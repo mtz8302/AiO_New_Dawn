@@ -3,12 +3,14 @@
 #include "NetworkBase.h"
 
 void setup() {
-  pinMode(LED_BUILTIN, OUTPUT);
+  delay(5000); //delay for time to start monitor
   Serial.begin(115200);
-  while (!Serial) delay(50);
 
+  storedCfgSetup();
   ethernet_init();
   mongoose_init();
+  udpSetup();
+
 }
 
 void loop() {

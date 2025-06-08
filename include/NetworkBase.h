@@ -7,11 +7,196 @@
 #ifndef NETWORKBASE_H_
 #define NETWORKBASE_H_
 #include "Arduino.h"
+#include "EEPROM.h"
+#include "mongoose.h"
+
+// EEPROM storage layout
+#define eeVersionStore 1  // 100 bytes
+#define ipStore 100       // 100 bytes
+
+uint16_t ip_ver;
+
+// Networking variables 
+struct NetConfigStruct
+{
+  static constexpr uint8_t defaultIP[5] = {192, 168, 5, 126};
+  uint8_t currentIP[5] = {192, 168, 5, 126};
+  uint8_t gatewayIP[5] = {192, 168, 5, 1};
+  uint8_t broadcastIP[5] = {192, 168, 5, 255};
+};
+NetConfigStruct const defaultNet;
+NetConfigStruct netConfig = defaultNet;
+
+struct mg_connection *sendAgio;
+
+// void rtcmHandler(void);
+// void pgnHandler(void);
+
+// Send byte arrays to AgIO
+void sendUDPbytes(uint8_t *message, int msgLen)
+{
+  if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
+    return; // Check if IP stack is up.
+  // Send data
+  if (mg_send(sendAgio, message, msgLen) <= 0)
+  {
+    Serial.println("UDP Send to AgIO failed.\r\n");
+  }
+  else
+  {
+    mg_iobuf_del(&sendAgio->send, 0, sendAgio->send.len);
+  }
+}
+
+// Send char arrays to AgIO
+void sendUDPchars(char *stuff)
+{
+  if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
+    return; // Check if IP stack is up.
+  mg_printf(sendAgio, stuff);
+}
+
+// pgnHandler stub Feel free to move me into your code but make a reference so NetworkBase can find me.
+void pgnHandler(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
+{
+  if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
+    return; // Check if IP stack is up.
+  if (ev == MG_EV_ERROR)
+  {
+    Serial.printf("Error: %s", (char *)ev_data);
+  }
+  if (ev == MG_EV_READ && mg_ntohs(udpPacket->rem.port) == 9999 && udpPacket->recv.len >= 5)
+  {
+    Serial.println("I am the pgnHandler stub. Populate me."); // The actual handling code should be outside NetworkBase.h. Make sure there is a reference to it.
+    // Verify first 3 PGN header bytes
+    if (udpPacket->recv.buf[0] != 128 || udpPacket->recv.buf[1] != 129 || udpPacket->recv.buf[2] != 127)
+      return;
+  }
+}
+
+// rtcmHandler stub. Feel free to move me into your code but make a reference so NetworkBase can find me.
+void rtcmHandler(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
+{
+  if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
+    return; // Check if IP stack is up.
+  if (ev == MG_EV_ERROR)
+  {
+    Serial.printf("Error: %s", (char *)ev_data);
+  }
+  if (ev == MG_EV_READ && mg_ntohs(udpPacket->rem.port) == 9999 && udpPacket->recv.len >= 5)
+  {
+    Serial.println("I am the rtcmHandler stub. Populate me."); // The actual handling code should be outside NetworkBase.h. Make sure there is a reference to it.
+    // Verify first 3 PGN header bytes
+    if (udpPacket->recv.buf[0] != 128 || udpPacket->recv.buf[1] != 129 || udpPacket->recv.buf[2] != 127)
+      return;
+  }
+}
+
+// Write default IP to EEPROM
+void save_default_net()
+{
+  // IP stored in 300
+  EEPROM.put(ipStore, defaultNet);
+}
+
+// Load current IP from EEPROM
+void load_current_net()
+{
+  // IP loaded from 300
+  EEPROM.get(ipStore, netConfig);
+}
+
+void storedCfgSetup()
+{
+  uint16_t eth_ee_read;
+  EEPROM.get(eeVersionStore, eth_ee_read);
+
+  if (eth_ee_read != ip_ver)
+  { // if EE is out of sync, write defaults to EE
+    EEPROM.put(eeVersionStore, ip_ver);
+    save_default_net();
+    load_current_net();
+    Serial.print("\r\n\nWriting IP address defaults to EEPROM\r\n");
+  }
+  else
+  {
+    load_current_net();
+    Serial.print("\r\n\nLoaded IP address from EEPROM\r\n");
+  }
+}
+
+// Setup UDP comms channels
+static uint32_t ipv4ary(const uint8_t input[])
+{
+  char buf[16];
+  mg_snprintf(buf, sizeof(buf), "%d.%d.%d.%d", input[0], input[1], input[2], input[3]);
+  struct mg_addr a = {};
+  mg_aton(mg_str(buf), &a);
+  return *(uint32_t *)&a.ip;
+}
+
+void udpSetup()
+{
+  g_mgr.ifp->enable_dhcp_client = 0;
+  g_mgr.ifp->ip = ipv4ary(netConfig.currentIP);
+  g_mgr.ifp->gw = ipv4ary(netConfig.gatewayIP);
+  g_mgr.ifp->mask = MG_IPV4(255, 255, 255, 0);
+
+  char pgnListenURL[50];
+  char rtcmListen[150];
+  mg_snprintf(pgnListenURL, sizeof(pgnListenURL), "udp://%d.%d.%d.126:8888", netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
+  mg_snprintf(rtcmListen, sizeof(rtcmListen), "udp://%d.%d.%d.126:2233", netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
+
+  if (mg_listen(&g_mgr, pgnListenURL, pgnHandler, NULL) != NULL)
+  // if (mg_listen(&g_mgr, pgnListenURL, NULL, NULL) != NULL)
+  {
+    // listenPGNs = true;
+    MG_DEBUG(("Listening for AgIO on UDP 8888"));
+  }
+  else
+  {
+    MG_DEBUG(("AgIO on UDP 8888 did not open"));
+  }
+
+  if (mg_listen(&g_mgr, rtcmListen, rtcmHandler, NULL) != NULL)
+  /// if (mg_listen(&g_mgr, rtcmListen, NULL, NULL) != NULL)
+  {
+    // listenRtcm = true;
+    MG_DEBUG(("Listening for RTCM on UDP 2233"));
+  }
+  else
+  {
+    MG_DEBUG(("RTCM on UDP 2233 did not open"));
+  }
+
+  // Create UDP connection to broadcast address
+  char agioURL[25];
+  strcpy(agioURL, "udp://");
+  itoa(netConfig.currentIP[0], agioURL + strlen(agioURL), 10);
+  strcat(agioURL, ".");
+  itoa(netConfig.currentIP[1], agioURL + strlen(agioURL), 10);
+  strcat(agioURL, ".");
+  itoa(netConfig.currentIP[2], agioURL + strlen(agioURL), 10);
+  strcat(agioURL, ".255:9999");
+
+  sendAgio = mg_connect(&g_mgr, agioURL, NULL, NULL);
+
+  if (sendAgio->is_client)
+  {
+    // agioConnect = true;
+    MG_DEBUG(("Connected to AgIO"));
+  }
+  else
+  {
+    MG_DEBUG(("Trying to connect to AgIO"));
+    return;
+  }
+}
 
 //---------------------------------- Don't touch anything below this line. Here be dragons. You have been warned. ---------------------------------------
 
-extern "C"
-{
+    extern "C"
+    {
 // #include "mongoose_glue.h"
 #define TRNG_ENT_COUNT 16
   void ENET_IRQHandler(void);
