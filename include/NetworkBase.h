@@ -9,6 +9,7 @@
 #include "Arduino.h"
 #include "EEPROM.h"
 #include "mongoose.h"
+#include "RTCMHandler.h"
 
 // EEPROM storage layout
 #define eeVersionStore 1  // 100 bytes
@@ -75,22 +76,22 @@ void pgnHandler(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn
 }
 
 // rtcmHandler stub. Feel free to move me into your code but make a reference so NetworkBase can find me.
-void rtcmHandler(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
-{
-  if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
-    return; // Check if IP stack is up.
-  if (ev == MG_EV_ERROR)
-  {
-    Serial.printf("Error: %s", (char *)ev_data);
-  }
-  if (ev == MG_EV_READ && mg_ntohs(udpPacket->rem.port) == 9999 && udpPacket->recv.len >= 5)
-  {
-    Serial.println("I am the rtcmHandler stub. Populate me."); // The actual handling code should be outside NetworkBase.h. Make sure there is a reference to it.
-    // Verify first 3 PGN header bytes
-    if (udpPacket->recv.buf[0] != 128 || udpPacket->recv.buf[1] != 129 || udpPacket->recv.buf[2] != 127)
-      return;
-  }
-}
+// void rtcmHandler(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
+// {
+//   if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
+//     return; // Check if IP stack is up.
+//   if (ev == MG_EV_ERROR)
+//   {
+//     Serial.printf("Error: %s", (char *)ev_data);
+//   }
+//   if (ev == MG_EV_READ && mg_ntohs(udpPacket->rem.port) == 9999 && udpPacket->recv.len >= 5)
+//   {
+//     Serial.println("I am the rtcmHandler stub. Populate me."); // The actual handling code should be outside NetworkBase.h. Make sure there is a reference to it.
+//     // Verify first 3 PGN header bytes
+//     if (udpPacket->recv.buf[0] != 128 || udpPacket->recv.buf[1] != 129 || udpPacket->recv.buf[2] != 127)
+//       return;
+//   }
+// }
 
 // Write default IP to EEPROM
 void save_default_net()
@@ -142,6 +143,8 @@ void udpSetup()
   g_mgr.ifp->gw = ipv4ary(netConfig.gatewayIP);
   g_mgr.ifp->mask = MG_IPV4(255, 255, 255, 0);
 
+  RTCMHandler::init();
+
   char pgnListenURL[50];
   char rtcmListen[150];
   mg_snprintf(pgnListenURL, sizeof(pgnListenURL), "udp://%d.%d.%d.126:8888", netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
@@ -158,7 +161,7 @@ void udpSetup()
     MG_DEBUG(("AgIO on UDP 8888 did not open"));
   }
 
-  if (mg_listen(&g_mgr, rtcmListen, rtcmHandler, NULL) != NULL)
+  if (mg_listen(&g_mgr, rtcmListen, RTCMHandler::handleRTCM, NULL) != NULL)
   /// if (mg_listen(&g_mgr, rtcmListen, NULL, NULL) != NULL)
   {
     // listenRtcm = true;
