@@ -1,4 +1,8 @@
 #include "PGNHandler.h"
+#include "ConfigManager.h" // Full definition needed for method calls
+
+// External declaration of the global pointer (defined in main.cpp)
+extern ConfigManager *configPTR;
 
 // Forward declaration for NetworkBase structure
 struct NetConfigStruct
@@ -9,7 +13,7 @@ struct NetConfigStruct
     uint8_t broadcastIP[5] = {192, 168, 5, 255};
 };
 
-// External references to NetworkBase functions and variables (declared, not defined)
+// External references to NetworkBase functions and variables
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 extern void sendUDPchars(char *stuff);
 extern void save_current_net();
@@ -84,7 +88,7 @@ void PGNHandler::processPGN(struct mg_connection *udpPacket, int ev, void *ev_da
             }
             break;
         case 251: // Steer config
-            if (udpPacket->recv.len == 12)
+            if (udpPacket->recv.len == 14)
             {
                 processSteerConfig(udpPacket);
             }
@@ -119,7 +123,7 @@ void PGNHandler::processHelloFromAgIO(struct mg_connection *udpPacket)
     printPgnAnnouncement(udpPacket, (char *)"Hello from AgIO");
 
     uint8_t helloFromAutoSteer[] = {128, 129, 126, 126, 5, 0, 0, 0, 0, 0, 71};
-    ::sendUDPbytes(helloFromAutoSteer, sizeof(helloFromAutoSteer)); // Use global function directly
+    ::sendUDPbytes(helloFromAutoSteer, sizeof(helloFromAutoSteer));
 }
 
 void PGNHandler::processSubnetChange(struct mg_connection *udpPacket)
@@ -134,7 +138,8 @@ void PGNHandler::processSubnetChange(struct mg_connection *udpPacket)
     Serial.printf("New subnet: %d.%d.%d.x\r\n",
                   netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
 
-    save_current_net(); // This function exists in NetworkBase.h but is missing implementation
+    // Call the NetworkBase function to save to EEPROM
+    save_current_net();
 }
 
 void PGNHandler::processScanRequest(struct mg_connection *udpPacket)
@@ -154,18 +159,113 @@ void PGNHandler::processSteerConfig(struct mg_connection *udpPacket)
 {
     printPgnAnnouncement(udpPacket, (char *)"Steer Config");
 
-    // Process steer configuration data
-    // Implementation depends on ConfigManager integration
-    Serial.print("Steer config received - integration with ConfigManager pending");
+    if (!configPTR)
+    {
+        Serial.print("ConfigManager not available");
+        return;
+    }
+
+    // Parse PGN 251 data structure
+    uint8_t sett0 = udpPacket->recv.buf[5]; // setting0 byte
+    uint8_t pulseCountMax = udpPacket->recv.buf[6];
+    uint8_t minSpeed = udpPacket->recv.buf[7];
+    uint8_t sett1 = udpPacket->recv.buf[8]; // setting1 byte
+
+    // Extract boolean flags from setting0 byte
+    configPTR->setInvertWAS(bitRead(sett0, 0));
+    configPTR->setIsRelayActiveHigh(bitRead(sett0, 1));
+    configPTR->setMotorDriveDirection(bitRead(sett0, 2));
+    configPTR->setSingleInputWAS(bitRead(sett0, 3));
+    configPTR->setCytronDriver(bitRead(sett0, 4));
+    configPTR->setSteerSwitch(bitRead(sett0, 5));
+    configPTR->setSteerButton(bitRead(sett0, 6));
+    configPTR->setShaftEncoder(bitRead(sett0, 7));
+
+    // Set numeric values
+    configPTR->setPulseCountMax(pulseCountMax);
+    configPTR->setMinSpeed(minSpeed);
+
+    // Extract boolean flags from setting1 byte
+    configPTR->setIsDanfoss(bitRead(sett1, 0));
+    configPTR->setPressureSensor(bitRead(sett1, 1));
+    configPTR->setCurrentSensor(bitRead(sett1, 2));
+    configPTR->setIsUseYAxis(bitRead(sett1, 3));
+
+    // Save to EEPROM
+    configPTR->saveSteerConfig();
+
+    // Debug output
+    Serial.printf("\r\nSteer Config Updated:");
+    Serial.printf("\r\n- InvertWAS: %d", configPTR->getInvertWAS());
+    Serial.printf("\r\n- RelayActiveHigh: %d", configPTR->getIsRelayActiveHigh());
+    Serial.printf("\r\n- MotorDirection: %d", configPTR->getMotorDriveDirection());
+    Serial.printf("\r\n- SingleInputWAS: %d", configPTR->getSingleInputWAS());
+    Serial.printf("\r\n- CytronDriver: %d", configPTR->getCytronDriver());
+    Serial.printf("\r\n- SteerSwitch: %d", configPTR->getSteerSwitch());
+    Serial.printf("\r\n- SteerButton: %d", configPTR->getSteerButton());
+    Serial.printf("\r\n- ShaftEncoder: %d", configPTR->getShaftEncoder());
+    Serial.printf("\r\n- PulseCountMax: %d", configPTR->getPulseCountMax());
+    Serial.printf("\r\n- MinSpeed: %d", configPTR->getMinSpeed());
+    Serial.printf("\r\n- IsDanfoss: %d", configPTR->getIsDanfoss());
+    Serial.printf("\r\n- PressureSensor: %d", configPTR->getPressureSensor());
+    Serial.printf("\r\n- CurrentSensor: %d", configPTR->getCurrentSensor());
+    Serial.printf("\r\n- UseYAxis: %d", configPTR->getIsUseYAxis());
 }
 
 void PGNHandler::processSteerSettings(struct mg_connection *udpPacket)
 {
     printPgnAnnouncement(udpPacket, (char *)"Steer Settings");
 
-    // Process steer settings data
-    // Implementation depends on ConfigManager integration
-    Serial.print("Steer settings received - integration with ConfigManager pending");
+    if (!configPTR)
+    {
+        Serial.print("ConfigManager not available");
+        return;
+    }
+
+    // Parse PGN 252 data structure
+    float kp = (float)udpPacket->recv.buf[5];
+    uint8_t highPWM = udpPacket->recv.buf[6];
+    float lowPWM = (float)udpPacket->recv.buf[7];
+    uint8_t minPWM = udpPacket->recv.buf[8];
+    uint8_t steerSensorCounts = udpPacket->recv.buf[9];
+
+    // WAS offset is 16-bit value (Lo/Hi bytes)
+    int16_t wasOffset = udpPacket->recv.buf[10];
+    wasOffset |= (udpPacket->recv.buf[11] << 8);
+
+    // Ackerman fix is 16-bit value (Lo/Hi bytes)
+    int16_t ackermanRaw = udpPacket->recv.buf[12];
+    ackermanRaw |= (udpPacket->recv.buf[13] << 8);
+    float ackermanFix = (float)ackermanRaw * 0.01;
+
+    // Apply lowPWM adjustment
+    float adjustedLowPWM = (float)minPWM * 1.2;
+    if (adjustedLowPWM < 255)
+    {
+        lowPWM = adjustedLowPWM;
+    }
+
+    // Update ConfigManager
+    configPTR->setKp(kp);
+    configPTR->setHighPWM(highPWM);
+    configPTR->setLowPWM(lowPWM);
+    configPTR->setMinPWM(minPWM);
+    configPTR->setSteerSensorCounts(steerSensorCounts);
+    configPTR->setWasOffset(wasOffset);
+    configPTR->setAckermanFix(ackermanFix);
+
+    // Save to EEPROM
+    configPTR->saveSteerSettings();
+
+    // Debug output
+    Serial.printf("\r\nSteer Settings Updated:");
+    Serial.printf("\r\n- Kp: %.1f", configPTR->getKp());
+    Serial.printf("\r\n- HighPWM: %d", configPTR->getHighPWM());
+    Serial.printf("\r\n- LowPWM: %.1f", configPTR->getLowPWM());
+    Serial.printf("\r\n- MinPWM: %d", configPTR->getMinPWM());
+    Serial.printf("\r\n- SensorCounts: %d", configPTR->getSteerSensorCounts());
+    Serial.printf("\r\n- WAS Offset: %d", configPTR->getWasOffset());
+    Serial.printf("\r\n- Ackerman Fix: %.2f", configPTR->getAckermanFix());
 }
 
 void PGNHandler::processSteerData(struct mg_connection *udpPacket)
