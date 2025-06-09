@@ -6,13 +6,6 @@
 
 // Forward declarations for external dependencies
 extern struct mg_mgr g_mgr;
-extern void save_current_net();
-extern void steerConfigInit();
-extern void steerSettingsInit();
-
-// UDP functions from NetworkBase.h
-extern void sendUDPbytes(uint8_t *message, int msgLen);
-extern void sendUDPchars(char *stuff);
 
 class PGNHandler
 {
@@ -31,8 +24,6 @@ public:
 
     // Utility methods
     void printPgnAnnouncement(struct mg_connection *udpPacket, char *pgnName);
-    void sendUDPbytes(uint8_t *message, int msgLen);
-    void sendUDPchars(char *stuff);
 
     // PGN processing methods
     void processHelloFromAgIO(struct mg_connection *udpPacket);

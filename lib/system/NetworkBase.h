@@ -13,12 +13,12 @@
 #include "PGNHandler.h"
 
 // EEPROM storage layout
-#define eeVersionStore 1  // 100 bytes
-#define ipStore 100       // 100 bytes
+#define eeVersionStore 1 // 100 bytes
+#define ipStore 100      // 100 bytes
 
 uint16_t ip_ver;
 
-// Networking variables 
+// Networking variables
 struct NetConfigStruct
 {
   static constexpr uint8_t defaultIP[5] = {192, 168, 5, 126};
@@ -106,6 +106,12 @@ void load_current_net()
 {
   // IP loaded from 300
   EEPROM.get(ipStore, netConfig);
+}
+
+void save_current_net()
+{
+  // Save current network config to EEPROM
+  EEPROM.put(ipStore, netConfig);
 }
 
 void storedCfgSetup()
@@ -200,8 +206,8 @@ void udpSetup()
 
 //---------------------------------- Don't touch anything below this line. Here be dragons. You have been warned. ---------------------------------------
 
-    extern "C"
-    {
+extern "C"
+{
 // #include "mongoose_glue.h"
 #define TRNG_ENT_COUNT 16
   void ENET_IRQHandler(void);
