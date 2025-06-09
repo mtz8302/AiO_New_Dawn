@@ -1,0 +1,413 @@
+#include "ConfigManager.h"
+
+// Current EEPROM version
+#define CURRENT_EE_VERSION 106
+
+// Static instance pointer
+ConfigManager *ConfigManager::instance = nullptr;
+
+ConfigManager::ConfigManager()
+{
+    instance = this;
+    resetToDefaults();
+    if (checkVersion())
+    {
+        loadAllConfigs();
+    }
+    else
+    {
+        // Version mismatch, save defaults and update version
+        saveAllConfigs();
+        updateVersion();
+    }
+}
+
+ConfigManager::~ConfigManager()
+{
+    instance = nullptr;
+}
+
+ConfigManager *ConfigManager::getInstance()
+{
+    return instance;
+}
+
+void ConfigManager::init()
+{
+    if (instance == nullptr)
+    {
+        new ConfigManager();
+    }
+}
+
+// EEPROM operations
+void ConfigManager::saveSteerConfig()
+{
+    // Pack boolean values into bytes for efficient storage
+    uint8_t configByte1 = 0;
+    uint8_t configByte2 = 0;
+
+    if (invertWAS)
+        configByte1 |= 0x01;
+    if (isRelayActiveHigh)
+        configByte1 |= 0x02;
+    if (motorDriveDirection)
+        configByte1 |= 0x04;
+    if (singleInputWAS)
+        configByte1 |= 0x08;
+    if (cytronDriver)
+        configByte1 |= 0x10;
+    if (steerSwitch)
+        configByte1 |= 0x20;
+    if (steerButton)
+        configByte1 |= 0x40;
+    if (shaftEncoder)
+        configByte1 |= 0x80;
+
+    if (isDanfoss)
+        configByte2 |= 0x01;
+    if (pressureSensor)
+        configByte2 |= 0x02;
+    if (currentSensor)
+        configByte2 |= 0x04;
+    if (isUseYAxis)
+        configByte2 |= 0x08;
+
+    int addr = STEER_CONFIG_ADDR;
+    EEPROM.put(addr, configByte1);
+    addr += sizeof(configByte1);
+    EEPROM.put(addr, configByte2);
+    addr += sizeof(configByte2);
+    EEPROM.put(addr, pulseCountMax);
+    addr += sizeof(pulseCountMax);
+    EEPROM.put(addr, minSpeed);
+}
+
+void ConfigManager::loadSteerConfig()
+{
+    uint8_t configByte1, configByte2;
+
+    int addr = STEER_CONFIG_ADDR;
+    EEPROM.get(addr, configByte1);
+    addr += sizeof(configByte1);
+    EEPROM.get(addr, configByte2);
+    addr += sizeof(configByte2);
+    EEPROM.get(addr, pulseCountMax);
+    addr += sizeof(pulseCountMax);
+    EEPROM.get(addr, minSpeed);
+
+    // Unpack boolean values
+    invertWAS = (configByte1 & 0x01) != 0;
+    isRelayActiveHigh = (configByte1 & 0x02) != 0;
+    motorDriveDirection = (configByte1 & 0x04) != 0;
+    singleInputWAS = (configByte1 & 0x08) != 0;
+    cytronDriver = (configByte1 & 0x10) != 0;
+    steerSwitch = (configByte1 & 0x20) != 0;
+    steerButton = (configByte1 & 0x40) != 0;
+    shaftEncoder = (configByte1 & 0x80) != 0;
+
+    isDanfoss = (configByte2 & 0x01) != 0;
+    pressureSensor = (configByte2 & 0x02) != 0;
+    currentSensor = (configByte2 & 0x04) != 0;
+    isUseYAxis = (configByte2 & 0x08) != 0;
+}
+
+void ConfigManager::saveSteerSettings()
+{
+    int addr = STEER_SETTINGS_ADDR;
+    EEPROM.put(addr, kp);
+    addr += sizeof(kp);
+    EEPROM.put(addr, highPWM);
+    addr += sizeof(highPWM);
+    EEPROM.put(addr, lowPWM);
+    addr += sizeof(lowPWM);
+    EEPROM.put(addr, minPWM);
+    addr += sizeof(minPWM);
+    EEPROM.put(addr, steerSensorCounts);
+    addr += sizeof(steerSensorCounts);
+    EEPROM.put(addr, wasOffset);
+    addr += sizeof(wasOffset);
+    EEPROM.put(addr, ackermanFix);
+}
+
+void ConfigManager::loadSteerSettings()
+{
+    int addr = STEER_SETTINGS_ADDR;
+    EEPROM.get(addr, kp);
+    addr += sizeof(kp);
+    EEPROM.get(addr, highPWM);
+    addr += sizeof(highPWM);
+    EEPROM.get(addr, lowPWM);
+    addr += sizeof(lowPWM);
+    EEPROM.get(addr, minPWM);
+    addr += sizeof(minPWM);
+    EEPROM.get(addr, steerSensorCounts);
+    addr += sizeof(steerSensorCounts);
+    EEPROM.get(addr, wasOffset);
+    addr += sizeof(wasOffset);
+    EEPROM.get(addr, ackermanFix);
+}
+
+void ConfigManager::saveGPSConfig()
+{
+    int addr = GPS_CONFIG_ADDR;
+    EEPROM.put(addr, gpsBaudRate);
+    addr += sizeof(gpsBaudRate);
+
+    uint8_t gpsConfigByte = 0;
+    if (gpsSyncMode)
+        gpsConfigByte |= 0x01;
+    if (gpsPassThrough)
+        gpsConfigByte |= 0x02;
+
+    EEPROM.put(addr, gpsConfigByte);
+    addr += sizeof(gpsConfigByte);
+    EEPROM.put(addr, gpsProtocol);
+}
+
+void ConfigManager::loadGPSConfig()
+{
+    int addr = GPS_CONFIG_ADDR;
+    EEPROM.get(addr, gpsBaudRate);
+    addr += sizeof(gpsBaudRate);
+
+    uint8_t gpsConfigByte;
+    EEPROM.get(addr, gpsConfigByte);
+    addr += sizeof(gpsConfigByte);
+    EEPROM.get(addr, gpsProtocol);
+
+    gpsSyncMode = (gpsConfigByte & 0x01) != 0;
+    gpsPassThrough = (gpsConfigByte & 0x02) != 0;
+}
+
+void ConfigManager::saveMachineConfig()
+{
+    int addr = MACHINE_CONFIG_ADDR;
+    EEPROM.put(addr, sectionCount);
+    addr += sizeof(sectionCount);
+
+    uint8_t machineConfigByte = 0;
+    if (hydraulicLift)
+        machineConfigByte |= 0x01;
+    if (tramlineControl)
+        machineConfigByte |= 0x02;
+    if (isPinActiveHigh)
+        machineConfigByte |= 0x04;
+
+    EEPROM.put(addr, machineConfigByte);
+    addr += sizeof(machineConfigByte);
+    EEPROM.put(addr, workWidth);
+    addr += sizeof(workWidth);
+    EEPROM.put(addr, raiseTime);
+    addr += sizeof(raiseTime);
+    EEPROM.put(addr, lowerTime);
+}
+
+void ConfigManager::loadMachineConfig()
+{
+    int addr = MACHINE_CONFIG_ADDR;
+    EEPROM.get(addr, sectionCount);
+    addr += sizeof(sectionCount);
+
+    uint8_t machineConfigByte;
+    EEPROM.get(addr, machineConfigByte);
+    addr += sizeof(machineConfigByte);
+    EEPROM.get(addr, workWidth);
+    addr += sizeof(workWidth);
+    EEPROM.get(addr, raiseTime);
+    addr += sizeof(raiseTime);
+    EEPROM.get(addr, lowerTime);
+
+    hydraulicLift = (machineConfigByte & 0x01) != 0;
+    tramlineControl = (machineConfigByte & 0x02) != 0;
+    isPinActiveHigh = (machineConfigByte & 0x04) != 0;
+}
+
+void ConfigManager::saveKWASConfig()
+{
+    int addr = KWAS_CONFIG_ADDR;
+
+    uint8_t kwasConfigByte = 0;
+    if (kwasEnabled)
+        kwasConfigByte |= 0x01;
+
+    EEPROM.put(addr, kwasConfigByte);
+    addr += sizeof(kwasConfigByte);
+    EEPROM.put(addr, kwasMode);
+    addr += sizeof(kwasMode);
+    EEPROM.put(addr, kwasGain);
+    addr += sizeof(kwasGain);
+    EEPROM.put(addr, kwasDeadband);
+    addr += sizeof(kwasDeadband);
+    EEPROM.put(addr, kwasFilterLevel);
+}
+
+void ConfigManager::loadKWASConfig()
+{
+    int addr = KWAS_CONFIG_ADDR;
+
+    uint8_t kwasConfigByte;
+    EEPROM.get(addr, kwasConfigByte);
+    addr += sizeof(kwasConfigByte);
+    EEPROM.get(addr, kwasMode);
+    addr += sizeof(kwasMode);
+    EEPROM.get(addr, kwasGain);
+    addr += sizeof(kwasGain);
+    EEPROM.get(addr, kwasDeadband);
+    addr += sizeof(kwasDeadband);
+    EEPROM.get(addr, kwasFilterLevel);
+
+    kwasEnabled = (kwasConfigByte & 0x01) != 0;
+}
+
+void ConfigManager::saveINSConfig()
+{
+    int addr = INS_CONFIG_ADDR;
+
+    uint8_t insConfigByte = 0;
+    if (insEnabled)
+        insConfigByte |= 0x01;
+    if (insUseFusion)
+        insConfigByte |= 0x02;
+
+    EEPROM.put(addr, insConfigByte);
+    addr += sizeof(insConfigByte);
+    EEPROM.put(addr, insMode);
+    addr += sizeof(insMode);
+    EEPROM.put(addr, insHeadingOffset);
+    addr += sizeof(insHeadingOffset);
+    EEPROM.put(addr, insRollOffset);
+    addr += sizeof(insRollOffset);
+    EEPROM.put(addr, insPitchOffset);
+    addr += sizeof(insPitchOffset);
+    EEPROM.put(addr, insFilterLevel);
+    addr += sizeof(insFilterLevel);
+    EEPROM.put(addr, insVarianceHeading);
+    addr += sizeof(insVarianceHeading);
+    EEPROM.put(addr, insVarianceRoll);
+    addr += sizeof(insVarianceRoll);
+    EEPROM.put(addr, insVariancePitch);
+}
+
+void ConfigManager::loadINSConfig()
+{
+    int addr = INS_CONFIG_ADDR;
+
+    uint8_t insConfigByte;
+    EEPROM.get(addr, insConfigByte);
+    addr += sizeof(insConfigByte);
+    EEPROM.get(addr, insMode);
+    addr += sizeof(insMode);
+    EEPROM.get(addr, insHeadingOffset);
+    addr += sizeof(insHeadingOffset);
+    EEPROM.get(addr, insRollOffset);
+    addr += sizeof(insRollOffset);
+    EEPROM.get(addr, insPitchOffset);
+    addr += sizeof(insPitchOffset);
+    EEPROM.get(addr, insFilterLevel);
+    addr += sizeof(insFilterLevel);
+    EEPROM.get(addr, insVarianceHeading);
+    addr += sizeof(insVarianceHeading);
+    EEPROM.get(addr, insVarianceRoll);
+    addr += sizeof(insVarianceRoll);
+    EEPROM.get(addr, insVariancePitch);
+
+    insEnabled = (insConfigByte & 0x01) != 0;
+    insUseFusion = (insConfigByte & 0x02) != 0;
+}
+
+void ConfigManager::loadAllConfigs()
+{
+    loadSteerConfig();
+    loadSteerSettings();
+    loadGPSConfig();
+    loadMachineConfig();
+    loadKWASConfig();
+    loadINSConfig();
+}
+
+void ConfigManager::saveAllConfigs()
+{
+    saveSteerConfig();
+    saveSteerSettings();
+    saveGPSConfig();
+    saveMachineConfig();
+    saveKWASConfig();
+    saveINSConfig();
+}
+
+void ConfigManager::resetToDefaults()
+{
+    // Steer config defaults
+    invertWAS = false;
+    isRelayActiveHigh = false;
+    motorDriveDirection = false;
+    singleInputWAS = false;
+    cytronDriver = false;
+    steerSwitch = false;
+    steerButton = false;
+    shaftEncoder = false;
+    isDanfoss = false;
+    pressureSensor = false;
+    currentSensor = false;
+    isUseYAxis = false;
+    pulseCountMax = 5;
+    minSpeed = 3;
+
+    // Steer settings defaults
+    kp = 40.0;
+    highPWM = 255;
+    lowPWM = 30.0;
+    minPWM = 10;
+    steerSensorCounts = 30;
+    wasOffset = 0;
+    ackermanFix = 1.0;
+
+    // GPS config defaults
+    gpsBaudRate = 460800; // From pcb.h
+    gpsSyncMode = false;
+    gpsPassThrough = false;
+    gpsProtocol = 0;
+
+    // Machine config defaults
+    sectionCount = 8;
+    hydraulicLift = false;
+    tramlineControl = false;
+    workWidth = 1200; // 12 meters in cm
+    raiseTime = 2;
+    lowerTime = 4;
+    isPinActiveHigh = false;
+
+    // KWAS config defaults
+    kwasEnabled = false;
+    kwasMode = 0;
+    kwasGain = 1.0;
+    kwasDeadband = 50;
+    kwasFilterLevel = 3;
+
+    // INS config defaults
+    insEnabled = false;
+    insMode = 0;
+    insHeadingOffset = 0.0;
+    insRollOffset = 0.0;
+    insPitchOffset = 0.0;
+    insFilterLevel = 3;
+    insUseFusion = false;
+    insVarianceHeading = 1.0;
+    insVarianceRoll = 1.0;
+    insVariancePitch = 1.0;
+
+    eeVersion = CURRENT_EE_VERSION;
+}
+
+bool ConfigManager::checkVersion()
+{
+    uint16_t storedVersion;
+    EEPROM.get(EE_VERSION_ADDR, storedVersion);
+    return (storedVersion == CURRENT_EE_VERSION);
+}
+
+void ConfigManager::updateVersion()
+{
+    EEPROM.put(EE_VERSION_ADDR, CURRENT_EE_VERSION);
+}

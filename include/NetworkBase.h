@@ -10,6 +10,7 @@
 #include "EEPROM.h"
 #include "mongoose.h"
 #include "RTCMHandler.h"
+#include "PGNHandler.h"
 
 // EEPROM storage layout
 #define eeVersionStore 1  // 100 bytes
@@ -57,23 +58,23 @@ void sendUDPchars(char *stuff)
   mg_printf(sendAgio, stuff);
 }
 
-// pgnHandler stub Feel free to move me into your code but make a reference so NetworkBase can find me.
-void pgnHandler(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
-{
-  if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
-    return; // Check if IP stack is up.
-  if (ev == MG_EV_ERROR)
-  {
-    Serial.printf("Error: %s", (char *)ev_data);
-  }
-  if (ev == MG_EV_READ && mg_ntohs(udpPacket->rem.port) == 9999 && udpPacket->recv.len >= 5)
-  {
-    Serial.println("I am the pgnHandler stub. Populate me."); // The actual handling code should be outside NetworkBase.h. Make sure there is a reference to it.
-    // Verify first 3 PGN header bytes
-    if (udpPacket->recv.buf[0] != 128 || udpPacket->recv.buf[1] != 129 || udpPacket->recv.buf[2] != 127)
-      return;
-  }
-}
+// // pgnHandler stub Feel free to move me into your code but make a reference so NetworkBase can find me.
+// void pgnHandler(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
+// {
+//   if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
+//     return; // Check if IP stack is up.
+//   if (ev == MG_EV_ERROR)
+//   {
+//     Serial.printf("Error: %s", (char *)ev_data);
+//   }
+//   if (ev == MG_EV_READ && mg_ntohs(udpPacket->rem.port) == 9999 && udpPacket->recv.len >= 5)
+//   {
+//     Serial.println("I am the pgnHandler stub. Populate me."); // The actual handling code should be outside NetworkBase.h. Make sure there is a reference to it.
+//     // Verify first 3 PGN header bytes
+//     if (udpPacket->recv.buf[0] != 128 || udpPacket->recv.buf[1] != 129 || udpPacket->recv.buf[2] != 127)
+//       return;
+//   }
+// }
 
 // rtcmHandler stub. Feel free to move me into your code but make a reference so NetworkBase can find me.
 // void rtcmHandler(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
@@ -144,13 +145,14 @@ void udpSetup()
   g_mgr.ifp->mask = MG_IPV4(255, 255, 255, 0);
 
   RTCMHandler::init();
+  PGNHandler::init();
 
   char pgnListenURL[50];
   char rtcmListen[150];
   mg_snprintf(pgnListenURL, sizeof(pgnListenURL), "udp://%d.%d.%d.126:8888", netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
   mg_snprintf(rtcmListen, sizeof(rtcmListen), "udp://%d.%d.%d.126:2233", netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
 
-  if (mg_listen(&g_mgr, pgnListenURL, pgnHandler, NULL) != NULL)
+  if (mg_listen(&g_mgr, pgnListenURL, PGNHandler::handlePGN, NULL) != NULL)
   // if (mg_listen(&g_mgr, pgnListenURL, NULL, NULL) != NULL)
   {
     // listenPGNs = true;

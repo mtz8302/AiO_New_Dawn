@@ -2,6 +2,8 @@
 #include "mongoose_glue.h"
 #include "NetworkBase.h"
 #include "pcb.h"
+#include "ConfigManager.h"
+#include "HardwareManager.h"
 
 void setup() {
   delay(5000); //delay for time to start monitor

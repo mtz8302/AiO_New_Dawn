@@ -43,7 +43,7 @@ void RTCMHandler::processRTCM(struct mg_connection *rtcm, int ev, void *ev_data)
 
     if (ev == MG_EV_READ && mg_ntohs(rtcm->rem.port) == 9999 && rtcm->recv.len >= 5)
     {
-        Serial.printf("RTCM: Processing %d bytes\n", rtcm->recv.len);
+        //Serial.printf("RTCM: Processing %d bytes\n", rtcm->recv.len);
 
         // Copy to buffer exactly like the original code
         char TXbuf[1024];
@@ -55,10 +55,10 @@ void RTCMHandler::processRTCM(struct mg_connection *rtcm, int ev, void *ev_data)
 
         // Write using the same pattern as your original
         SerialGPS1.write(TXbuf, length);
-        Serial.println("RTCM: Data written to GPS1");
+        //Serial.println("RTCM: Data written to GPS1");
 
         mg_iobuf_del(&rtcm->recv, 0, rtcm->recv.len);
-        Serial.println("RTCM: Buffer cleared");
+        //Serial.println("RTCM: Buffer cleared");
     }
     else
     {
