@@ -1,30 +1,22 @@
 #include "HardwareManager.h"
-#include "pcb.h"
+
+// Global instance pointer
+HardwareManager *hardwarePTR = nullptr;
 
 // Static instance pointer
 HardwareManager *HardwareManager::instance = nullptr;
 
 HardwareManager::HardwareManager()
+    : isInitialized(false), pwmFrequencyMode(4)
 {
     instance = this;
-    isInitialized = false;
-    pwmFrequencyMode = 4; // Default to 18310Hz
-
-    // Initialize buffer pointers to nullptr
-    gps1RxBuffer = nullptr;
-    gps1TxBuffer = nullptr;
-    gps2RxBuffer = nullptr;
-    gps2TxBuffer = nullptr;
-    rtkRxBuffer = nullptr;
-    rs232TxBuffer = nullptr;
-    esp32RxBuffer = nullptr;
-    esp32TxBuffer = nullptr;
+    hardwarePTR = this;
 }
 
 HardwareManager::~HardwareManager()
 {
-    deallocateSerialBuffers();
     instance = nullptr;
+    hardwarePTR = nullptr;
 }
 
 HardwareManager *HardwareManager::getInstance()
@@ -40,85 +32,69 @@ void HardwareManager::init()
     }
 }
 
+bool HardwareManager::initialize()
+{
+    return initializeHardware();
+}
+
 bool HardwareManager::initializeHardware()
 {
-    Serial.print("\r\n\nHardware Manager initialization");
+    Serial.print("\r\n=== Hardware Manager Initialization ===");
 
-    bool success = true;
-
-    success &= allocateSerialBuffers();
-    success &= initializePins();
-    success &= initializeSerial();
-    success &= initializePWM();
-    success &= initializeADC();
-
-    if (success)
+    if (!initializePins())
     {
-        isInitialized = true;
-        Serial.print("\r\n- Hardware initialization complete");
-    }
-    else
-    {
-        Serial.print("\r\n- ** Hardware initialization FAILED **");
+        Serial.print("\r\n** Pin initialization FAILED **");
+        return false;
     }
 
-    return success;
+    if (!initializePWM())
+    {
+        Serial.print("\r\n** PWM initialization FAILED **");
+        return false;
+    }
+
+    if (!initializeADC())
+    {
+        Serial.print("\r\n** ADC initialization FAILED **");
+        return false;
+    }
+
+    isInitialized = true;
+    Serial.print("\r\n- Hardware initialization SUCCESS");
+    return true;
 }
 
 bool HardwareManager::initializePins()
 {
     Serial.print("\r\n- Configuring pins");
 
-    configureDigitalPins();
-    configureAnalogPins();
-    configurePWMPins();
+    // Configure output pins
+    pinMode(getBuzzerPin(), OUTPUT);
+    pinMode(getSleepPin(), OUTPUT);
+    pinMode(getPWM1Pin(), OUTPUT);
+    pinMode(getPWM2Pin(), OUTPUT);
 
-    return true;
-}
+    // Configure input pins
+    pinMode(getSteerPin(), INPUT_PULLUP);
+    pinMode(getKickoutDPin(), INPUT_PULLUP);
+    pinMode(getWASSensorPin(), INPUT_DISABLE);
+    pinMode(getWorkPin(), INPUT);
+    pinMode(getCurrentPin(), INPUT);
+    pinMode(getKickoutAPin(), INPUT);
 
-bool HardwareManager::initializeSerial()
-{
-    Serial.print("\r\n- Initializing serial ports");
+    // Initialize output states
+    digitalWrite(getBuzzerPin(), LOW);
+    digitalWrite(getSleepPin(), LOW);
+    analogWrite(getPWM1Pin(), 0);
+    analogWrite(getPWM2Pin(), 0);
 
-    // GPS1 Serial
-    SerialGPS1.begin(BAUD_GPS);
-    SerialGPS1.addMemoryForRead(gps1RxBuffer, GPS_BUFFER_SIZE);
-    SerialGPS1.addMemoryForWrite(gps1TxBuffer, GPS_BUFFER_SIZE);
-
-    // GPS2 Serial
-    SerialGPS2.begin(BAUD_GPS);
-    SerialGPS2.addMemoryForRead(gps2RxBuffer, GPS_BUFFER_SIZE);
-    SerialGPS2.addMemoryForWrite(gps2TxBuffer, GPS_BUFFER_SIZE);
-
-    // RTK Radio Serial
-    SerialRTK.begin(BAUD_RTK);
-    SerialRTK.addMemoryForRead(rtkRxBuffer, RTK_BUFFER_SIZE);
-
-    // RS232 Serial
-    SerialRS232.begin(BAUD_RS232);
-    SerialRS232.addMemoryForWrite(rs232TxBuffer, RS232_BUFFER_SIZE);
-
-    // ESP32 Serial
-    SerialESP32.begin(BAUD_ESP32);
-    SerialESP32.addMemoryForRead(esp32RxBuffer, ESP32_BUFFER_SIZE);
-    SerialESP32.addMemoryForWrite(esp32TxBuffer, ESP32_BUFFER_SIZE);
-
-    // IMU Serial
-    SerialIMU->begin(BAUD_IMU);
-
-    Serial.printf("\r\n  - SerialGPS1/GPS2: %i baud", BAUD_GPS);
-    Serial.printf("\r\n  - SerialRTK: %i baud", BAUD_RTK);
-    Serial.printf("\r\n  - SerialRS232: %i baud", BAUD_RS232);
-    Serial.printf("\r\n  - SerialESP32: %i baud", BAUD_ESP32);
-    Serial.printf("\r\n  - SerialIMU: %i baud", BAUD_IMU);
-
+    Serial.print("\r\n  - Pin configuration complete");
     return true;
 }
 
 bool HardwareManager::initializePWM()
 {
     Serial.print("\r\n- Configuring PWM");
-
     return setPWMFrequency(pwmFrequencyMode);
 }
 
@@ -129,6 +105,7 @@ bool HardwareManager::initializeADC()
     analogReadResolution(12);
     analogReadAveraging(16);
 
+    Serial.print("\r\n  - ADC: 12-bit resolution, 16x averaging");
     return true;
 }
 
@@ -210,7 +187,6 @@ void HardwareManager::printHardwareStatus()
     Serial.printf("\r\nPWM Mode: %i", pwmFrequencyMode);
 
     printPinConfiguration();
-    printSerialConfiguration();
     Serial.print("\r\n===============================\r\n");
 }
 
@@ -230,104 +206,7 @@ void HardwareManager::printPinConfiguration()
     Serial.printf("\r\nKickout Analog: A%i", getKickoutAPin() - A0);
 }
 
-void HardwareManager::printSerialConfiguration()
+bool HardwareManager::getInitializationStatus() const
 {
-    Serial.print("\r\n\n--- Serial Configuration ---");
-    Serial.printf("\r\nSerialGPS1 (Serial5): %i baud", BAUD_GPS);
-    Serial.printf("\r\nSerialGPS2 (Serial8): %i baud", BAUD_GPS);
-    Serial.printf("\r\nSerialRTK (Serial3): %i baud", BAUD_RTK);
-    Serial.printf("\r\nSerialRS232 (Serial7): %i baud", BAUD_RS232);
-    Serial.printf("\r\nSerialESP32 (Serial2): %i baud", BAUD_ESP32);
-    Serial.printf("\r\nSerialIMU (Serial4): %i baud", BAUD_IMU);
-}
-
-bool HardwareManager::allocateSerialBuffers()
-{
-    Serial.print("\r\n- Allocating serial buffers");
-
-    // Allocate GPS1 buffers
-    gps1RxBuffer = new uint8_t[GPS_BUFFER_SIZE];
-    gps1TxBuffer = new uint8_t[GPS_BUFFER_SIZE];
-
-    // Allocate GPS2 buffers
-    gps2RxBuffer = new uint8_t[GPS_BUFFER_SIZE];
-    gps2TxBuffer = new uint8_t[GPS_BUFFER_SIZE];
-
-    // Allocate RTK buffer
-    rtkRxBuffer = new uint8_t[RTK_BUFFER_SIZE];
-
-    // Allocate RS232 buffer
-    rs232TxBuffer = new uint8_t[RS232_BUFFER_SIZE];
-
-    // Allocate ESP32 buffers
-    esp32RxBuffer = new uint8_t[ESP32_BUFFER_SIZE];
-    esp32TxBuffer = new uint8_t[ESP32_BUFFER_SIZE];
-
-    // Check if all allocations succeeded
-    if (!gps1RxBuffer || !gps1TxBuffer || !gps2RxBuffer || !gps2TxBuffer ||
-        !rtkRxBuffer || !rs232TxBuffer || !esp32RxBuffer || !esp32TxBuffer)
-    {
-        Serial.print("\r\n  - ** Buffer allocation FAILED **");
-        deallocateSerialBuffers();
-        return false;
-    }
-
-    Serial.printf("\r\n  - GPS buffers: %i bytes each", GPS_BUFFER_SIZE);
-    Serial.printf("\r\n  - RTK buffer: %i bytes", RTK_BUFFER_SIZE);
-    Serial.printf("\r\n  - RS232 buffer: %i bytes", RS232_BUFFER_SIZE);
-    Serial.printf("\r\n  - ESP32 buffers: %i bytes each", ESP32_BUFFER_SIZE);
-
-    return true;
-}
-
-void HardwareManager::deallocateSerialBuffers()
-{
-    delete[] gps1RxBuffer;
-    gps1RxBuffer = nullptr;
-    delete[] gps1TxBuffer;
-    gps1TxBuffer = nullptr;
-    delete[] gps2RxBuffer;
-    gps2RxBuffer = nullptr;
-    delete[] gps2TxBuffer;
-    gps2TxBuffer = nullptr;
-    delete[] rtkRxBuffer;
-    rtkRxBuffer = nullptr;
-    delete[] rs232TxBuffer;
-    rs232TxBuffer = nullptr;
-    delete[] esp32RxBuffer;
-    esp32RxBuffer = nullptr;
-    delete[] esp32TxBuffer;
-    esp32TxBuffer = nullptr;
-}
-
-void HardwareManager::configureDigitalPins()
-{
-    // Buzzer output
-    pinMode(getBuzzerPin(), OUTPUT);
-    digitalWrite(getBuzzerPin(), LOW);
-
-    // Motor sleep control
-    pinMode(getSleepPin(), OUTPUT);
-    digitalWrite(getSleepPin(), LOW); // Keep motor asleep initially
-
-    // Input pins with pullups
-    pinMode(getSteerPin(), INPUT_PULLUP);
-    pinMode(getKickoutDPin(), INPUT_PULLUP);
-}
-
-void HardwareManager::configureAnalogPins()
-{
-    // Disable pullup/pulldown resistors for analog inputs
-    pinMode(getWASSensorPin(), INPUT_DISABLE);
-    pinMode(getWorkPin(), INPUT_DISABLE);
-    pinMode(getCurrentPin(), INPUT_DISABLE);
-    pinMode(getKickoutAPin(), INPUT_DISABLE);
-}
-
-void HardwareManager::configurePWMPins()
-{
-    // PWM pins are configured automatically when analogWrite is called
-    // Just ensure they start at 0
-    analogWrite(getPWM1Pin(), 0);
-    analogWrite(getPWM2Pin(), 0);
+    return isInitialized;
 }
