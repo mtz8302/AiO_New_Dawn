@@ -1,17 +1,18 @@
 #include "Arduino.h"
 #include "mongoose_glue.h"
 #include "NetworkBase.h"
-//#include "pcb.h"
 #include "ConfigManager.h"
 #include "HardwareManager.h"
 #include "SerialManager.h"
 #include "SerialGlobals.h"
+#include "GNSSProcessor.h"
 
 // ConfigManager pointer definition (same pattern as machinePTR)
 // This is the ONLY definition - all other files use extern declaration
 ConfigManager *configPTR = nullptr;
 extern HardwareManager *hardwarePTR;
 extern SerialManager *serialPTR;
+extern GNSSProcessor *gnssPTR;
 
 void setup()
 {
@@ -90,6 +91,27 @@ void setup()
   hardwarePTR->printHardwareStatus();
   serialPTR->printSerialStatus();
 
+  // NEW: Test GNSSProcessor
+  Serial.print("\r\n\n*** Testing GNSSProcessor ***");
+  gnssPTR = new GNSSProcessor();
+  if (gnssPTR->setup(true, true)) // Enable debug and noise filter
+  {
+    Serial.print("\r\n✓ GNSSProcessor SUCCESS");
+    Serial.print("\r\n  - Debug enabled: YES");
+    Serial.print("\r\n  - Noise filter: YES");
+    Serial.print("\r\n  - Ready for NMEA data");
+
+    // Print initial stats
+    gnssPTR->printStats();
+  }
+  else
+  {
+    Serial.print("\r\n✗ GNSSProcessor FAILED");
+  }
+
+  Serial.print("\r\n\n=== New Dawn Initialization Complete ===");
+  Serial.print("\r\nEntering main loop...\r\n");
+
   Serial.print("\r\n=== System Ready ===\r\n");
 }
 
@@ -104,21 +126,78 @@ void loop()
     lastPrint = millis();
   }
 
-  if (serialPTR && serialPTR->isSerialInitialized())
-  {
-    // Update bridge mode (handles USB DTR detection)
-    serialPTR->updateBridgeMode();
+  // if (serialPTR && serialPTR->isSerialInitialized())
+  // {
+  //   // Update bridge mode (handles USB DTR detection)
+  //   serialPTR->updateBridgeMode();
 
-    // Process serial ports
-    serialPTR->processGPS1();
-    serialPTR->processGPS2();
-    serialPTR->processRTK();
-    serialPTR->processRS232();
-    serialPTR->processESP32();
-  }
-  else
+  //   // Process serial ports
+  //   serialPTR->processGPS1();
+  //   serialPTR->processGPS2();
+  //   serialPTR->processRTK();
+  //   serialPTR->processRS232();
+  //   serialPTR->processESP32();
+  // }
+  // else
+  // {
+  //   // Fall back to existing serial processing if SerialManager failed
+  //   // Keep your existing serialGPS(), serialESP32(), serialRTCM() calls here
+  // }
+
+  // if (SerialGPS1.available())
+  // {
+  //   char c = SerialGPS1.read();
+  //   Serial.println(c);
+  //   // gnssPTR->processNMEAChar(c);
+
+  //   // // Debug: Show first 100 characters to see what we're getting
+  //   // static uint32_t charCount = 0;
+  //   // if (charCount < 100)
+  //   // {
+  //   //   Serial.print(c);
+  //   //   charCount++;
+  //   //   if (charCount == 100)
+  //   //   {
+  //   //     Serial.println("\r\n--- End of first 100 GPS characters ---");
+  //   //   }
+  //   // }
+  // }
+
+  // Just feed GPS data to processor - use if instead of while to prevent blocking
+  if (SerialGPS1.available())
   {
-    // Fall back to existing serial processing if SerialManager failed
-    // Keep your existing serialGPS(), serialESP32(), serialRTCM() calls here
+    char c = SerialGPS1.read();
+    gnssPTR->processNMEAChar(c);
   }
+
+  // Print structure contents every 5 seconds to see if data is getting in
+  static uint32_t lastCheck = 0;
+  if (millis() - lastCheck > 5000)
+  {
+    lastCheck = millis();
+
+    const auto &data = gnssPTR->getData();
+
+    Serial.println("\r\n=== GNSSProcessor Data Structure ===");
+    Serial.printf("isValid: %s\r\n", data.isValid ? "YES" : "NO");
+    Serial.printf("hasPosition: %s\r\n", data.hasPosition ? "YES" : "NO");
+    Serial.printf("hasVelocity: %s\r\n", data.hasVelocity ? "YES" : "NO");
+    Serial.printf("hasDualHeading: %s\r\n", data.hasDualHeading ? "YES" : "NO");
+    Serial.printf("latitude: %.6f\r\n", data.latitude);
+    Serial.printf("longitude: %.6f\r\n", data.longitude);
+    Serial.printf("fixQuality: %d\r\n", data.fixQuality);
+    Serial.printf("numSatellites: %d\r\n", data.numSatellites);
+    Serial.printf("hdop: %.1f\r\n", data.hdop);
+    Serial.printf("speedKnots: %.1f\r\n", data.speedKnots);
+    Serial.printf("headingTrue: %.1f\r\n", data.headingTrue);
+    Serial.printf("dataAge: %lu ms\r\n", gnssPTR->getDataAge());
+
+    // Show stats
+    const auto &stats = gnssPTR->getStats();
+    Serial.printf("Messages processed: %lu\r\n", stats.messagesProcessed);
+    Serial.printf("Parse errors: %lu\r\n", stats.parseErrors);
+    Serial.printf("Success rate: %.1f%%\r\n", gnssPTR->getSuccessRate());
+    Serial.println("=====================================");
+  }
+
 }
