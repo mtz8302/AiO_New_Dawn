@@ -94,7 +94,7 @@ void setup()
   // NEW: Test GNSSProcessor
   Serial.print("\r\n\n*** Testing GNSSProcessor ***");
   gnssPTR = new GNSSProcessor();
-  if (gnssPTR->setup(true, true)) // Enable debug and noise filter
+  if (gnssPTR->setup(false, true)) // Enable debug and noise filter
   {
     Serial.print("\r\n✓ GNSSProcessor SUCCESS");
     Serial.print("\r\n  - Debug enabled: YES");
@@ -191,6 +191,9 @@ void loop()
     Serial.printf("speedKnots: %.1f\r\n", data.speedKnots);
     Serial.printf("headingTrue: %.1f\r\n", data.headingTrue);
     Serial.printf("dataAge: %lu ms\r\n", gnssPTR->getDataAge());
+    Serial.printf("dual heading: %.2f\r\n", data.dualHeading);
+    Serial.printf("dual roll: %.2f\r\n", data.dualRoll);
+    Serial.printf("heading quality: %d\r\n", data.headingQuality);
 
     // Show stats
     const auto &stats = gnssPTR->getStats();

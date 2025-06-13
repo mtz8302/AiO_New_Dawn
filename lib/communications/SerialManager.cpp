@@ -1,5 +1,9 @@
 #include "SerialManager.h"
 
+// Supported GPS baud rates for detection
+const int32_t SerialManager::GPS_BAUD_RATES[] = {460800, 115200, 57600, 38400};
+const uint8_t SerialManager::NUM_GPS_BAUD_RATES = 4;
+
 // Global instance pointer
 SerialManager *serialPTR = nullptr;
 
@@ -7,7 +11,9 @@ SerialManager *serialPTR = nullptr;
 SerialManager *SerialManager::instance = nullptr;
 
 SerialManager::SerialManager()
-    : isInitialized(false), serialIMU(&Serial4), prevUSB1DTR(false), prevUSB2DTR(false)
+    : isInitialized(false), serialIMU(&Serial4), prevUSB1DTR(false), prevUSB2DTR(false),
+      detectedGPS1Type(GPSType::UNKNOWN), detectedGPS2Type(GPSType::UNKNOWN),
+      detectedIMUType(IMUType::NONE)
 {
     instance = this;
     serialPTR = this;
@@ -41,6 +47,9 @@ bool SerialManager::initializeSerial()
         Serial.print("\r\n** Serial port initialization FAILED **");
         return false;
     }
+
+    // Detect connected devices
+    detectConnectedDevices();
 
     isInitialized = true;
     Serial.print("\r\n- Serial initialization SUCCESS");
@@ -86,6 +95,418 @@ bool SerialManager::initializeSerialPorts()
     return true;
 }
 
+void SerialManager::detectConnectedDevices()
+{
+    Serial.print("\r\n\n--- Device Detection ---");
+
+    // Clear buffers before detection
+    clearSerialBuffers();
+    delay(100); // Allow buffers to clear
+
+    // Detect GPS1 baud rate and type
+    Serial.print("\r\n- Detecting GPS1...");
+    int32_t gps1Baud = detectGPSBaudRate(SerialGPS1, "GPS1");
+    if (gps1Baud > 0)
+    {
+        Serial.printf(" found at %d baud,", gps1Baud);
+        // First try standard detection (for F9P)
+        detectedGPS1Type = detectGPSType(SerialGPS1, "GPS1");
+
+        // If generic NMEA, try Unicore detection with larger buffer
+        if (detectedGPS1Type == GPSType::GENERIC_NMEA)
+        {
+            GPSType unicoreType = detectUnicoreGPS(1); // 1 for GPS1
+            if (unicoreType != GPSType::UNKNOWN)
+            {
+                detectedGPS1Type = unicoreType;
+            }
+        }
+        Serial.printf(" type: %s", getGPSTypeName(detectedGPS1Type));
+    }
+    else
+    {
+        Serial.print(" not found");
+        detectedGPS1Type = GPSType::UNKNOWN;
+    }
+
+    // Detect GPS2 baud rate and type
+    Serial.print("\r\n- Detecting GPS2...");
+    int32_t gps2Baud = detectGPSBaudRate(SerialGPS2, "GPS2");
+    if (gps2Baud > 0)
+    {
+        Serial.printf(" found at %d baud,", gps2Baud);
+        // First try standard detection (for F9P)
+        detectedGPS2Type = detectGPSType(SerialGPS2, "GPS2");
+
+        // If generic NMEA, try Unicore detection with larger buffer
+        if (detectedGPS2Type == GPSType::GENERIC_NMEA)
+        {
+            GPSType unicoreType = detectUnicoreGPS(2); // 2 for GPS2
+            if (unicoreType != GPSType::UNKNOWN)
+            {
+                detectedGPS2Type = unicoreType;
+            }
+        }
+        Serial.printf(" type: %s", getGPSTypeName(detectedGPS2Type));
+    }
+    else
+    {
+        Serial.print(" not found");
+        detectedGPS2Type = GPSType::UNKNOWN;
+    }
+
+    // Detect IMU (unless already detected as UM981 integrated)
+    if (detectedGPS1Type == GPSType::UM981 || detectedGPS2Type == GPSType::UM981)
+    {
+        detectedIMUType = IMUType::UM981_INTEGRATED;
+        Serial.printf("\r\n- IMU detected: %s (integrated with GPS)", getIMUTypeName(detectedIMUType));
+    }
+    else
+    {
+        Serial.print("\r\n- Detecting IMU...");
+        detectedIMUType = detectIMUType();
+        Serial.printf(" %s", getIMUTypeName(detectedIMUType));
+    }
+}
+
+int32_t SerialManager::detectGPSBaudRate(HardwareSerial &port, const char *portName)
+{
+    // Try each baud rate
+    for (uint8_t i = 0; i < NUM_GPS_BAUD_RATES; i++)
+    {
+        int32_t baudRate = GPS_BAUD_RATES[i];
+
+        // Set baud rate
+        port.end();
+        delay(10);
+        port.begin(baudRate);
+        delay(100); // Give GPS time to start sending
+
+        // Clear any garbage
+        while (port.available())
+        {
+            port.read();
+        }
+
+        // Look for NMEA sentences at this baud rate
+        if (checkForNMEASentence(port, "$G", 500))
+        { // Look for any NMEA sentence starting with $G
+            // Found valid NMEA data at this baud rate
+            return baudRate;
+        }
+    }
+
+    // No valid data found at any baud rate
+    // Set back to default
+    port.end();
+    delay(10);
+    port.begin(BAUD_GPS);
+
+    return -1; // Not found
+}
+
+GPSType SerialManager::detectGPSType(HardwareSerial &port, const char *portName)
+{
+    // Clear any existing data
+    while (port.available())
+    {
+        port.read();
+    }
+
+    // Try u-blox UBX MON-VER command first
+    const uint8_t ubxMonVer[] = {0xB5, 0x62, 0x0A, 0x04, 0x00, 0x00, 0x0E, 0x34};
+    uint8_t response[256];
+    uint16_t responseLen;
+
+    if (sendAndWaitForResponse(port, ubxMonVer, sizeof(ubxMonVer), response, responseLen, 500))
+    {
+        // Parse UBX response for F9P identification
+        if (responseLen > 40)
+        {
+            // Look for "ZED-F9P" in the response
+            for (int i = 0; i < responseLen - 7; i++)
+            {
+                if (memcmp(&response[i], "ZED-F9P", 7) == 0)
+                {
+                    // For F9P, we can't reliably detect dual without checking messages
+                    // Default to single
+                    return GPSType::F9P_SINGLE;
+                }
+            }
+        }
+    }
+
+    // If not F9P, return generic NMEA
+    // Unicore detection will be done separately with larger buffer
+    return GPSType::GENERIC_NMEA;
+}
+
+GPSType SerialManager::detectUnicoreGPS(int portNum)
+{
+    // Temporary larger buffers for Unicore detection
+    const int tempBufferSize = 2048;
+    uint8_t *tempRxBuffer = new uint8_t[tempBufferSize];
+    uint8_t *tempTxBuffer = new uint8_t[256];
+
+    GPSType detectedType = GPSType::UNKNOWN;
+
+    if (portNum == 1)
+    {
+        // Clear buffer
+        while (SerialGPS1.available())
+        {
+            SerialGPS1.read();
+        }
+
+        // Temporarily increase buffer size for GPS1
+        SerialGPS1.addMemoryForRead(tempRxBuffer, tempBufferSize);
+        SerialGPS1.addMemoryForWrite(tempTxBuffer, 256);
+
+        // Send VERSION command
+        SerialGPS1.write("VERSION\r\n");
+        delay(100);
+
+        // Read response
+        uint32_t startTime = millis();
+        while (millis() - startTime < 500)
+        {
+            if (SerialGPS1.available())
+            {
+                char incoming[256];
+                memset(incoming, 0, sizeof(incoming));
+
+                int bytesRead = SerialGPS1.readBytesUntil('\n', incoming, sizeof(incoming) - 1);
+
+                if (bytesRead > 0)
+                {
+                    if (strstr(incoming, "UM981") != NULL)
+                    {
+                        Serial.printf("\r\n  UM981 VERSION: %s", incoming);
+                        detectedType = GPSType::UM981;
+                        break;
+                    }
+                    if (strstr(incoming, "UM982") != NULL)
+                    {
+                        Serial.printf("\r\n  UM982 VERSION: %s", incoming);
+                        detectedType = GPSType::UM982_SINGLE;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Restore original buffers
+        SerialGPS1.addMemoryForRead(gps1RxBuffer, sizeof(gps1RxBuffer));
+        SerialGPS1.addMemoryForWrite(gps1TxBuffer, sizeof(gps1TxBuffer));
+
+        // Clear any remaining data
+        while (SerialGPS1.available())
+        {
+            SerialGPS1.read();
+        }
+    }
+    else if (portNum == 2)
+    {
+        // Clear buffer
+        while (SerialGPS2.available())
+        {
+            SerialGPS2.read();
+        }
+
+        // Temporarily increase buffer size for GPS2
+        SerialGPS2.addMemoryForRead(tempRxBuffer, tempBufferSize);
+        SerialGPS2.addMemoryForWrite(tempTxBuffer, 256);
+
+        // Send VERSION command
+        SerialGPS2.write("VERSION\r\n");
+        delay(100);
+
+        // Read response
+        uint32_t startTime = millis();
+        while (millis() - startTime < 500)
+        {
+            if (SerialGPS2.available())
+            {
+                char incoming[256];
+                memset(incoming, 0, sizeof(incoming));
+
+                int bytesRead = SerialGPS2.readBytesUntil('\n', incoming, sizeof(incoming) - 1);
+
+                if (bytesRead > 0)
+                {
+                    if (strstr(incoming, "UM981") != NULL)
+                    {
+                        Serial.printf("\r\n  UM981 VERSION: %s", incoming);
+                        detectedType = GPSType::UM981;
+                        break;
+                    }
+                    if (strstr(incoming, "UM982") != NULL)
+                    {
+                        Serial.printf("\r\n  UM982 VERSION: %s", incoming);
+                        detectedType = GPSType::UM982_SINGLE;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Restore original buffers
+        SerialGPS2.addMemoryForRead(gps2RxBuffer, sizeof(gps2RxBuffer));
+        SerialGPS2.addMemoryForWrite(gps2TxBuffer, sizeof(gps2TxBuffer));
+
+        // Clear any remaining data
+        while (SerialGPS2.available())
+        {
+            SerialGPS2.read();
+        }
+    }
+
+    // Clean up temporary buffers
+    delete[] tempRxBuffer;
+    delete[] tempTxBuffer;
+
+    return detectedType;
+}
+
+IMUType SerialManager::detectIMUType()
+{
+    if (!serialIMU)
+        return IMUType::NONE;
+
+    // Clear IMU buffer
+    while (serialIMU->available())
+    {
+        serialIMU->read();
+    }
+
+    // BNO085 detection - in RVC mode, it sends data continuously
+    // Look for RVC packet (starts with 0xAA, 0xAA)
+    uint32_t startTime = millis();
+    uint8_t lastByte = 0;
+    while (millis() - startTime < 500)
+    {
+        if (serialIMU->available())
+        {
+            uint8_t currentByte = serialIMU->read();
+            if (lastByte == 0xAA && currentByte == 0xAA)
+            {
+                // Found RVC header
+                return IMUType::BNO085;
+            }
+            lastByte = currentByte;
+        }
+    }
+
+    // TODO: Add detection for TM171 and CMPS14
+
+    return IMUType::NONE;
+}
+
+bool SerialManager::sendAndWaitForResponse(HardwareSerial &port, const uint8_t *cmd, uint16_t cmdLen,
+                                           uint8_t *response, uint16_t &responseLen, uint32_t timeout)
+{
+    // Clear input buffer
+    while (port.available())
+    {
+        port.read();
+    }
+
+    // Send command
+    port.write(cmd, cmdLen);
+
+    // Wait for response
+    uint32_t startTime = millis();
+    responseLen = 0;
+
+    while (millis() - startTime < timeout && responseLen < 256)
+    {
+        if (port.available())
+        {
+            response[responseLen++] = port.read();
+            startTime = millis(); // Reset timeout on data received
+        }
+    }
+
+    return responseLen > 0;
+}
+
+bool SerialManager::checkForNMEASentence(HardwareSerial &port, const char *sentenceType, uint32_t timeout)
+{
+    uint32_t startTime = millis();
+    char buffer[128];
+    uint8_t bufIdx = 0;
+
+    while (millis() - startTime < timeout)
+    {
+        if (port.available())
+        {
+            char c = port.read();
+
+            if (c == '$')
+            {
+                bufIdx = 0;
+                buffer[bufIdx++] = c;
+            }
+            else if (bufIdx > 0 && bufIdx < sizeof(buffer) - 1)
+            {
+                buffer[bufIdx++] = c;
+
+                if (c == '\n')
+                {
+                    buffer[bufIdx] = '\0';
+                    if (strstr(buffer, sentenceType) != nullptr)
+                    {
+                        return true;
+                    }
+                    bufIdx = 0;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+const char *SerialManager::getGPSTypeName(GPSType type) const
+{
+    switch (type)
+    {
+    case GPSType::F9P_SINGLE:
+        return "F9P Single";
+    case GPSType::F9P_DUAL:
+        return "F9P Dual";
+    case GPSType::UM981:
+        return "UM981";
+    case GPSType::UM982_SINGLE:
+        return "UM982 Single";
+    case GPSType::UM982_DUAL:
+        return "UM982 Dual";
+    case GPSType::GENERIC_NMEA:
+        return "Generic NMEA";
+    default:
+        return "Unknown";
+    }
+}
+
+const char *SerialManager::getIMUTypeName(IMUType type) const
+{
+    switch (type)
+    {
+    case IMUType::BNO085:
+        return "BNO085";
+    case IMUType::TM171:
+        return "TM171";
+    case IMUType::CMPS14:
+        return "CMPS14";
+    case IMUType::UM981_INTEGRATED:
+        return "UM981 Integrated";
+    case IMUType::GENERIC:
+        return "Generic";
+    default:
+        return "None";
+    }
+}
+
 void SerialManager::processGPS1()
 {
     // Basic GPS1 processing without external dependencies
@@ -97,27 +518,25 @@ void SerialManager::processGPS1()
             if (gps1Available > sizeof(gps1RxBuffer) - 10)
             {
                 SerialGPS1.clear();
-                Serial.printf("\r\n%i *SerialGPS1 buffer cleared!*", millis());
+                Serial.printf("\r\n%i *SerialGPS1 buffer cleared!-Normal at startup*", millis());
                 return;
             }
 
+            // Basic processing - just read the data for now
             uint8_t gps1Read = SerialGPS1.read();
-
-            // Basic NMEA forwarding to RS232
-            SerialRS232.write(gps1Read);
+            // Data will be processed by GNSSProcessor
+            (void)gps1Read; // Suppress unused variable warning
         }
     }
-#if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
     else
     {
         handleGPS1BridgeMode();
     }
-#endif
 }
 
 void SerialManager::processGPS2()
 {
-    // Basic GPS2 processing without external dependencies
+    // Basic GPS2 processing
     if (!isGPS2Bridged())
     {
         uint16_t gps2Available = SerialGPS2.available();
@@ -126,39 +545,45 @@ void SerialManager::processGPS2()
             if (gps2Available > sizeof(gps2RxBuffer) - 10)
             {
                 SerialGPS2.clear();
-                Serial.printf("\r\n%i *SerialGPS2 buffer cleared!*", millis());
+                Serial.printf("\r\n%i *SerialGPS2 buffer cleared!-Normal at startup*", millis());
                 return;
             }
 
+            // Basic processing
             uint8_t gps2Read = SerialGPS2.read();
-            // Basic processing - can be enhanced later
             (void)gps2Read; // Suppress unused variable warning
         }
     }
-#if defined(USB_TRIPLE_SERIAL)
     else
     {
         handleGPS2BridgeMode();
     }
-#endif
 }
 
 void SerialManager::processRTK()
 {
-    // Forward RTK data to GPS1
+    // RTK/RTCM processing
     if (SerialRTK.available())
     {
         uint8_t rtcmByte = SerialRTK.read();
+
+        // Forward RTCM to GPS1 (unless bridged)
         if (!isGPS1Bridged())
         {
             SerialGPS1.write(rtcmByte);
         }
+
+        // Optionally forward to GPS2 for special setups
+        // if (!isGPS2Bridged()) {
+        //     SerialGPS2.write(rtcmByte);
+        // }
     }
 }
 
 void SerialManager::processRS232()
 {
-    // RS232 processing - placeholder for future implementation
+    // RS232 is typically output only for NMEA sentences
+    // Add any RS232 input processing here if needed
 }
 
 void SerialManager::processESP32()
@@ -172,18 +597,14 @@ void SerialManager::processESP32()
         incomingBytes[incomingIndex] = SerialESP32.read();
         incomingIndex++;
 
-        // Check for CR/LF termination
+        // Check for CRLF termination
         if (incomingIndex >= 2 &&
             incomingBytes[incomingIndex - 2] == 13 &&
             incomingBytes[incomingIndex - 1] == 10)
         {
-            if (validatePGNHeader(incomingBytes, incomingIndex - 2))
+            if (validatePGNHeader(incomingBytes, incomingIndex))
             {
                 processESP32PGN(incomingBytes, incomingIndex - 2);
-            }
-            else
-            {
-                Serial.print("\r\n*** ESP32 invalid PGN header ***");
             }
             incomingIndex = 0;
         }
@@ -344,6 +765,11 @@ void SerialManager::printSerialStatus()
     Serial.printf("\r\nInitialized: %s", isInitialized ? "YES" : "NO");
     Serial.printf("\r\nGPS1 Bridged: %s", isGPS1Bridged() ? "YES" : "NO");
     Serial.printf("\r\nGPS2 Bridged: %s", isGPS2Bridged() ? "YES" : "NO");
+
+    Serial.print("\r\n\n--- Detected Devices ---");
+    Serial.printf("\r\nGPS1: %s", getGPSTypeName(detectedGPS1Type));
+    Serial.printf("\r\nGPS2: %s", getGPSTypeName(detectedGPS2Type));
+    Serial.printf("\r\nIMU: %s", getIMUTypeName(detectedIMUType));
 
     printSerialConfiguration();
     Serial.print("\r\n=============================\r\n");
