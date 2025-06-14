@@ -12,12 +12,10 @@
 #include <Streaming.h>
 
 // Include necessary parser and statistics classes
-#include "NMEA.h"
 #include "UBXParser.h"
 
 // External variables that SerialManager needs access to
 extern void sendUDPbytes(uint8_t *message, int msgLen);
-extern NMEAParser<5> nmeaParser;
 extern UBX_Parser ubxParser;
 extern bool nmeaDebug;
 extern bool nmeaDebug2;
