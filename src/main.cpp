@@ -102,22 +102,17 @@ void setup()
     Serial.print("\r\n✗ GNSSProcessor FAILED");
   }
 
-  // NEW: Test IMUProcessor
+  // Test IMUProcessor
   Serial.print("\r\n\n*** Testing IMUProcessor ***");
   imuPTR = new IMUProcessor();
-  imuPTR->setup();
 
-  // Give IMU time to be detected
-  delay(200);
-
-  if (imuPTR->detectIMU())
+  // Initialize the IMU
+  if (imuPTR->initialize())
   {
     Serial.print("\r\n✓ IMUProcessor SUCCESS");
-    Serial.print("\r\n  - IMU Type: ");
-    Serial.print(imuPTR->imuType == IMUType::BNO085 ? "BNO085" : imuPTR->imuType == IMUType::TM171 ? "TM171"
-                                                                                                   : "None");
+    Serial.printf("\r\n  - IMU Type: %s", imuPTR->getIMUTypeName());
 
-    if (imuPTR->imuType == IMUType::TM171)
+    if (imuPTR->getIMUType() == IMUType::TM171)
     {
       Serial.print("\r\n  - TM171 detected - waiting for angle data...");
       Serial.print("\r\n  - Note: TM171 TX/RX silkscreen labels are reversed!");
@@ -131,6 +126,24 @@ void setup()
   }
 
   Serial.print("\r\n\n*** Class Testing Complete ***\r\n");
+
+  // Print status of all managers
+  hardwarePTR->printHardwareStatus();
+  serialPTR->printSerialStatus();
+  if (imuPTR)
+  {
+    imuPTR->printStatus();
+  }
+
+  Serial.print("\r\n\n*** Class Testing Complete ***\r\n");
+
+  // Print status of all managers
+  hardwarePTR->printHardwareStatus();
+  serialPTR->printSerialStatus();
+  if (imuPTR)
+  {
+    imuPTR->printStatus();
+  }
 
   // Print status of all managers
   hardwarePTR->printHardwareStatus();
@@ -162,17 +175,11 @@ void loop()
     lastPrint = millis();
 
     // Check for IMU data
-    if (imuPTR && imuPTR->dataReady)
+    if (imuPTR && imuPTR->hasValidData())
     {
-      Serial.print("\r\n[");
-      Serial.print(millis() / 1000.0, 1);
-      Serial.print("s] IMU: R=");
-      Serial.print(imuPTR->roll, 1);
-      Serial.print("° P=");
-      Serial.print(imuPTR->pitch, 1);
-      Serial.print("° H=");
-      Serial.print(imuPTR->heading, 1);
-      Serial.print("°");
+      IMUData data = imuPTR->getCurrentData();
+      Serial.printf("\r\n[%.1fs] IMU: R=%.1f° P=%.1f° H=%.1f°",
+                    millis() / 1000.0, data.roll, data.pitch, data.heading);
     }
   }
 
@@ -183,40 +190,26 @@ void loop()
 
     if (imuPTR)
     {
-      // Call printDebugInfo method from IMUProcessor.cpp
-      Serial.println(F("\n=== IMU Processor Debug ==="));
-      Serial.print(F("IMU Type: "));
-      Serial.println(imuPTR->imuType == IMUType::BNO085 ? F("BNO085") : imuPTR->imuType == IMUType::TM171 ? F("TM171")
-                                                                                                          : F("None"));
-      Serial.print(F("IMU Detected: "));
-      Serial.println(imuPTR->imuDetected ? F("Yes") : F("No"));
-      Serial.print(F("Data Ready: "));
-      Serial.println(imuPTR->dataReady ? F("Yes") : F("No"));
-
-      if (imuPTR->imuType == IMUType::TM171)
-      {
-        imuPTR->tm171Parser.printDebug();
-      }
-
-      if (imuPTR->dataReady)
-      {
-        Serial.print(F("Roll: "));
-        Serial.print(imuPTR->roll, 2);
-        Serial.println(F("°"));
-        Serial.print(F("Pitch: "));
-        Serial.print(imuPTR->pitch, 2);
-        Serial.println(F("°"));
-        Serial.print(F("Yaw/Heading: "));
-        Serial.print(imuPTR->heading, 2);
-        Serial.println(F("°"));
-
-        uint32_t timeSinceData = millis() - imuPTR->lastDataTime;
-        Serial.print(F("Time since last data: "));
-        Serial.print(timeSinceData);
-        Serial.println(F(" ms"));
-      }
-      Serial.println(F("==========================\n"));
+      imuPTR->printStatus();
     }
+  }
+
+  // Very detailed status every 30 seconds
+  if (millis() - lastDetailedStatus > 30000)
+  {
+    lastDetailedStatus = millis();
+
+    Serial.print("\r\n\n=== Detailed System Status ===");
+    hardwarePTR->printHardwareStatus();
+    serialPTR->printSerialStatus();
+    gnssPTR->printStats();
+
+    if (imuPTR)
+    {
+      imuPTR->printStatus();
+    }
+
+    Serial.print("\r\n=== End Status ===\r\n");
   }
 
   // Process GPS data if available

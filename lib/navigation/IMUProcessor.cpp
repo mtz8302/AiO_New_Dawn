@@ -1,5 +1,5 @@
 #include "IMUProcessor.h"
-#include "TM171MinimalParser.h"
+#include "TM171AiOParser.h"
 
 // Global instance pointer
 IMUProcessor *imuPTR = nullptr;
@@ -121,9 +121,15 @@ bool IMUProcessor::initTM171()
     Serial.print("\r\n- Initializing TM171");
 
     // Create TM171 parser
-    tm171Parser = new TM171MinimalParser();
+    tm171Parser = new TM171AiOParser();
+    Serial.print("\r\n  - TM171 AiO parser created");
 
-    Serial.print("\r\n  - TM171 parser initialized");
+    // Make sure serial port is properly initialized
+    if (!imuSerial)
+    {
+        Serial.print("\r\n  - ERROR: IMU serial port is NULL!");
+        return false;
+    }
 
     // Clear serial buffer
     while (imuSerial->available())
@@ -131,36 +137,12 @@ bool IMUProcessor::initTM171()
         imuSerial->read();
     }
 
-    // Wait for data
-    Serial.print("\r\n  - Waiting for TM171 data...");
-    uint32_t startTime = millis();
+    // For TM171, we'll consider it initialized even without initial data
+    // The device may need configuration or time to start
+    Serial.print("\r\n  - TM171 initialization complete");
+    Serial.print("\r\n  - Waiting for RPY packets (Object ID 0x23)...");
 
-    while (millis() - startTime < 1000)
-    {
-        if (imuSerial->available())
-        {
-            uint8_t byte = imuSerial->read();
-            tm171Parser->processByte(byte);
-
-            if (tm171Parser->packetsReceived > 0)
-            {
-                Serial.printf("\r\n  - TM171 packets received: %lu", tm171Parser->packetsReceived);
-                return true;
-            }
-        }
-    }
-
-    // If we got here, check if any data was received
-    if (tm171Parser->packetsError > 0)
-    {
-        Serial.printf("\r\n  - TM171 CRC errors: %lu (check wiring)", tm171Parser->packetsError);
-    }
-    else
-    {
-        Serial.print("\r\n  - No TM171 data received");
-    }
-
-    return false;
+    return true;
 }
 
 void IMUProcessor::process()
@@ -208,27 +190,41 @@ void IMUProcessor::processBNO085Data()
 
 void IMUProcessor::processTM171Data()
 {
+    if (!tm171Parser)
+        return;
+
     while (imuSerial->available())
     {
         uint8_t byte = imuSerial->read();
-        tm171Parser.addByte(byte);
+        tm171Parser->processByte(byte);
 
         // Check if we have new valid data
-        if (tm171Parser.isDataValid())
+        if (tm171Parser->isDataValid())
         {
-            // Update our angle data
-            roll = tm171Parser.getRoll();
-            pitch = tm171Parser.getPitch();
-            yaw = tm171Parser.getYaw();
+            // Update current data structure
+            currentData.heading = tm171Parser->getYaw();
+            currentData.pitch = tm171Parser->getPitch();
+            currentData.roll = tm171Parser->getRoll();
+            currentData.yawRate = 0;  // TM171 doesn't provide yaw rate
+            currentData.quality = 10; // Assume good quality if data is valid
+            currentData.timestamp = millis();
+            currentData.isValid = true;
 
-            // TM171 yaw is heading in this context
-            heading = yaw;
-
-            dataReady = true;
-            lastDataTime = millis();
+            // Update statistics from parser
+            packetsReceived = tm171Parser->totalPackets;
+            packetsErrors = tm171Parser->crcErrors;
+            timeSinceLastPacket = 0;
         }
     }
+
+    // Update time since last packet
+    if (tm171Parser->getTimeSinceLastValid() > 100)
+    {
+        currentData.isValid = false;
+        currentData.quality = 0;
+    }
 }
+
 const char *IMUProcessor::getIMUTypeName() const
 {
     return serialMgr ? serialMgr->getIMUTypeName(detectedType) : "Unknown";
@@ -258,7 +254,15 @@ void IMUProcessor::printStatus()
         Serial.print("\r\n\nNo valid data");
     }
 
-    Serial.print("\r\n=============================\r\n");
+    Serial.print("\r\n=============================");
+
+    // If TM171, print parser debug info
+    if (detectedType == IMUType::TM171 && tm171Parser)
+    {
+        tm171Parser->printStats();
+    }
+
+    Serial.println();
 }
 
 void IMUProcessor::printCurrentData()
@@ -269,41 +273,4 @@ void IMUProcessor::printCurrentData()
                       currentData.timestamp, currentData.heading, currentData.roll,
                       currentData.pitch, currentData.yawRate, currentData.quality);
     }
-}
-
-// Add a debug method to IMUProcessor
-void IMUProcessor::printDebugInfo()
-{
-    Serial.println(F("\n=== IMU Processor Debug ==="));
-    Serial.print(F("IMU Type: "));
-    Serial.println(imuType == IMUType::BNO085 ? F("BNO085") : imuType == IMUType::TM171 ? F("TM171")
-                                                                                        : F("None"));
-    Serial.print(F("IMU Detected: "));
-    Serial.println(imuDetected ? F("Yes") : F("No"));
-    Serial.print(F("Data Ready: "));
-    Serial.println(dataReady ? F("Yes") : F("No"));
-
-    if (imuType == IMUType::TM171)
-    {
-        tm171Parser.printDebug();
-    }
-
-    if (dataReady)
-    {
-        Serial.print(F("Roll: "));
-        Serial.print(roll, 2);
-        Serial.println(F("°"));
-        Serial.print(F("Pitch: "));
-        Serial.print(pitch, 2);
-        Serial.println(F("°"));
-        Serial.print(F("Yaw/Heading: "));
-        Serial.print(heading, 2);
-        Serial.println(F("°"));
-
-        uint32_t timeSinceData = millis() - lastDataTime;
-        Serial.print(F("Time since last data: "));
-        Serial.print(timeSinceData);
-        Serial.println(F(" ms"));
-    }
-    Serial.println(F("==========================\n"));
 }

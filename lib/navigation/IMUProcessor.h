@@ -4,7 +4,7 @@
 #include "Arduino.h"
 #include "SerialManager.h"
 #include "BNO_RVC.h"
-#include "TM171MinimalParser.h"
+#include "TM171AiOParser.h"
 #include "elapsedMillis.h"
 
 // IMU data structure
@@ -33,7 +33,7 @@ private:
     HardwareSerial *imuSerial;
 
     // TM171 support
-    TM171MinimalParser *tm171Parser;
+    TM171AiOParser *tm171Parser;
 
     // Latest IMU data
     IMUData currentData;
