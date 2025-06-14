@@ -1,3 +1,4 @@
+// main.cpp - Updated section with IMU testing
 #include "Arduino.h"
 #include "mongoose_glue.h"
 #include "NetworkBase.h"
@@ -6,6 +7,7 @@
 #include "SerialManager.h"
 #include "SerialGlobals.h"
 #include "GNSSProcessor.h"
+#include "IMUProcessor.h" // Add this include
 
 // ConfigManager pointer definition (same pattern as machinePTR)
 // This is the ONLY definition - all other files use extern declaration
@@ -13,6 +15,7 @@ ConfigManager *configPTR = nullptr;
 extern HardwareManager *hardwarePTR;
 extern SerialManager *serialPTR;
 extern GNSSProcessor *gnssPTR;
+extern IMUProcessor *imuPTR; // Add this extern
 
 void setup()
 {
@@ -21,10 +24,6 @@ void setup()
 
   Serial.print("\r\n\n=== Teensy 4.1 AiO-NG-v6 New Dawn ===");
   Serial.print("\r\nInitializing subsystems...");
-
-  // Minimal GPS1 serial setup for RTCM testing
-  // SerialGPS1.begin(460800); // baudGPS from pcb.h
-  // SerialGPS1.addMemoryForWrite(GPS1txbuffer, sizeof(GPS1txbuffer));
 
   // Network and communication setup FIRST
   storedCfgSetup();
@@ -85,13 +84,7 @@ void setup()
     Serial.print("\r\n✗ SerialManager FAILED");
   }
 
-  Serial.print("\r\n\n*** Class Testing Complete ***\r\n");
-
-  // Print status of all managers
-  hardwarePTR->printHardwareStatus();
-  serialPTR->printSerialStatus();
-
-  // NEW: Test GNSSProcessor
+  // Test GNSSProcessor
   Serial.print("\r\n\n*** Testing GNSSProcessor ***");
   gnssPTR = new GNSSProcessor();
   if (gnssPTR->setup(false, true)) // Enable debug and noise filter
@@ -109,6 +102,40 @@ void setup()
     Serial.print("\r\n✗ GNSSProcessor FAILED");
   }
 
+  // NEW: Test IMUProcessor
+  Serial.print("\r\n\n*** Testing IMUProcessor ***");
+  imuPTR = new IMUProcessor();
+  imuPTR->setup();
+
+  // Give IMU time to be detected
+  delay(200);
+
+  if (imuPTR->detectIMU())
+  {
+    Serial.print("\r\n✓ IMUProcessor SUCCESS");
+    Serial.print("\r\n  - IMU Type: ");
+    Serial.print(imuPTR->imuType == IMUType::BNO085 ? "BNO085" : imuPTR->imuType == IMUType::TM171 ? "TM171"
+                                                                                                   : "None");
+
+    if (imuPTR->imuType == IMUType::TM171)
+    {
+      Serial.print("\r\n  - TM171 detected - waiting for angle data...");
+      Serial.print("\r\n  - Note: TM171 TX/RX silkscreen labels are reversed!");
+    }
+  }
+  else
+  {
+    Serial.print("\r\n✗ IMUProcessor - No IMU detected");
+    Serial.print("\r\n  - Check wiring and power");
+    Serial.print("\r\n  - For TM171: TX on Teensy -> RX on TM171 (reversed labels!)");
+  }
+
+  Serial.print("\r\n\n*** Class Testing Complete ***\r\n");
+
+  // Print status of all managers
+  hardwarePTR->printHardwareStatus();
+  serialPTR->printSerialStatus();
+
   Serial.print("\r\n\n=== New Dawn Initialization Complete ===");
   Serial.print("\r\nEntering main loop...\r\n");
 
@@ -120,59 +147,88 @@ void loop()
   mongoose_poll();
 
   static uint32_t lastPrint = 0;
-  if (millis() - lastPrint > 5000)
-  { // Print every 5 seconds
-    Serial.println("Main loop running...");
-    lastPrint = millis();
+  static uint32_t lastIMUDebug = 0;
+  static uint32_t lastDetailedStatus = 0;
+
+  // Process IMU data
+  if (imuPTR)
+  {
+    imuPTR->process();
   }
 
-  // if (serialPTR && serialPTR->isSerialInitialized())
-  // {
-  //   // Update bridge mode (handles USB DTR detection)
-  //   serialPTR->updateBridgeMode();
+  // Quick status print every second
+  if (millis() - lastPrint > 1000)
+  {
+    lastPrint = millis();
 
-  //   // Process serial ports
-  //   serialPTR->processGPS1();
-  //   serialPTR->processGPS2();
-  //   serialPTR->processRTK();
-  //   serialPTR->processRS232();
-  //   serialPTR->processESP32();
-  // }
-  // else
-  // {
-  //   // Fall back to existing serial processing if SerialManager failed
-  //   // Keep your existing serialGPS(), serialESP32(), serialRTCM() calls here
-  // }
+    // Check for IMU data
+    if (imuPTR && imuPTR->dataReady)
+    {
+      Serial.print("\r\n[");
+      Serial.print(millis() / 1000.0, 1);
+      Serial.print("s] IMU: R=");
+      Serial.print(imuPTR->roll, 1);
+      Serial.print("° P=");
+      Serial.print(imuPTR->pitch, 1);
+      Serial.print("° H=");
+      Serial.print(imuPTR->heading, 1);
+      Serial.print("°");
+    }
+  }
 
-  // if (SerialGPS1.available())
-  // {
-  //   char c = SerialGPS1.read();
-  //   Serial.println(c);
-  //   // gnssPTR->processNMEAChar(c);
+  // Detailed IMU debug every 5 seconds
+  if (millis() - lastIMUDebug > 5000)
+  {
+    lastIMUDebug = millis();
 
-  //   // // Debug: Show first 100 characters to see what we're getting
-  //   // static uint32_t charCount = 0;
-  //   // if (charCount < 100)
-  //   // {
-  //   //   Serial.print(c);
-  //   //   charCount++;
-  //   //   if (charCount == 100)
-  //   //   {
-  //   //     Serial.println("\r\n--- End of first 100 GPS characters ---");
-  //   //   }
-  //   // }
-  // }
+    if (imuPTR)
+    {
+      // Call printDebugInfo method from IMUProcessor.cpp
+      Serial.println(F("\n=== IMU Processor Debug ==="));
+      Serial.print(F("IMU Type: "));
+      Serial.println(imuPTR->imuType == IMUType::BNO085 ? F("BNO085") : imuPTR->imuType == IMUType::TM171 ? F("TM171")
+                                                                                                          : F("None"));
+      Serial.print(F("IMU Detected: "));
+      Serial.println(imuPTR->imuDetected ? F("Yes") : F("No"));
+      Serial.print(F("Data Ready: "));
+      Serial.println(imuPTR->dataReady ? F("Yes") : F("No"));
 
-  // Just feed GPS data to processor - use if instead of while to prevent blocking
+      if (imuPTR->imuType == IMUType::TM171)
+      {
+        imuPTR->tm171Parser.printDebug();
+      }
+
+      if (imuPTR->dataReady)
+      {
+        Serial.print(F("Roll: "));
+        Serial.print(imuPTR->roll, 2);
+        Serial.println(F("°"));
+        Serial.print(F("Pitch: "));
+        Serial.print(imuPTR->pitch, 2);
+        Serial.println(F("°"));
+        Serial.print(F("Yaw/Heading: "));
+        Serial.print(imuPTR->heading, 2);
+        Serial.println(F("°"));
+
+        uint32_t timeSinceData = millis() - imuPTR->lastDataTime;
+        Serial.print(F("Time since last data: "));
+        Serial.print(timeSinceData);
+        Serial.println(F(" ms"));
+      }
+      Serial.println(F("==========================\n"));
+    }
+  }
+
+  // Process GPS data if available
   if (SerialGPS1.available())
   {
     char c = SerialGPS1.read();
     gnssPTR->processNMEAChar(c);
   }
 
-  // Print structure contents every 5 seconds to see if data is getting in
+  // Print GNSS structure contents every 10 seconds to see if data is getting in
   static uint32_t lastCheck = 0;
-  if (millis() - lastCheck > 5000)
+  if (millis() - lastCheck > 10000)
   {
     lastCheck = millis();
 
@@ -202,5 +258,4 @@ void loop()
     Serial.printf("Success rate: %.1f%%\r\n", gnssPTR->getSuccessRate());
     Serial.println("=====================================");
   }
-
 }

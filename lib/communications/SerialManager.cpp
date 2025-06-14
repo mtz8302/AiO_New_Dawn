@@ -379,25 +379,116 @@ IMUType SerialManager::detectIMUType()
         serialIMU->read();
     }
 
-    // BNO085 detection - in RVC mode, it sends data continuously
-    // Look for RVC packet (starts with 0xAA, 0xAA)
+    // Wait for fresh data
+    delay(100);
+
+    // Try to detect IMU type by looking at data pattern
     uint32_t startTime = millis();
-    uint8_t lastByte = 0;
-    while (millis() - startTime < 500)
+    uint8_t buffer[256]; // Larger buffer for full packets
+    uint16_t bufIdx = 0;
+    int byteCount = 0;
+
+    Serial.print("\r\n  IMU detection: reading bytes...");
+
+    while (millis() - startTime < 1500) // Increased timeout
     {
         if (serialIMU->available())
         {
             uint8_t currentByte = serialIMU->read();
-            if (lastByte == 0xAA && currentByte == 0xAA)
+            byteCount++;
+
+            // Store in buffer
+            if (bufIdx < sizeof(buffer))
             {
-                // Found RVC header
-                return IMUType::BNO085;
+                buffer[bufIdx++] = currentByte;
             }
-            lastByte = currentByte;
+            else
+            {
+                // Shift buffer left by 1
+                memmove(buffer, buffer + 1, sizeof(buffer) - 1);
+                buffer[sizeof(buffer) - 1] = currentByte;
+                bufIdx = sizeof(buffer);
+            }
+
+            // Debug output - show first 40 bytes
+            if (byteCount <= 40)
+            {
+                Serial.printf("%02X ", currentByte);
+                if (byteCount % 10 == 0)
+                    Serial.print("\r\n  ");
+            }
+
+            // Check for BNO085 pattern (0xAA, 0xAA)
+            if (bufIdx >= 2)
+            {
+                for (int i = 0; i <= bufIdx - 2; i++)
+                {
+                    if (buffer[i] == 0xAA && buffer[i + 1] == 0xAA)
+                    {
+                        Serial.print("\r\n  Found BNO085 header");
+                        return IMUType::BNO085;
+                    }
+                }
+            }
+
+            // Check for TM171 EasyProfile pattern (0xAA, 0x55, size)
+            if (bufIdx >= 4) // Need at least header + size + 1 data byte
+            {
+                for (int i = 0; i <= bufIdx - 4; i++)
+                {
+                    if (buffer[i] == 0xAA && buffer[i + 1] == 0x55)
+                    {
+                        uint8_t payloadSize = buffer[i + 2];
+
+                        // TM171 typical payload sizes based on EasyProfile
+                        // Common sizes: 13, 29, 45, 61 (from your original code)
+                        // But also check for any reasonable size up to 120
+                        if (payloadSize > 0 && payloadSize <= 120)
+                        {
+                            Serial.printf("\r\n  Found TM171 EasyProfile header with payload size %d", payloadSize);
+
+                            // Wait to see if we get a complete packet
+                            uint32_t packetWaitStart = millis();
+                            int totalPacketSize = 2 + 1 + payloadSize + 2; // header + size + payload + checksum
+
+                            while (millis() - packetWaitStart < 50)
+                            {
+                                if (serialIMU->available())
+                                {
+                                    buffer[bufIdx++] = serialIMU->read();
+                                    if (bufIdx >= i + totalPacketSize)
+                                    {
+                                        // We have enough bytes for a complete packet
+                                        // Could validate checksum here if needed
+                                        Serial.print(" - Complete packet received");
+                                        return IMUType::TM171;
+                                    }
+                                }
+                            }
+
+                            // Even if we didn't get a complete packet,
+                            // finding the header with valid size is good enough
+                            return IMUType::TM171;
+                        }
+                    }
+                }
+            }
         }
     }
 
-    // TODO: Add detection for TM171 and CMPS14
+    Serial.printf("\r\n  No IMU pattern detected (read %d bytes)", byteCount);
+
+    // If we got data but couldn't identify the pattern, show what we got
+    if (byteCount > 0 && byteCount <= 100)
+    {
+        Serial.print("\r\n  Full buffer dump: ");
+        for (int i = 0; i < min(bufIdx, 50); i++)
+        {
+            Serial.printf("%02X ", buffer[i]);
+            if ((i + 1) % 20 == 0)
+                Serial.print("\r\n  ");
+        }
+    }
 
     return IMUType::NONE;
 }
