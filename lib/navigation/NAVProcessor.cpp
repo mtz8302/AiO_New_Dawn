@@ -160,7 +160,11 @@ bool NAVProcessor::formatPAOGIMessage() {
     int16_t pitch = -1;
     float yawRate = 0.0;
     
-    if (imuPTR && imuPTR->hasValidData()) {
+    // Prefer INS pitch if available (from UM981)
+    if (gnssData.hasINS) {
+        pitch = (int16_t)round(gnssData.insPitch);
+    }
+    else if (imuPTR && imuPTR->hasValidData()) {
         const auto& imuData = imuPTR->getCurrentData();
         pitch = (int16_t)round(imuData.pitch);
         yawRate = imuData.yawRate;
@@ -185,7 +189,7 @@ bool NAVProcessor::formatPAOGIMessage() {
         gnssData.altitude,                 // Altitude
         (float)gnssData.ageDGPS,           // Age DGPS
         gnssData.speedKnots,               // Speed
-        // Empty field for heading (just comma)
+        // Empty field for heading (double comma)
         dualHeading,                       // Dual heading in degrees
         roll,                              // Dual roll
         pitch,                             // Pitch (from IMU)

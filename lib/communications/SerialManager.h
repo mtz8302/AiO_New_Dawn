@@ -9,9 +9,9 @@
 #define SerialGPS2 Serial8
 #define SerialRS232 Serial7
 #define SerialESP32 Serial2
-1
-    // Baud rates (self-contained constants)
-    const int32_t baudGPS = 460800;
+
+// Baud rates (self-contained constants)
+const int32_t baudGPS = 460800;
 const int32_t baudRTK = 115200;
 const int32_t baudRS232 = 38400;
 const int32_t baudESP32 = 460800;

@@ -36,6 +36,24 @@ public:
         float dualHeading;      // degrees
         float dualRoll;         // degrees
         uint8_t headingQuality; // dual GPS solution quality
+        
+        // INS data (from INSPVAA/INSPVAXA messages)
+        float insPitch;         // degrees
+        float insRoll;          // degrees  
+        float insHeading;       // degrees (azimuth)
+        float northVelocity;    // m/s
+        float eastVelocity;     // m/s
+        float upVelocity;       // m/s
+        uint32_t insStatus;     // INS status word
+        uint8_t posType;        // Position type (for INS quality)
+        
+        // Extended INS data (from INSPVAXA)
+        float posStdDevLat;     // Position std dev latitude (m)
+        float posStdDevLon;     // Position std dev longitude (m)
+        float posStdDevAlt;     // Position std dev altitude (m)
+        float velStdDevNorth;   // Velocity std dev north (m/s)
+        float velStdDevEast;    // Velocity std dev east (m/s)
+        float velStdDevUp;      // Velocity std dev up (m/s)
 
         // Status flags
         uint32_t lastUpdateTime;
@@ -43,6 +61,7 @@ public:
         bool hasPosition;
         bool hasVelocity;
         bool hasDualHeading;
+        bool hasINS;            // Has INS data from INSPVAA/INSPVAXA
     };
 
     // Statistics
@@ -56,6 +75,8 @@ public:
         uint32_t vtgCount;
         uint32_t hprCount;
         uint32_t ksxtCount;
+        uint32_t inspvaaCount;
+        uint32_t inspvaxaCount;
     };
 
 private:
@@ -68,15 +89,17 @@ private:
     };
 
     // Parse buffer and state
-    char parseBuffer[200];
-    uint8_t bufferIndex;
+    char parseBuffer[300];  // Increased for INSPVAXA messages
+    uint16_t bufferIndex;  // Changed from uint8_t to support messages > 255 bytes
     ParseState state;
     uint8_t calculatedChecksum;
     uint8_t receivedChecksum;
+    uint32_t receivedChecksum32;  // For Unicore 32-bit CRC
     uint8_t checksumIndex;
+    bool isUnicoreMessage;        // Track if current message starts with #
 
     // Field parsing
-    char fields[20][16]; // Max 20 fields, 16 chars each
+    char fields[35][24]; // Max 35 fields, 24 chars each (increased for INSPVAXA)
     uint8_t fieldCount;
 
     // Data storage
@@ -102,6 +125,8 @@ private:
     bool parseVTG();
     bool parseHPR();
     bool parseKSXT();
+    bool parseINSPVAA();
+    bool parseINSPVAXA();
 
     // Field parsing utilities
     double parseLatitude(const char *lat, const char *ns);
@@ -138,6 +163,7 @@ public:
     bool hasPosition() const { return gpsData.hasPosition; }
     bool hasVelocity() const { return gpsData.hasVelocity; }
     bool hasDualHeading() const { return gpsData.hasDualHeading; }
+    bool hasINS() const { return gpsData.hasINS; }
 
     // Status checking
     uint32_t getDataAge() const;

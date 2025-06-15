@@ -91,10 +91,10 @@ void setup()
   // Test GNSSProcessor
   Serial.print("\r\n\n*** Testing GNSSProcessor ***");
   gnssPTR = new GNSSProcessor();
-  if (gnssPTR->setup(false, true)) // Enable debug and noise filter
+  if (gnssPTR->setup(false, true)) // Disable debug, enable noise filter
   {
     Serial.print("\r\n✓ GNSSProcessor SUCCESS");
-    Serial.print("\r\n  - Debug enabled: YES");
+    Serial.print("\r\n  - Debug enabled: NO");
     Serial.print("\r\n  - Noise filter: YES");
     Serial.print("\r\n  - Ready for NMEA data");
 
@@ -227,10 +227,22 @@ void loop()
   }
 
   // Process GPS1 data if available
-  if (SerialGPS1.available())
+  static uint32_t gps1ByteCount = 0;
+  static uint32_t lastGPS1Report = 0;
+  
+  while (SerialGPS1.available())
   {
     char c = SerialGPS1.read();
+    gps1ByteCount++;
     gnssPTR->processNMEAChar(c);
+  }
+  
+  // Report GPS1 byte count every 5 seconds
+  if (millis() - lastGPS1Report > 5000 && gps1ByteCount > 0)
+  {
+    lastGPS1Report = millis();
+    Serial.printf("\r\n[GPS1] Received %lu bytes in last 5s", gps1ByteCount);
+    gps1ByteCount = 0;
   }
   
   // Process GPS2 data if available (for F9P dual RELPOSNED)
@@ -240,36 +252,47 @@ void loop()
     gnssPTR->processUBXByte(b);
   }
 
-  // Print GNSS structure contents every 10 seconds to see if data is getting in
+  // Print GNSS structure contents every 5 seconds to see if data is getting in
   static uint32_t lastCheck = 0;
-  if (millis() - lastCheck > 10000)
+  if (millis() - lastCheck > 5000)
   {
     lastCheck = millis();
 
     const auto &data = gnssPTR->getData();
+    
+    Serial.print("\r\n\n=== GNSSProcessor Data Structure ===");
+    Serial.printf("\r\nisValid: %s", data.isValid ? "YES" : "NO");
+    Serial.printf("\r\nhasPosition: %s", data.hasPosition ? "YES" : "NO");
+    Serial.printf("\r\nhasVelocity: %s", data.hasVelocity ? "YES" : "NO");
+    Serial.printf("\r\nhasDualHeading: %s", data.hasDualHeading ? "YES" : "NO");
+    Serial.printf("\r\nhasINS: %s", data.hasINS ? "YES" : "NO");
+    Serial.printf("\r\nlatitude: %.8f", data.latitude);
+    Serial.printf("\r\nlongitude: %.8f", data.longitude);
+    Serial.printf("\r\naltitude: %.2f", data.altitude);
+    Serial.printf("\r\nfixQuality: %d", data.fixQuality);
+    Serial.printf("\r\nnumSatellites: %d", data.numSatellites);
+    Serial.printf("\r\nhdop: %.1f", data.hdop);
+    Serial.printf("\r\nspeedKnots: %.1f", data.speedKnots);
+    Serial.printf("\r\nheadingTrue: %.1f", data.headingTrue);
+    Serial.printf("\r\ndataAge: %lu ms", gnssPTR->getDataAge());
+    Serial.printf("\r\ndual heading: %.2f", data.dualHeading);
+    Serial.printf("\r\ndual roll: %.2f", data.dualRoll);
+    Serial.printf("\r\nINS pitch: %.2f", data.insPitch);
+    Serial.printf("\r\nheading quality: %d", data.headingQuality);
+    
+    // Display INSPVAXA standard deviation data if available
+    if (data.hasINS && (data.posStdDevLat > 0 || data.posStdDevLon > 0))
+    {
+      Serial.print("\r\n--- INSPVAXA Std Dev Data ---");
+      Serial.printf("\r\nPos StdDev: Lat=%.3fm Lon=%.3fm Alt=%.3fm", 
+                    data.posStdDevLat, data.posStdDevLon, data.posStdDevAlt);
+      Serial.printf("\r\nVel StdDev: N=%.3fm/s E=%.3fm/s U=%.3fm/s", 
+                    data.velStdDevNorth, data.velStdDevEast, data.velStdDevUp);
+    }
+    
+    Serial.print("\r\n=====================================");
+    
+    gnssPTR->printStats();
 
-    Serial.println("\r\n=== GNSSProcessor Data Structure ===");
-    Serial.printf("isValid: %s\r\n", data.isValid ? "YES" : "NO");
-    Serial.printf("hasPosition: %s\r\n", data.hasPosition ? "YES" : "NO");
-    Serial.printf("hasVelocity: %s\r\n", data.hasVelocity ? "YES" : "NO");
-    Serial.printf("hasDualHeading: %s\r\n", data.hasDualHeading ? "YES" : "NO");
-    Serial.printf("latitude: %.6f\r\n", data.latitude);
-    Serial.printf("longitude: %.6f\r\n", data.longitude);
-    Serial.printf("fixQuality: %d\r\n", data.fixQuality);
-    Serial.printf("numSatellites: %d\r\n", data.numSatellites);
-    Serial.printf("hdop: %.1f\r\n", data.hdop);
-    Serial.printf("speedKnots: %.1f\r\n", data.speedKnots);
-    Serial.printf("headingTrue: %.1f\r\n", data.headingTrue);
-    Serial.printf("dataAge: %lu ms\r\n", gnssPTR->getDataAge());
-    Serial.printf("dual heading: %.2f\r\n", data.dualHeading);
-    Serial.printf("dual roll: %.2f\r\n", data.dualRoll);
-    Serial.printf("heading quality: %d\r\n", data.headingQuality);
-
-    // Show stats
-    const auto &stats = gnssPTR->getStats();
-    Serial.printf("Messages processed: %lu\r\n", stats.messagesProcessed);
-    Serial.printf("Parse errors: %lu\r\n", stats.parseErrors);
-    Serial.printf("Success rate: %.1f%%\r\n", gnssPTR->getSuccessRate());
-    Serial.println("=====================================");
   }
 }

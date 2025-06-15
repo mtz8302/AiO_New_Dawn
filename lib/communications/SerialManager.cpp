@@ -218,6 +218,8 @@ int32_t SerialManager::detectGPSBaudRate(HardwareSerial &port, const char *portN
     {
         int32_t baudRate = GPS_BAUD_RATES[i];
 
+        Serial.printf("\r\n  Trying %s at %d baud...", portName, baudRate);
+
         // Set baud rate
         port.end();
         delay(10);
@@ -229,10 +231,14 @@ int32_t SerialManager::detectGPSBaudRate(HardwareSerial &port, const char *portN
         {
             port.read();
         }
+        
+        // Send VERSION command to wake up Unicore devices
+        port.write("VERSION\r\n");
+        delay(100);
 
-        // Look for NMEA sentences at this baud rate
-        if (checkForNMEASentence(port, "$G", 500))
-        { // Look for any NMEA sentence starting with $G
+        // Look for any response including VERSION or command acknowledgment
+        if (checkForNMEASentence(port, "$", 500) || checkForNMEASentence(port, "#", 500))
+        { // Look for any NMEA sentence starting with $G or #INS (for UM981)
             // Found valid NMEA data at this baud rate
             return baudRate;
         }
@@ -392,30 +398,43 @@ GPSType SerialManager::detectUnicoreGPS(int portNum)
 
         // Send VERSION command
         SerialGPS1.write("VERSION\r\n");
-        delay(100);
+        delay(200); // Give more time for command to process
 
-        // Read response
+        // Read response - need to handle multiple messages
         uint32_t startTime = millis();
-        while (millis() - startTime < 500)
+        int messageCount = 0;
+        Serial.print("\r\n  Looking for VERSION response...");
+        
+        while (millis() - startTime < 1000) // Increased timeout
         {
             if (SerialGPS1.available())
             {
-                char incoming[256];
+                char incoming[512]; // Larger buffer
                 memset(incoming, 0, sizeof(incoming));
 
                 int bytesRead = SerialGPS1.readBytesUntil('\n', incoming, sizeof(incoming) - 1);
 
                 if (bytesRead > 0)
                 {
+                    messageCount++;
+                    
+                    // Only print first few messages or VERSION response
+                    if (messageCount <= 3 || strstr(incoming, "VERSION") != NULL)
+                    {
+                        Serial.printf("\r\n  Message %d: %.50s%s", messageCount, incoming, 
+                                     strlen(incoming) > 50 ? "..." : "");
+                    }
+                    
+                    // Check for UM981 (might be "UM981-02" or similar)
                     if (strstr(incoming, "UM981") != NULL)
                     {
-                        Serial.printf("\r\n  UM981 VERSION: %s", incoming);
+                        Serial.printf("\r\n  UM981 detected in message %d!", messageCount);
                         detectedType = GPSType::UM981;
                         break;
                     }
                     if (strstr(incoming, "UM982") != NULL)
                     {
-                        Serial.printf("\r\n  UM982 VERSION: %s", incoming);
+                        Serial.printf("\r\n  UM982 detected in message %d!", messageCount);
                         detectedType = GPSType::UM982_SINGLE;
                         
                         // Check for dual configuration by looking for GPHPR messages
@@ -473,6 +492,11 @@ GPSType SerialManager::detectUnicoreGPS(int portNum)
                 }
             }
         }
+        
+        // Debug summary if no GPS detected
+        if (detectedType == GPSType::UNKNOWN && messageCount > 0) {
+            Serial.printf("\r\n  Total messages received: %d (no UM981/UM982 found)", messageCount);
+        }
 
         // Restore original buffers
         SerialGPS1.addMemoryForRead(gps1RxBuffer, sizeof(gps1RxBuffer));
@@ -513,15 +537,18 @@ GPSType SerialManager::detectUnicoreGPS(int portNum)
 
                 if (bytesRead > 0)
                 {
+                    Serial.printf("\r\n  VERSION response: %s", incoming); // Debug output
+                    
+                    // Check for UM981 (might be "UM981-02" or similar)
                     if (strstr(incoming, "UM981") != NULL)
                     {
-                        Serial.printf("\r\n  UM981 VERSION: %s", incoming);
+                        Serial.printf("\r\n  UM981 detected!");
                         detectedType = GPSType::UM981;
                         break;
                     }
                     if (strstr(incoming, "UM982") != NULL)
                     {
-                        Serial.printf("\r\n  UM982 VERSION: %s", incoming);
+                        Serial.printf("\r\n  UM982 detected!");
                         detectedType = GPSType::UM982_SINGLE;
                         break;
                     }
@@ -705,33 +732,56 @@ bool SerialManager::checkForNMEASentence(HardwareSerial &port, const char *sente
     uint32_t startTime = millis();
     char buffer[128];
     uint8_t bufIdx = 0;
+    int charCount = 0;
+    bool foundStart = false;
 
     while (millis() - startTime < timeout)
     {
         if (port.available())
         {
             char c = port.read();
+            charCount++;
+            
+            // Debug first few characters
+            if (charCount <= 20) {
+                Serial.printf("%c", (c >= 32 && c <= 126) ? c : '.');
+            }
+            else if (charCount == 21) {
+                Serial.print("...");
+            }
 
-            if (c == '$')
+            if (c == '$' || c == '#')
             {
                 bufIdx = 0;
                 buffer[bufIdx++] = c;
+                foundStart = true;
             }
             else if (bufIdx > 0 && bufIdx < sizeof(buffer) - 1)
             {
                 buffer[bufIdx++] = c;
 
-                if (c == '\n')
+                if (c == '\n' || (c == '*' && buffer[0] == '#'))
                 {
                     buffer[bufIdx] = '\0';
+                    
+                    // Debug: show what we're checking
+                    if (bufIdx > 10 && bufIdx < 50) {
+                        Serial.printf("\r\n  Checking: %.20s... for %s", buffer, sentenceType);
+                    }
+                    
                     if (strstr(buffer, sentenceType) != nullptr)
                     {
+                        Serial.print(" FOUND!");
                         return true;
                     }
                     bufIdx = 0;
                 }
             }
         }
+    }
+    
+    if (charCount > 0) {
+        Serial.printf(" (%d chars read)", charCount);
     }
 
     return false;
