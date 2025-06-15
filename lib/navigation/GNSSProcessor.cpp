@@ -2,8 +2,6 @@
 #include <string.h>
 #include <math.h>
 
-// Global pointer
-GNSSProcessor *gnssPTR = nullptr;
 
 GNSSProcessor::GNSSProcessor() : bufferIndex(0),
                                  state(WAIT_START),

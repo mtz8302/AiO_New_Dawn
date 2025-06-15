@@ -4,8 +4,6 @@
 const int32_t SerialManager::GPS_BAUD_RATES[] = {460800, 115200, 57600, 38400};
 const uint8_t SerialManager::NUM_GPS_BAUD_RATES = 4;
 
-// Global instance pointer
-SerialManager *serialPTR = nullptr;
 
 // Static instance pointer
 SerialManager *SerialManager::instance = nullptr;
@@ -16,13 +14,11 @@ SerialManager::SerialManager()
       detectedIMUType(IMUType::NONE)
 {
     instance = this;
-    serialPTR = this;
 }
 
 SerialManager::~SerialManager()
 {
     instance = nullptr;
-    serialPTR = nullptr;
 }
 
 SerialManager *SerialManager::getInstance()

@@ -1,8 +1,6 @@
 #include "IMUProcessor.h"
 #include "TM171AiOParser.h"
 
-// Global instance pointer
-IMUProcessor *imuPTR = nullptr;
 
 // Static instance pointer
 IMUProcessor *IMUProcessor::instance = nullptr;
@@ -13,7 +11,6 @@ IMUProcessor::IMUProcessor()
       packetsReceived(0), packetsErrors(0)
 {
     instance = this;
-    imuPTR = this;
 
     // Initialize current data
     currentData = {0, 0, 0, 0, 0, 0, false};
@@ -32,7 +29,6 @@ IMUProcessor::~IMUProcessor()
         tm171Parser = nullptr;
     }
     instance = nullptr;
-    imuPTR = nullptr;
 }
 
 IMUProcessor *IMUProcessor::getInstance()

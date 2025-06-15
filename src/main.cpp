@@ -8,14 +8,18 @@
 #include "SerialGlobals.h"
 #include "GNSSProcessor.h"
 #include "IMUProcessor.h" // Add this include
+#include "NAVProcessor.h"
 
 // ConfigManager pointer definition (same pattern as machinePTR)
 // This is the ONLY definition - all other files use extern declaration
 ConfigManager *configPTR = nullptr;
-extern HardwareManager *hardwarePTR;
-extern SerialManager *serialPTR;
-extern GNSSProcessor *gnssPTR;
-extern IMUProcessor *imuPTR; // Add this extern
+
+// Define the global pointers (only declared as extern in headers)
+HardwareManager *hardwarePTR = nullptr;
+SerialManager *serialPTR = nullptr;
+GNSSProcessor *gnssPTR = nullptr;
+IMUProcessor *imuPTR = nullptr;
+NAVProcessor *navPTR = nullptr;
 
 void setup()
 {
@@ -127,15 +131,11 @@ void setup()
 
   Serial.print("\r\n\n*** Class Testing Complete ***\r\n");
 
-  // Print status of all managers
-  hardwarePTR->printHardwareStatus();
-  serialPTR->printSerialStatus();
-  if (imuPTR)
-  {
-    imuPTR->printStatus();
-  }
-
-  Serial.print("\r\n\n*** Class Testing Complete ***\r\n");
+  // Initialize NAVProcessor
+  Serial.print("\r\n\n*** Initializing NAVProcessor ***");
+  NAVProcessor::init();
+  navPTR = navPTR->getInstance();
+  navPTR->printStatus();
 
   // Print status of all managers
   hardwarePTR->printHardwareStatus();
@@ -144,10 +144,6 @@ void setup()
   {
     imuPTR->printStatus();
   }
-
-  // Print status of all managers
-  hardwarePTR->printHardwareStatus();
-  serialPTR->printSerialStatus();
 
   Serial.print("\r\n\n=== New Dawn Initialization Complete ===");
   Serial.print("\r\nEntering main loop...\r\n");
@@ -162,11 +158,18 @@ void loop()
   static uint32_t lastPrint = 0;
   static uint32_t lastIMUDebug = 0;
   static uint32_t lastDetailedStatus = 0;
+  static uint32_t lastNAVStatus = 0;
 
   // Process IMU data
   if (imuPTR)
   {
     imuPTR->process();
+  }
+
+  // Process NAV messages
+  if (navPTR)
+  {
+    navPTR->process();
   }
 
   // Quick status print every second
@@ -191,6 +194,17 @@ void loop()
     if (imuPTR)
     {
       imuPTR->printStatus();
+    }
+  }
+
+  // NAV processor status every 10 seconds
+  if (millis() - lastNAVStatus > 10000)
+  {
+    lastNAVStatus = millis();
+
+    if (navPTR)
+    {
+      navPTR->printStatus();
     }
   }
 

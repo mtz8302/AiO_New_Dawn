@@ -1,7 +1,5 @@
 #include "HardwareManager.h"
 
-// Global instance pointer
-HardwareManager *hardwarePTR = nullptr;
 
 // Static instance pointer
 HardwareManager *HardwareManager::instance = nullptr;
@@ -10,13 +8,11 @@ HardwareManager::HardwareManager()
     : isInitialized(false), pwmFrequencyMode(4)
 {
     instance = this;
-    hardwarePTR = this;
 }
 
 HardwareManager::~HardwareManager()
 {
     instance = nullptr;
-    hardwarePTR = nullptr;
 }
 
 HardwareManager *HardwareManager::getInstance()
