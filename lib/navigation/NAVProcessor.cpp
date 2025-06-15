@@ -212,7 +212,7 @@ void NAVProcessor::sendMessage(const char* message) {
     sendUDPbytes((uint8_t*)buffer, strlen(buffer));
     
     // Also send to Serial for debugging (without extra CR+LF)
-    Serial.printf("\r\n>> %s", message);
+    // Serial.printf("\r\n>> %s", message);  // Commented out to reduce spam
 }
 
 void NAVProcessor::process() {

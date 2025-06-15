@@ -9,6 +9,8 @@
 #include "GNSSProcessor.h"
 #include "IMUProcessor.h" // Add this include
 #include "NAVProcessor.h"
+#include "I2CManager.h"
+#include "CANManager.h"
 
 // ConfigManager pointer definition (same pattern as machinePTR)
 // This is the ONLY definition - all other files use extern declaration
@@ -17,6 +19,8 @@ ConfigManager *configPTR = nullptr;
 // Define the global pointers (only declared as extern in headers)
 HardwareManager *hardwarePTR = nullptr;
 SerialManager *serialPTR = nullptr;
+I2CManager *i2cPTR = nullptr;
+CANManager *canPTR = nullptr;
 GNSSProcessor *gnssPTR = nullptr;
 IMUProcessor *imuPTR = nullptr;
 NAVProcessor *navPTR = nullptr;
@@ -66,6 +70,41 @@ void setup()
   else
   {
     Serial.print("\r\n✗ HardwareManager FAILED");
+  }
+
+  // Test I2CManager
+  Serial.print("\r\n\n*** Testing I2CManager ***");
+  i2cPTR = new I2CManager();
+  if (i2cPTR->initializeI2C())
+  {
+    Serial.print("\r\n✓ I2CManager SUCCESS");
+    
+    // Print full status
+    i2cPTR->printI2CStatus();
+  }
+  else
+  {
+    Serial.print("\r\n✗ I2CManager FAILED");
+  }
+
+  // Test CANManager
+  Serial.print("\r\n\n*** Testing CANManager ***");
+  canPTR = new CANManager();
+  if (canPTR->initializeCAN())
+  {
+    Serial.print("\r\n✓ CANManager SUCCESS");
+    
+    // Test some basic functionality
+    Serial.printf("\r\n  - CAN1 initialized: %s", canPTR->isCAN1Initialized() ? "YES" : "NO");
+    Serial.printf("\r\n  - CAN2 initialized: %s", canPTR->isCAN2Initialized() ? "YES" : "NO");
+    Serial.printf("\r\n  - CAN3 initialized: %s", canPTR->isCAN3Initialized() ? "YES" : "NO");
+    
+    // Print full status
+    canPTR->printCANStatus();
+  }
+  else
+  {
+    Serial.print("\r\n✗ CANManager FAILED");
   }
 
   // Test SerialManager
@@ -159,6 +198,7 @@ void loop()
   static uint32_t lastIMUDebug = 0;
   static uint32_t lastDetailedStatus = 0;
   static uint32_t lastNAVStatus = 0;
+  static uint32_t lastCANStatus = 0;
 
   // Process IMU data
   if (imuPTR)
@@ -170,6 +210,12 @@ void loop()
   if (navPTR)
   {
     navPTR->process();
+  }
+
+  // Poll CAN messages (like NG-V6 does)
+  if (canPTR)
+  {
+    canPTR->pollCANMessages();
   }
 
   // Quick status print every second
@@ -205,6 +251,28 @@ void loop()
     if (navPTR)
     {
       navPTR->printStatus();
+    }
+  }
+
+  // CAN status every 3 seconds to monitor Keya motor
+  if (millis() - lastCANStatus > 3000)
+  {
+    lastCANStatus = millis();
+
+    if (canPTR && canPTR->isCAN3Initialized())
+    {
+      Serial.print("\r\n[CAN3 Status] ");
+      CANManager::CANBusInfo* can3Info = canPTR->getBusInfo(3);
+      if (can3Info)
+      {
+        Serial.printf("Total msgs: %lu, Keya motor msgs: %lu", 
+                      can3Info->messagesReceived, can3Info->keyaMotorMessages);
+        if (can3Info->keyaMotorMessages > 0)
+        {
+          uint32_t timeSinceLast = millis() - can3Info->lastKeyaMessageTime;
+          Serial.printf(" (last %lums ago)", timeSinceLast);
+        }
+      }
     }
   }
 
