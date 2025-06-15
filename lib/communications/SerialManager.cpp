@@ -150,6 +150,52 @@ void SerialManager::detectConnectedDevices()
         Serial.print(" not found");
         detectedGPS2Type = GPSType::UNKNOWN;
     }
+    
+    // Special case: If F9P detected on GPS1, check GPS2 for RELPOSNED even if GPS2 not detected normally
+    if (detectedGPS1Type == GPSType::F9P_SINGLE && detectedGPS2Type == GPSType::UNKNOWN)
+    {
+        Serial.print("\r\n  Checking GPS2 for F9P dual RELPOSNED...");
+        
+        // Try GPS2 at GPS1's baud rate
+        SerialGPS2.end();
+        delay(10);
+        SerialGPS2.begin(BAUD_GPS);
+        delay(100);
+        
+        // Look for RELPOSNED on GPS2
+        uint32_t startTime = millis();
+        bool foundRELPOSNED = false;
+        int bytesRead = 0;
+        
+        while (millis() - startTime < 2000 && !foundRELPOSNED)
+        {
+            if (SerialGPS2.available())
+            {
+                uint8_t b = SerialGPS2.read();
+                bytesRead++;
+                
+                // Simple check for UBX RELPOSNED header pattern
+                static uint8_t ubxPattern[4] = {0, 0, 0, 0};
+                ubxPattern[0] = ubxPattern[1];
+                ubxPattern[1] = ubxPattern[2];
+                ubxPattern[2] = ubxPattern[3];
+                ubxPattern[3] = b;
+                
+                if (ubxPattern[0] == 0xB5 && ubxPattern[1] == 0x62 && 
+                    ubxPattern[2] == 0x01 && ubxPattern[3] == 0x3C)
+                {
+                    Serial.print(" RELPOSNED found on GPS2!");
+                    foundRELPOSNED = true;
+                    detectedGPS1Type = GPSType::F9P_DUAL;
+                    detectedGPS2Type = GPSType::F9P_DUAL;
+                }
+            }
+        }
+        
+        if (!foundRELPOSNED && bytesRead > 0) {
+            Serial.printf(" No RELPOSNED (read %d bytes)", bytesRead);
+        }
+    }
 
     // Detect IMU (unless already detected as UM981 integrated)
     if (detectedGPS1Type == GPSType::UM981 || detectedGPS2Type == GPSType::UM981)
@@ -224,9 +270,95 @@ GPSType SerialManager::detectGPSType(HardwareSerial &port, const char *portName)
             {
                 if (memcmp(&response[i], "ZED-F9P", 7) == 0)
                 {
-                    // For F9P, we can't reliably detect dual without checking messages
-                    // Default to single
-                    return GPSType::F9P_SINGLE;
+                    // F9P detected, now check if it's configured for dual by looking for RELPOSNED
+                    Serial.print("\r\n  F9P detected, checking for RELPOSNED...");
+                    
+                    // Clear buffer and wait for fresh data
+                    while (port.available()) {
+                        port.read();
+                    }
+                    delay(100); // Give GPS time to send new data
+                    
+                    // Look for dual antenna indicators in both UBX and NMEA streams
+                    uint32_t startTime = millis();
+                    uint8_t buffer[512];
+                    uint16_t bufIndex = 0;
+                    bool foundDualIndicator = false;
+                    int bytesRead = 0;
+                    int ubxCount = 0;
+                    int nmeaCount = 0;
+                    
+                    // NMEA buffer for sentence detection
+                    char nmeaBuffer[256];
+                    uint8_t nmeaIndex = 0;
+                    
+                    Serial.print("\r\n  Looking for dual antenna indicators...");
+                    
+                    while (millis() - startTime < 3000 && !foundDualIndicator) // 3 second timeout
+                    {
+                        if (port.available())
+                        {
+                            uint8_t b = port.read();
+                            bytesRead++;
+                            
+                            // Store in main buffer
+                            if (bufIndex >= sizeof(buffer))
+                            {
+                                memmove(buffer, buffer + 1, sizeof(buffer) - 1);
+                                bufIndex = sizeof(buffer) - 1;
+                            }
+                            buffer[bufIndex++] = b;
+                            
+                            // Check for NMEA sentences
+                            if (b == '$')
+                            {
+                                nmeaIndex = 0;
+                                nmeaBuffer[nmeaIndex++] = b;
+                                nmeaCount++;
+                            }
+                            else if (nmeaIndex > 0 && nmeaIndex < sizeof(nmeaBuffer) - 1)
+                            {
+                                nmeaBuffer[nmeaIndex++] = b;
+                                
+                                if (b == '\n')
+                                {
+                                    nmeaBuffer[nmeaIndex] = '\0';
+                                    
+                                    // Check for dual antenna NMEA messages
+                                    if (strstr(nmeaBuffer, "$GNHDT") != NULL || // Heading
+                                        strstr(nmeaBuffer, "$GPHDT") != NULL || // Heading
+                                        strstr(nmeaBuffer, "$PTNL,BPQ") != NULL) // Baseline/quality
+                                    {
+                                        Serial.printf("\r\n  Found dual antenna NMEA: %.20s...", nmeaBuffer);
+                                        foundDualIndicator = true;
+                                    }
+                                    nmeaIndex = 0;
+                                }
+                            }
+                            
+                            // Also check for UBX RELPOSNED
+                            if (bufIndex >= 4)
+                            {
+                                // Check for UBX header
+                                if (buffer[bufIndex-4] == 0xB5 && buffer[bufIndex-3] == 0x62)
+                                {
+                                    ubxCount++;
+                                    
+                                    // Check if this is RELPOSNED
+                                    if (buffer[bufIndex-2] == 0x01 && buffer[bufIndex-1] == 0x3C)
+                                    {
+                                        Serial.print("\r\n  RELPOSNED UBX message found!");
+                                        foundDualIndicator = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    Serial.printf("\r\n  Bytes: %d, NMEA msgs: %d, UBX msgs: %d", 
+                                  bytesRead, nmeaCount, ubxCount);
+                    
+                    return foundDualIndicator ? GPSType::F9P_DUAL : GPSType::F9P_SINGLE;
                 }
             }
         }
@@ -285,6 +417,57 @@ GPSType SerialManager::detectUnicoreGPS(int portNum)
                     {
                         Serial.printf("\r\n  UM982 VERSION: %s", incoming);
                         detectedType = GPSType::UM982_SINGLE;
+                        
+                        // Check for dual configuration by looking for GPHPR messages
+                        Serial.print("\r\n  Checking for UM982 dual configuration...");
+                        
+                        // Clear buffer and wait for fresh data
+                        while (SerialGPS1.available()) {
+                            SerialGPS1.read();
+                        }
+                        
+                        // Look for GPHPR messages
+                        uint32_t checkStart = millis();
+                        bool foundDualIndicator = false;
+                        char buffer[256];
+                        uint8_t bufIdx = 0;
+                        
+                        while (millis() - checkStart < 2000 && !foundDualIndicator)
+                        {
+                            if (SerialGPS1.available())
+                            {
+                                char c = SerialGPS1.read();
+                                
+                                if (c == '$')
+                                {
+                                    bufIdx = 0;
+                                    buffer[bufIdx++] = c;
+                                }
+                                else if (bufIdx > 0 && bufIdx < sizeof(buffer) - 1)
+                                {
+                                    buffer[bufIdx++] = c;
+                                    
+                                    if (c == '\n')
+                                    {
+                                        buffer[bufIdx] = '\0';
+                                        
+                                        // Check for GNHPR message (dual antenna heading/pitch/roll)
+                                        if (strstr(buffer, "$GNHPR") != NULL)
+                                        {
+                                            Serial.print(" GNHPR found - Dual configuration detected!");
+                                            foundDualIndicator = true;
+                                            detectedType = GPSType::UM982_DUAL;
+                                        }
+                                        bufIdx = 0;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (!foundDualIndicator) {
+                            Serial.print(" Single configuration");
+                        }
+                        
                         break;
                     }
                 }

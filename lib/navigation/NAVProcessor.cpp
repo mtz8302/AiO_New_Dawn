@@ -167,7 +167,7 @@ bool NAVProcessor::formatPAOGIMessage() {
     }
     
     // Use dual GPS heading and roll
-    int headingX10 = (int)(gnssData.dualHeading * 10.0);
+    float dualHeading = gnssData.dualHeading;
     int16_t roll = (int16_t)round(gnssData.dualRoll);
     
     // Format time
@@ -175,7 +175,7 @@ bool NAVProcessor::formatPAOGIMessage() {
     
     // Build PAOGI message without checksum
     int len = snprintf(messageBuffer, BUFFER_SIZE - 4,
-        "$PAOGI,%.1f,%.6f,%c,%.6f,%c,%d,%d,%.1f,%.3f,%.1f,%.3f,%d,%d,%d,%.2f",
+        "$PAOGI,%.1f,%.6f,%c,%.6f,%c,%d,%d,%.1f,%.3f,%.1f,%.3f,%.1f,%d,%d,%.2f",
         timeFloat,                          // Time
         latNMEA, latDir,                   // Latitude
         lonNMEA, lonDir,                   // Longitude
@@ -186,7 +186,7 @@ bool NAVProcessor::formatPAOGIMessage() {
         (float)gnssData.ageDGPS,           // Age DGPS
         gnssData.speedKnots,               // Speed
         // Empty field for heading (just comma)
-        headingX10,                        // Dual heading * 10
+        dualHeading,                       // Dual heading in degrees
         roll,                              // Dual roll
         pitch,                             // Pitch (from IMU)
         yawRate                            // Yaw rate (from IMU)

@@ -7,6 +7,9 @@
 #include "Arduino.h"
 #include <stdint.h>
 
+// Forward declaration
+class UBX_Parser;
+
 class GNSSProcessor
 {
 public:
@@ -83,6 +86,9 @@ private:
     // Configuration
     bool enableNoiseFilter;
     bool enableDebug;
+    
+    // UBX parser for GPS2 RELPOSNED
+    UBX_Parser* ubxParser;
 
     // Internal parsing methods
     void resetParser();
@@ -121,6 +127,7 @@ public:
 
     // Main processing - single character input
     bool processNMEAChar(char c);
+    bool processUBXByte(uint8_t b);
 
     // Batch processing
     uint16_t processNMEAStream(const char *data, uint16_t length);

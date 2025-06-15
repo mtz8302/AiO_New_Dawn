@@ -226,11 +226,18 @@ void loop()
     Serial.print("\r\n=== End Status ===\r\n");
   }
 
-  // Process GPS data if available
+  // Process GPS1 data if available
   if (SerialGPS1.available())
   {
     char c = SerialGPS1.read();
     gnssPTR->processNMEAChar(c);
+  }
+  
+  // Process GPS2 data if available (for F9P dual RELPOSNED)
+  if (SerialGPS2.available())
+  {
+    uint8_t b = SerialGPS2.read();
+    gnssPTR->processUBXByte(b);
   }
 
   // Print GNSS structure contents every 10 seconds to see if data is getting in

@@ -1,4 +1,5 @@
 #include "GNSSProcessor.h"
+#include "UBXParser.h"
 #include <string.h>
 #include <math.h>
 
@@ -10,7 +11,8 @@ GNSSProcessor::GNSSProcessor() : bufferIndex(0),
                                  checksumIndex(0),
                                  fieldCount(0),
                                  enableNoiseFilter(true),
-                                 enableDebug(false)
+                                 enableDebug(false),
+                                 ubxParser(nullptr)
 {
 
     // Initialize data structures
@@ -19,11 +21,18 @@ GNSSProcessor::GNSSProcessor() : bufferIndex(0),
 
     gpsData.hdop = 99.9f;
     resetParser();
+    
+    // Initialize UBX parser
+    ubxParser = new UBX_Parser();
 }
 
 GNSSProcessor::~GNSSProcessor()
 {
-    // Cleanup if needed
+    // Cleanup UBX parser
+    if (ubxParser) {
+        delete ubxParser;
+        ubxParser = nullptr;
+    }
 }
 
 bool GNSSProcessor::init()
@@ -573,4 +582,35 @@ void GNSSProcessor::printStats() const
     Serial.printf("Types: GGA=%lu GNS=%lu VTG=%lu HPR=%lu KSXT=%lu\r\n",
                   stats.ggaCount, stats.gnsCount, stats.vtgCount,
                   stats.hprCount, stats.ksxtCount);
+}
+
+bool GNSSProcessor::processUBXByte(uint8_t b)
+{
+    if (!ubxParser) return false;
+    
+    // Parse the UBX byte - parse() doesn't return a value, check relPosNedReady flag
+    ubxParser->parse(b);
+    
+    // Check if a new RELPOSNED message was received
+    if (ubxParser->relPosNedReady)
+    {
+        // Extract dual antenna heading and roll from RELPOSNED
+        gpsData.dualHeading = ubxParser->ubxData.baseRelH;
+        gpsData.dualRoll = ubxParser->ubxData.baseRelRoll;
+        gpsData.hasDualHeading = true;
+        gpsData.headingQuality = (ubxParser->ubxData.carrSoln > 1) ? 4 : 1; // 4=RTK fixed, 1=float
+        
+        // Clear the ready flag
+        ubxParser->relPosNedReady = false;
+        
+        if (enableDebug)
+        {
+            Serial.printf("\r\nRELPOSNED: Heading=%.2f Roll=%.2f Quality=%d\r\n",
+                         gpsData.dualHeading, gpsData.dualRoll, gpsData.headingQuality);
+        }
+        
+        return true;
+    }
+    
+    return false;
 }
