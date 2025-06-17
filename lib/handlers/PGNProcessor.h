@@ -1,5 +1,5 @@
-#ifndef PGNHANDLER_H_
-#define PGNHANDLER_H_
+#ifndef PGNProcessor_H_
+#define PGNProcessor_H_
 
 #include "Arduino.h"
 #include "mongoose.h"
@@ -7,14 +7,31 @@
 // Forward declarations for external dependencies
 extern struct mg_mgr g_mgr;
 
-class PGNHandler
+// Define callback function type for PGN handlers
+// Parameters: PGN number, data buffer, data length
+typedef void (*PGNCallback)(uint8_t pgn, const uint8_t* data, size_t len);
+
+// Structure to hold PGN registration info
+struct PGNRegistration {
+    uint8_t pgn;
+    PGNCallback callback;
+    const char* name;  // For debugging
+};
+
+class PGNProcessor
 {
+public:
+    static PGNProcessor *instance;
+    
 private:
-    static PGNHandler *instance;
+    // Array to store registered callbacks (max 20 registrations)
+    static constexpr size_t MAX_REGISTRATIONS = 20;
+    PGNRegistration registrations[MAX_REGISTRATIONS];
+    size_t registrationCount = 0;
 
 public:
-    PGNHandler();
-    ~PGNHandler();
+    PGNProcessor();
+    ~PGNProcessor();
 
     // Static method for Mongoose callback (3 parameters to match mg_event_handler_t)
     static void handlePGN(struct mg_connection *udpPacket, int ev, void *ev_data);
@@ -26,7 +43,6 @@ public:
     void printPgnAnnouncement(struct mg_connection *udpPacket, char *pgnName);
 
     // PGN processing methods
-    void processHelloFromAgIO(struct mg_connection *udpPacket);
     void processSubnetChange(struct mg_connection *udpPacket);
     void processScanRequest(struct mg_connection *udpPacket);
     void processSteerConfig(struct mg_connection *udpPacket);
@@ -35,6 +51,11 @@ public:
 
     // Initialize the handler
     static void init();
+    
+    // Callback registration methods
+    bool registerCallback(uint8_t pgn, PGNCallback callback, const char* name);
+    bool unregisterCallback(uint8_t pgn);
+    void listRegisteredCallbacks();  // For debugging
 };
 
-#endif // PGNHANDLER_H_
+#endif // PGNProcessor_H_

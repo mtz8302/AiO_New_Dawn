@@ -1,6 +1,7 @@
 #include "GNSSProcessor.h"
 #include "UBXParser.h"
 #include "calc_crc32.h"
+#include "PGNUtils.h"
 #include <string.h>
 #include <math.h>
 
@@ -946,4 +947,62 @@ bool GNSSProcessor::parseINSPVAXA()
     }
     
     return true;
+}
+
+// PGN Support Implementation
+
+// External reference to NetworkBase send function
+extern void sendUDPbytes(uint8_t *message, int msgLen);
+
+// Static instance pointer for callback access
+static GNSSProcessor* gnssInstance = nullptr;
+
+void GNSSProcessor::registerPGNCallbacks()
+{
+    // Store instance pointer for static callback
+    gnssInstance = this;
+    
+    // Get PGNProcessor instance and register for Hello messages
+    PGNProcessor* pgnProcessor = PGNProcessor::instance;
+    if (pgnProcessor)
+    {
+        // Register for Hello PGN (200) - broadcast message
+        pgnProcessor->registerCallback(200, handleHelloPGN, "GPS Hello Handler");
+        Serial.print("\r\n[GNSSProcessor] Registered PGN callbacks");
+    }
+}
+
+// Static callback for broadcast PGNs (like Hello)
+void GNSSProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len)
+{
+    // Check if this is a Hello PGN
+    if (pgn == 200)
+    {
+        // When we receive a Hello from AgIO, we should respond
+        Serial.print("\r\n[GNSSProcessor] Received Hello PGN, sending reply");
+        
+        // GPS Hello reply format from PGN.md: 
+        // Source: 0x78 (120), PGN: 0x78 (120), Length: 5
+        uint8_t helloFromGPS[] = {0x80, 0x81, GPS_SOURCE_ID, GPS_HELLO_REPLY, 5, 0, 0, 0, 0, 0, 0};
+        
+        // Calculate and set CRC
+        calculateAndSetCRC(helloFromGPS, sizeof(helloFromGPS));
+        
+        // Send the reply
+        sendUDPbytes(helloFromGPS, sizeof(helloFromGPS));
+    }
+    // Future: Handle other broadcast PGNs here (like Scan Request)
+}
+
+void GNSSProcessor::sendGPSData()
+{
+    // PGN 214 (0xD6) - GPS data format is complex (51 bytes)
+    // For now this is just a placeholder for future implementation
+    // when AgIO supports GPS data via PGN
+    
+    if (!gpsData.isValid)
+        return;
+        
+    // Future implementation will send full GPS data packet
+    // Format is defined in PGN.md - Main Antenna section
 }

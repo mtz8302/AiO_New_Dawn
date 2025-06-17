@@ -225,19 +225,20 @@ void NAVProcessor::process() {
     
     // Debug output
     static uint32_t debugCounter = 0;
-    if (debugCounter++ % 10 == 0) {  // Print every 10th message (1Hz)
-        Serial.printf("\r\n[NAV] Processing message #%lu", debugCounter);
-    }
+    debugCounter++;
+    // if (debugCounter % 10 == 0) {  // Print every 10th message (1Hz)
+    //     Serial.printf("\r\n[NAV] Processing message #%lu", debugCounter);
+    // }
     
     // Select and format appropriate message type
     NavMessageType msgType = selectMessageType();
     bool success = false;
     
-    if (debugCounter % 10 == 1) {  // Print message type
-        Serial.printf(" - Type: %s", 
-            msgType == NavMessageType::PANDA ? "PANDA" :
-            msgType == NavMessageType::PAOGI ? "PAOGI" : "NONE");
-    }
+    // if (debugCounter % 10 == 1) {  // Print message type
+    //     Serial.printf(" - Type: %s", 
+    //         msgType == NavMessageType::PANDA ? "PANDA" :
+    //         msgType == NavMessageType::PAOGI ? "PAOGI" : "NONE");
+    // }
     
     switch (msgType) {
         case NavMessageType::PANDA:

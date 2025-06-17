@@ -1,5 +1,6 @@
 #include "IMUProcessor.h"
 #include "TM171AiOParser.h"
+#include "PGNUtils.h"
 
 
 // Static instance pointer
@@ -269,4 +270,84 @@ void IMUProcessor::printCurrentData()
                       currentData.timestamp, currentData.heading, currentData.roll,
                       currentData.pitch, currentData.yawRate, currentData.quality);
     }
+}
+
+// PGN Support Implementation
+
+// External reference to NetworkBase send function
+extern void sendUDPbytes(uint8_t *message, int msgLen);
+
+void IMUProcessor::registerPGNCallbacks()
+{
+    Serial.print("\r\n[IMUProcessor] Attempting to register PGN callbacks...");
+    
+    // Get PGNProcessor instance and register for IMU messages
+    PGNProcessor* pgnProcessor = PGNProcessor::instance;
+    if (pgnProcessor)
+    {
+        // Register for IMU PGN (121/0x79) - this also makes us receive broadcasts
+        // Even though we register for 121, we'll still receive broadcast PGNs like Hello (200)
+        bool success = pgnProcessor->registerCallback(IMU_SOURCE_ID, handleHelloPGN, "IMU Handler");
+        Serial.printf("\r\n[IMUProcessor] Registration %s for PGN %d", success ? "SUCCESS" : "FAILED", IMU_SOURCE_ID);
+    }
+    else
+    {
+        Serial.print("\r\n[IMUProcessor] ERROR: PGNProcessor instance is NULL!");
+    }
+}
+
+// Static callback for broadcast PGNs (like Hello)
+void IMUProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len)
+{
+    // Check if this is a Hello PGN
+    if (pgn == 200)
+    {
+        // When we receive a Hello from AgIO, we should respond
+        // Using the same format as V6-NG
+        
+        Serial.print("\r\n[IMUProcessor] Received Hello PGN, sending reply");
+        
+        // IMU Hello reply from V6-NG: {128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71}
+        uint8_t helloFromIMU[] = {128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71};
+        
+        // Send the reply
+        sendUDPbytes(helloFromIMU, sizeof(helloFromIMU));
+    }
+    // Future: Handle other broadcast PGNs here (like Scan Request)
+}
+
+void IMUProcessor::sendIMUData()
+{
+    if (!currentData.isValid)
+        return;
+        
+    // PGN 211 (0xD3) format:
+    // 0x80, 0x81, 0x79, 0xD3, 8, Heading_Lo, Heading_Hi, Roll_Lo, Roll_Hi, Gyro_Lo, Gyro_Hi, 0, 0, CRC
+    
+    // Convert float values to int16 (*10 for one decimal place precision)
+    int16_t headingX10 = (int16_t)(currentData.heading * 10);
+    int16_t rollX10 = (int16_t)(currentData.roll * 10);
+    int16_t gyroX10 = (int16_t)(currentData.yawRate * 10);  // yaw rate as gyro
+    
+    uint8_t imuData[] = {
+        0x80, 0x81,                     // PGN header
+        IMU_SOURCE_ID,                  // Source: 0x79 (121)
+        IMU_PGN_DATA,                   // PGN: 0xD3 (211)
+        8,                              // Data length
+        (uint8_t)(headingX10 & 0xFF),   // Heading low byte
+        (uint8_t)(headingX10 >> 8),     // Heading high byte
+        (uint8_t)(rollX10 & 0xFF),      // Roll low byte
+        (uint8_t)(rollX10 >> 8),        // Roll high byte
+        (uint8_t)(gyroX10 & 0xFF),      // Gyro low byte
+        (uint8_t)(gyroX10 >> 8),        // Gyro high byte
+        0,                              // Reserved
+        0,                              // Reserved
+        0                               // CRC placeholder
+    };
+    
+    // Calculate and set CRC
+    calculateAndSetCRC(imuData, sizeof(imuData));
+    
+    // Send the data
+    sendUDPbytes(imuData, sizeof(imuData));
 }

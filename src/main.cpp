@@ -139,6 +139,9 @@ void setup()
 
     // Print initial stats
     gnssPTR->printStats();
+    
+    // Register PGN callbacks
+    gnssPTR->registerPGNCallbacks();
   }
   else
   {
@@ -160,6 +163,11 @@ void setup()
       Serial.print("\r\n  - TM171 detected - waiting for angle data...");
       Serial.print("\r\n  - Note: TM171 TX/RX silkscreen labels are reversed!");
     }
+    
+    // Register PGN callbacks
+    Serial.print("\r\n[MAIN] About to register IMU PGN callbacks...");
+    imuPTR->registerPGNCallbacks();
+    Serial.print("\r\n[MAIN] IMU PGN callback registration complete");
   }
   else
   {
@@ -188,6 +196,14 @@ void setup()
   Serial.print("\r\nEntering main loop...\r\n");
 
   Serial.print("\r\n=== System Ready ===\r\n");
+  
+  // Debug: List all registered PGN callbacks
+  PGNProcessor* pgnProcessor = PGNProcessor::instance;
+  if (pgnProcessor)
+  {
+    Serial.print("\r\n[MAIN] Final PGN callback list:");
+    pgnProcessor->listRegisteredCallbacks();
+  }
 }
 
 void loop()
@@ -233,15 +249,15 @@ void loop()
   }
 
   // Detailed IMU debug every 5 seconds
-  if (millis() - lastIMUDebug > 5000)
-  {
-    lastIMUDebug = millis();
+  // if (millis() - lastIMUDebug > 5000)
+  // {
+  //   lastIMUDebug = millis();
 
-    if (imuPTR)
-    {
-      imuPTR->printStatus();
-    }
-  }
+  //   if (imuPTR)
+  //   {
+  //     imuPTR->printStatus();
+  //   }
+  // }
 
   // NAV processor status every 10 seconds
   if (millis() - lastNAVStatus > 10000)
@@ -321,46 +337,46 @@ void loop()
   }
 
   // Print GNSS structure contents every 5 seconds to see if data is getting in
-  static uint32_t lastCheck = 0;
-  if (millis() - lastCheck > 5000)
-  {
-    lastCheck = millis();
+  // static uint32_t lastCheck = 0;
+  // if (millis() - lastCheck > 5000)
+  // {
+  //   lastCheck = millis();
 
-    const auto &data = gnssPTR->getData();
+  //   const auto &data = gnssPTR->getData();
     
-    Serial.print("\r\n\n=== GNSSProcessor Data Structure ===");
-    Serial.printf("\r\nisValid: %s", data.isValid ? "YES" : "NO");
-    Serial.printf("\r\nhasPosition: %s", data.hasPosition ? "YES" : "NO");
-    Serial.printf("\r\nhasVelocity: %s", data.hasVelocity ? "YES" : "NO");
-    Serial.printf("\r\nhasDualHeading: %s", data.hasDualHeading ? "YES" : "NO");
-    Serial.printf("\r\nhasINS: %s", data.hasINS ? "YES" : "NO");
-    Serial.printf("\r\nlatitude: %.8f", data.latitude);
-    Serial.printf("\r\nlongitude: %.8f", data.longitude);
-    Serial.printf("\r\naltitude: %.2f", data.altitude);
-    Serial.printf("\r\nfixQuality: %d", data.fixQuality);
-    Serial.printf("\r\nnumSatellites: %d", data.numSatellites);
-    Serial.printf("\r\nhdop: %.1f", data.hdop);
-    Serial.printf("\r\nspeedKnots: %.1f", data.speedKnots);
-    Serial.printf("\r\nheadingTrue: %.1f", data.headingTrue);
-    Serial.printf("\r\ndataAge: %lu ms", gnssPTR->getDataAge());
-    Serial.printf("\r\ndual heading: %.2f", data.dualHeading);
-    Serial.printf("\r\ndual roll: %.2f", data.dualRoll);
-    Serial.printf("\r\nINS pitch: %.2f", data.insPitch);
-    Serial.printf("\r\nheading quality: %d", data.headingQuality);
+  //   Serial.print("\r\n\n=== GNSSProcessor Data Structure ===");
+  //   Serial.printf("\r\nisValid: %s", data.isValid ? "YES" : "NO");
+  //   Serial.printf("\r\nhasPosition: %s", data.hasPosition ? "YES" : "NO");
+  //   Serial.printf("\r\nhasVelocity: %s", data.hasVelocity ? "YES" : "NO");
+  //   Serial.printf("\r\nhasDualHeading: %s", data.hasDualHeading ? "YES" : "NO");
+  //   Serial.printf("\r\nhasINS: %s", data.hasINS ? "YES" : "NO");
+  //   Serial.printf("\r\nlatitude: %.8f", data.latitude);
+  //   Serial.printf("\r\nlongitude: %.8f", data.longitude);
+  //   Serial.printf("\r\naltitude: %.2f", data.altitude);
+  //   Serial.printf("\r\nfixQuality: %d", data.fixQuality);
+  //   Serial.printf("\r\nnumSatellites: %d", data.numSatellites);
+  //   Serial.printf("\r\nhdop: %.1f", data.hdop);
+  //   Serial.printf("\r\nspeedKnots: %.1f", data.speedKnots);
+  //   Serial.printf("\r\nheadingTrue: %.1f", data.headingTrue);
+  //   Serial.printf("\r\ndataAge: %lu ms", gnssPTR->getDataAge());
+  //   Serial.printf("\r\ndual heading: %.2f", data.dualHeading);
+  //   Serial.printf("\r\ndual roll: %.2f", data.dualRoll);
+  //   Serial.printf("\r\nINS pitch: %.2f", data.insPitch);
+  //   Serial.printf("\r\nheading quality: %d", data.headingQuality);
     
-    // Display INSPVAXA standard deviation data if available
-    if (data.hasINS && (data.posStdDevLat > 0 || data.posStdDevLon > 0))
-    {
-      Serial.print("\r\n--- INSPVAXA Std Dev Data ---");
-      Serial.printf("\r\nPos StdDev: Lat=%.3fm Lon=%.3fm Alt=%.3fm", 
-                    data.posStdDevLat, data.posStdDevLon, data.posStdDevAlt);
-      Serial.printf("\r\nVel StdDev: N=%.3fm/s E=%.3fm/s U=%.3fm/s", 
-                    data.velStdDevNorth, data.velStdDevEast, data.velStdDevUp);
-    }
+  //   // Display INSPVAXA standard deviation data if available
+  //   if (data.hasINS && (data.posStdDevLat > 0 || data.posStdDevLon > 0))
+  //   {
+  //     Serial.print("\r\n--- INSPVAXA Std Dev Data ---");
+  //     Serial.printf("\r\nPos StdDev: Lat=%.3fm Lon=%.3fm Alt=%.3fm", 
+  //                   data.posStdDevLat, data.posStdDevLon, data.posStdDevAlt);
+  //     Serial.printf("\r\nVel StdDev: N=%.3fm/s E=%.3fm/s U=%.3fm/s", 
+  //                   data.velStdDevNorth, data.velStdDevEast, data.velStdDevUp);
+  //   }
     
-    Serial.print("\r\n=====================================");
+  //   Serial.print("\r\n=====================================");
     
-    gnssPTR->printStats();
+  //   gnssPTR->printStats();
 
-  }
+  // }
 }

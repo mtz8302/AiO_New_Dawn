@@ -9,8 +9,8 @@
 #include "Arduino.h"
 #include "EEPROM.h"
 #include "mongoose.h"
-#include "RTCMHandler.h"
-#include "PGNHandler.h"
+#include "RTCMProcessor.h"
+#include "PGNProcessor.h"
 
 // EEPROM storage layout
 #define eeVersionStore 1 // 100 bytes
@@ -31,8 +31,8 @@ NetConfigStruct netConfig = defaultNet;
 
 struct mg_connection *sendAgio;
 
-// void rtcmHandler(void);
-// void pgnHandler(void);
+// void RTCMProcessor(void);
+// void PGNProcessor(void);
 
 // Send byte arrays to AgIO
 void sendUDPbytes(uint8_t *message, int msgLen)
@@ -58,8 +58,8 @@ void sendUDPchars(char *stuff)
   mg_printf(sendAgio, stuff);
 }
 
-// // pgnHandler stub Feel free to move me into your code but make a reference so NetworkBase can find me.
-// void pgnHandler(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
+// // PGNProcessor stub Feel free to move me into your code but make a reference so NetworkBase can find me.
+// void PGNProcessor(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
 // {
 //   if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
 //     return; // Check if IP stack is up.
@@ -69,15 +69,15 @@ void sendUDPchars(char *stuff)
 //   }
 //   if (ev == MG_EV_READ && mg_ntohs(udpPacket->rem.port) == 9999 && udpPacket->recv.len >= 5)
 //   {
-//     Serial.println("I am the pgnHandler stub. Populate me."); // The actual handling code should be outside NetworkBase.h. Make sure there is a reference to it.
+//     Serial.println("I am the PGNProcessor stub. Populate me."); // The actual handling code should be outside NetworkBase.h. Make sure there is a reference to it.
 //     // Verify first 3 PGN header bytes
 //     if (udpPacket->recv.buf[0] != 128 || udpPacket->recv.buf[1] != 129 || udpPacket->recv.buf[2] != 127)
 //       return;
 //   }
 // }
 
-// rtcmHandler stub. Feel free to move me into your code but make a reference so NetworkBase can find me.
-// void rtcmHandler(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
+// RTCMProcessor stub. Feel free to move me into your code but make a reference so NetworkBase can find me.
+// void RTCMProcessor(struct mg_connection *udpPacket, int ev, void *ev_data, void *fn_data)
 // {
 //   if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
 //     return; // Check if IP stack is up.
@@ -87,7 +87,7 @@ void sendUDPchars(char *stuff)
 //   }
 //   if (ev == MG_EV_READ && mg_ntohs(udpPacket->rem.port) == 9999 && udpPacket->recv.len >= 5)
 //   {
-//     Serial.println("I am the rtcmHandler stub. Populate me."); // The actual handling code should be outside NetworkBase.h. Make sure there is a reference to it.
+//     Serial.println("I am the RTCMProcessor stub. Populate me."); // The actual handling code should be outside NetworkBase.h. Make sure there is a reference to it.
 //     // Verify first 3 PGN header bytes
 //     if (udpPacket->recv.buf[0] != 128 || udpPacket->recv.buf[1] != 129 || udpPacket->recv.buf[2] != 127)
 //       return;
@@ -150,15 +150,15 @@ void udpSetup()
   g_mgr.ifp->gw = ipv4ary(netConfig.gatewayIP);
   g_mgr.ifp->mask = MG_IPV4(255, 255, 255, 0);
 
-  RTCMHandler::init();
-  PGNHandler::init();
+  RTCMProcessor::init();
+  PGNProcessor::init();
 
   char pgnListenURL[50];
   char rtcmListen[150];
   mg_snprintf(pgnListenURL, sizeof(pgnListenURL), "udp://%d.%d.%d.126:8888", netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
   mg_snprintf(rtcmListen, sizeof(rtcmListen), "udp://%d.%d.%d.126:2233", netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
 
-  if (mg_listen(&g_mgr, pgnListenURL, PGNHandler::handlePGN, NULL) != NULL)
+  if (mg_listen(&g_mgr, pgnListenURL, PGNProcessor::handlePGN, NULL) != NULL)
   // if (mg_listen(&g_mgr, pgnListenURL, NULL, NULL) != NULL)
   {
     // listenPGNs = true;
@@ -169,7 +169,7 @@ void udpSetup()
     MG_DEBUG(("AgIO on UDP 8888 did not open"));
   }
 
-  if (mg_listen(&g_mgr, rtcmListen, RTCMHandler::handleRTCM, NULL) != NULL)
+  if (mg_listen(&g_mgr, rtcmListen, RTCMProcessor::handleRTCM, NULL) != NULL)
   /// if (mg_listen(&g_mgr, rtcmListen, NULL, NULL) != NULL)
   {
     // listenRtcm = true;

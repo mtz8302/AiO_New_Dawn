@@ -6,6 +6,12 @@
 #include "BNO_RVC.h"
 #include "TM171AiOParser.h"
 #include "elapsedMillis.h"
+#include "PGNProcessor.h"
+
+// PGN Constants for IMU module
+constexpr uint8_t IMU_SOURCE_ID = 0x79;     // 121 decimal - IMU source address
+constexpr uint8_t IMU_PGN_DATA = 0xD3;      // 211 decimal - IMU data PGN
+constexpr uint8_t IMU_HELLO_REPLY = 0x79;   // 121 decimal - IMU hello reply
 
 // IMU data structure
 struct IMUData
@@ -75,6 +81,13 @@ public:
     // Debug
     void printStatus();
     void printCurrentData();
+    
+    // PGN support
+    void registerPGNCallbacks();
+    void sendIMUData();  // Send PGN 211 (0xD3)
+    
+    // Static callback for PGN Hello (200)
+    static void handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len);
 };
 
 // Global pointer

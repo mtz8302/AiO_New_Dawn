@@ -6,6 +6,12 @@
 
 #include "Arduino.h"
 #include <stdint.h>
+#include "PGNProcessor.h"
+
+// PGN Constants for GPS module
+constexpr uint8_t GPS_SOURCE_ID = 0x78;     // 120 decimal - GPS source address (from PGN.md GPS Reply)
+constexpr uint8_t GPS_PGN_DATA = 0xD6;      // 214 decimal - GPS data PGN
+constexpr uint8_t GPS_HELLO_REPLY = 0x78;   // 120 decimal - GPS hello reply
 
 // Forward declaration
 class UBX_Parser;
@@ -177,6 +183,13 @@ public:
     // Debug output
     void printData() const;
     void printStats() const;
+    
+    // PGN support
+    void registerPGNCallbacks();
+    void sendGPSData();  // Send PGN 214 (0xD6) - for future use
+    
+    // Static callback for PGN Hello (200)
+    static void handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len);
 };
 
 // Global pointer following established pattern

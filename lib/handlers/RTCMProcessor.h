@@ -1,17 +1,17 @@
-#ifndef RTCMHANDLER_H_
-#define RTCMHANDLER_H_
+#ifndef RTCMProcessor_H_
+#define RTCMProcessor_H_
 
 #include "Arduino.h"
 #include "mongoose.h"
 
-class RTCMHandler
+class RTCMProcessor
 {
 private:
-    static RTCMHandler *instance;
+    static RTCMProcessor *instance;
 
 public:
-    RTCMHandler();
-    ~RTCMHandler();
+    RTCMProcessor();
+    ~RTCMProcessor();
 
     // Static method for Mongoose callback (3 parameters to match mg_event_handler_t)
     static void handleRTCM(struct mg_connection *rtcm, int ev, void *ev_data);
@@ -23,4 +23,4 @@ public:
     static void init();
 };
 
-#endif // RTCMHANDLER_H_
+#endif // RTCMProcessor_H_
