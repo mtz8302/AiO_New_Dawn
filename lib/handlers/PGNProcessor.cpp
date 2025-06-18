@@ -70,7 +70,7 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
         
         // Debug: show registered callbacks for this PGN
         if (pgn == 200) {
-            Serial.printf("\r\n[DEBUG] Hello PGN 200 received, %d callbacks registered", registrationCount);
+            // Serial.printf("\r\n[DEBUG] Hello PGN 200 received, %d callbacks registered", registrationCount);
             for (size_t i = 0; i < registrationCount; i++) {
                 if (registrations[i].pgn == 200) {
                     Serial.printf("\r\n  - Found callback: %s", registrations[i].name);
@@ -85,14 +85,15 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
         // For broadcast PGNs, call ALL registered callbacks
         if (isBroadcast)
         {
-            Serial.printf("\r\n[PGNProcessor] Broadcasting PGN %d to all %d registered handlers", pgn, registrationCount);
+            // Commented out for quieter operation
+            // Serial.printf("\r\n[PGNProcessor] Broadcasting PGN %d to all %d registered handlers", pgn, registrationCount);
             
             const uint8_t* data = &udpPacket->recv.buf[4];
             size_t dataLen = udpPacket->recv.len - 5; // Subtract header(3) + pgn(1) + crc(1)
             
             for (size_t i = 0; i < registrationCount; i++)
             {
-                Serial.printf("\r\n[PGNProcessor] Broadcasting to %s", registrations[i].name);
+                // Serial.printf("\r\n[PGNProcessor] Broadcasting to %s", registrations[i].name);
                 registrations[i].callback(pgn, data, dataLen);
                 handled = true;
             }

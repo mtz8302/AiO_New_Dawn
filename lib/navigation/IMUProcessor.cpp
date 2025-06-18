@@ -305,7 +305,7 @@ void IMUProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len)
         // When we receive a Hello from AgIO, we should respond
         // Using the same format as V6-NG
         
-        Serial.print("\r\n[IMUProcessor] Received Hello PGN, sending reply");
+        // Serial.print("\r\n[IMUProcessor] Received Hello PGN, sending reply");
         
         // IMU Hello reply from V6-NG: {128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71}
         uint8_t helloFromIMU[] = {128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71};
@@ -313,7 +313,35 @@ void IMUProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len)
         // Send the reply
         sendUDPbytes(helloFromIMU, sizeof(helloFromIMU));
     }
-    // Future: Handle other broadcast PGNs here (like Scan Request)
+    // Check if this is a Scan Request PGN
+    else if (pgn == 202)
+    {
+        // Serial.print("\r\n[IMUProcessor] Received Scan Request PGN, sending subnet reply");
+        
+        // Subnet IMU reply format from PGN.md:
+        // Src: 0x79 (121), PGN: 0xCB (203), Len: 7
+        // IP_One, IP_Two, IP_Three, IP_Four, Subnet_One, Subnet_Two, Subnet_Three
+        uint8_t subnetReply[] = {
+            0x80, 0x81,          // PGN header
+            IMU_SOURCE_ID,       // Source: 0x79 (121)
+            0xCB,                // PGN: 203
+            7,                   // Data length
+            192,                 // IP_One
+            168,                 // IP_Two
+            5,                   // IP_Three
+            121,                 // IP_Four (IMU is at .121)
+            255,                 // Subnet_One
+            255,                 // Subnet_Two  
+            255,                 // Subnet_Three
+            0                    // CRC placeholder
+        };
+        
+        // Calculate and set CRC
+        calculateAndSetCRC(subnetReply, sizeof(subnetReply));
+        
+        // Send the reply
+        sendUDPbytes(subnetReply, sizeof(subnetReply));
+    }
 }
 
 void IMUProcessor::sendIMUData()

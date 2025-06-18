@@ -1,114 +1,51 @@
-// CANManager.h - Manages CAN bus initialization and communication
+// CANManager.h - Simple CAN bus manager (like SerialManager)
 #ifndef CAN_MANAGER_H
 #define CAN_MANAGER_H
 
 #include <Arduino.h>
-#include <FlexCAN_T4.h>
-
-// Common CAN speeds
-#define CAN_SPEED_250KBPS   250000
-#define CAN_SPEED_500KBPS   500000
-#define CAN_SPEED_1MBPS     1000000
-
-// ISOBUS/J1939 speeds
-#define CAN_SPEED_ISOBUS    250000  // Standard ISOBUS speed
-
-// CAN message types
-enum class CANMessageType {
-    UNKNOWN,
-    J1939,
-    ISOBUS,
-    STANDARD,
-    EXTENDED
-};
+#include "CANGlobals.h"
 
 class CANManager {
 public:
-    // Bus status tracking
-    struct CANBusInfo {
-        bool initialized;
-        uint32_t speed;
-        uint32_t messagesReceived;
-        uint32_t messagesSent;
-        uint32_t errors;
-        bool busOff;
-        // Keya motor tracking for CAN3
-        uint32_t keyaMotorMessages = 0;
-        uint32_t lastKeyaMessageTime = 0;
-    };
-
-private:
-    // CAN bus instances for Teensy 4.1
-    FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16> can1;
-    FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> can2;
-    FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_256> can3;  // Match NG-V6: TX_SIZE_256
+    // Use pointers to global CAN instances
+    FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16>* can1;
+    FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16>* can2;
+    FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_256>* can3;
     
-    CANBusInfo can1Info;
-    CANBusInfo can2Info;
-    CANBusInfo can3Info;
-    
-    // Message handlers
-    static void can1MessageHandler(const CAN_message_t &msg);
-    static void can2MessageHandler(const CAN_message_t &msg);
-    static void can3MessageHandler(const CAN_message_t &msg);
-    
-    // Process received message
-    void processCANMessage(uint8_t busNum, const CAN_message_t &msg);
-    
-    // Identify message type
-    CANMessageType identifyMessageType(const CAN_message_t &msg);
-    const char* getMessageTypeName(CANMessageType type);
-    
-    // Instance pointer for callbacks
-    static CANManager* instance;
-    
-public:
-    CANManager();
+    CANManager() : can1(&globalCAN1), can2(&globalCAN2), can3(&globalCAN3) {}
     ~CANManager() = default;
     
-    // Initialize CAN buses
-    bool initializeCAN();
-    bool initializeBus(uint8_t busNum, uint32_t speed = CAN_SPEED_250KBPS);
+    // Initialize all CAN buses
+    bool init();
     
-    // Enable/disable specific buses
-    bool enableBus(uint8_t busNum);
-    bool disableBus(uint8_t busNum);
+    // Poll for device detection (sets flags, doesn't process messages)
+    void pollForDevices();
     
-    // Send messages
-    bool sendMessage(uint8_t busNum, const CAN_message_t &msg);
-    bool sendJ1939Message(uint8_t busNum, uint32_t pgn, uint8_t priority, 
-                          uint8_t sourceAddr, const uint8_t* data, uint8_t len);
+    // Poll for devices for a specific duration (milliseconds)
+    void pollForDevicesWithTimeout(uint32_t timeoutMs);
     
-    // Bus management
-    bool setBusSpeed(uint8_t busNum, uint32_t speed);
-    bool setBusFilters(uint8_t busNum, uint32_t filterID, uint32_t filterMask);
-    void clearBusFilters(uint8_t busNum);
+    // Simple detection flags
+    bool isKeyaDetected() const { return keyaDetected; }
+    bool isCAN1Active() const { return can1Active; }
+    bool isCAN2Active() const { return can2Active; }
+    bool isCAN3Active() const { return can3Active; }
     
-    // Status and debugging
-    void printCANStatus();
-    void printBusStatus(uint8_t busNum);
-    CANBusInfo* getBusInfo(uint8_t busNum);
+    // Basic diagnostics
+    uint32_t getCAN1MessageCount() const { return can1MessageCount; }
+    uint32_t getCAN2MessageCount() const { return can2MessageCount; }
+    uint32_t getCAN3MessageCount() const { return can3MessageCount; }
     
-    // Error handling
-    bool isBusOff(uint8_t busNum);
-    bool resetBus(uint8_t busNum);
-    uint32_t getErrorCount(uint8_t busNum);
+private:
+    // Detection flags
+    bool keyaDetected = false;
+    bool can1Active = false;
+    bool can2Active = false;
+    bool can3Active = false;
     
-    // Getters for bus status
-    bool isCAN1Initialized() const { return can1Info.initialized; }
-    bool isCAN2Initialized() const { return can2Info.initialized; }
-    bool isCAN3Initialized() const { return can3Info.initialized; }
-    
-    // Polling method for CAN messages (like NG-V6)
-    void pollCANMessages();
-    
-    // Get FlexCAN objects for advanced use
-    FlexCAN_T4<CAN1, RX_SIZE_256, TX_SIZE_16>& getCAN1() { return can1; }
-    FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16>& getCAN2() { return can2; }
-    FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_256>& getCAN3() { return can3; }
+    // Basic counters
+    uint32_t can1MessageCount = 0;
+    uint32_t can2MessageCount = 0;
+    uint32_t can3MessageCount = 0;
 };
-
-// Global pointer following established pattern
-extern CANManager* canPTR;
 
 #endif // CAN_MANAGER_H

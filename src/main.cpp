@@ -1,4 +1,4 @@
-// main.cpp - Updated section with IMU testing
+// main.cpp - Updated section with motor driver testing
 #include "Arduino.h"
 #include "mongoose_glue.h"
 #include "NetworkBase.h"
@@ -11,6 +11,14 @@
 #include "NAVProcessor.h"
 #include "I2CManager.h"
 #include "CANManager.h"
+#include "ADProcessor.h"
+#include "PWMProcessor.h"
+#include "MotorDriverInterface.h"
+#include "MotorDriverFactory.h"
+#include "CANGlobals.h"
+
+// Test mode flag - set to true to run motor tests
+static bool MOTOR_TEST_MODE = true;  // Enable for motor control
 
 // ConfigManager pointer definition (same pattern as machinePTR)
 // This is the ONLY definition - all other files use extern declaration
@@ -24,6 +32,9 @@ CANManager *canPTR = nullptr;
 GNSSProcessor *gnssPTR = nullptr;
 IMUProcessor *imuPTR = nullptr;
 NAVProcessor *navPTR = nullptr;
+ADProcessor *adPTR = nullptr;
+PWMProcessor *pwmPTR = nullptr;
+MotorDriverInterface *motorPTR = nullptr;
 
 void setup()
 {
@@ -40,6 +51,9 @@ void setup()
   udpSetup();
 
   Serial.print("\r\n- Network stack initialized");
+  
+  // Initialize global CAN buses AFTER mongoose
+  initializeGlobalCANBuses();
 
   // Initialize ConfigManager (already implemented)
   configPTR = new ConfigManager();
@@ -87,20 +101,20 @@ void setup()
     Serial.print("\r\n✗ I2CManager FAILED");
   }
 
-  // Test CANManager
+  // Test CANManager with global instances
   Serial.print("\r\n\n*** Testing CANManager ***");
   canPTR = new CANManager();
-  if (canPTR->initializeCAN())
+  if (canPTR->init())
   {
     Serial.print("\r\n✓ CANManager SUCCESS");
     
     // Test some basic functionality
-    Serial.printf("\r\n  - CAN1 initialized: %s", canPTR->isCAN1Initialized() ? "YES" : "NO");
-    Serial.printf("\r\n  - CAN2 initialized: %s", canPTR->isCAN2Initialized() ? "YES" : "NO");
-    Serial.printf("\r\n  - CAN3 initialized: %s", canPTR->isCAN3Initialized() ? "YES" : "NO");
+    Serial.printf("\r\n  - CAN1 active: %s", canPTR->isCAN1Active() ? "YES" : "NO");
+    Serial.printf("\r\n  - CAN2 active: %s", canPTR->isCAN2Active() ? "YES" : "NO");
+    Serial.printf("\r\n  - CAN3 active: %s", canPTR->isCAN3Active() ? "YES" : "NO");
     
-    // Print full status
-    canPTR->printCANStatus();
+    // Simple status for new CANManager
+    Serial.printf("\r\n  - Keya detected: %s", canPTR->isKeyaDetected() ? "YES" : "NO");
   }
   else
   {
@@ -165,15 +179,70 @@ void setup()
     }
     
     // Register PGN callbacks
-    Serial.print("\r\n[MAIN] About to register IMU PGN callbacks...");
     imuPTR->registerPGNCallbacks();
-    Serial.print("\r\n[MAIN] IMU PGN callback registration complete");
   }
   else
   {
     Serial.print("\r\n✗ IMUProcessor - No IMU detected");
     Serial.print("\r\n  - Check wiring and power");
     Serial.print("\r\n  - For TM171: TX on Teensy -> RX on TM171 (reversed labels!)");
+  }
+
+  // Test ADProcessor
+  Serial.print("\r\n\n*** Testing ADProcessor ***");
+  adPTR = ADProcessor::getInstance();
+  if (adPTR->init())
+  {
+    Serial.print("\r\n✓ ADProcessor SUCCESS");
+    
+    // Print initial status
+    adPTR->printStatus();
+    
+    // Test configuration
+    // With 10k/10k divider: 2.5V sensor -> 1.25V ADC
+    // 1.25V / 3.3V * 4095 = 1553
+    Serial.print("\r\n  - Setting WAS offset to 1553 (2.5V center)");
+    adPTR->setWASOffset(1553);  // 2.5V center with 10k/10k voltage divider
+    Serial.print("\r\n  - Setting counts per degree to 30");
+    adPTR->setWASCountsPerDegree(30.0f);
+    
+    // Take a reading
+    adPTR->process();
+    Serial.printf("\r\n  - Current angle: %.2f°", adPTR->getWASAngle());
+  }
+  else
+  {
+    Serial.print("\r\n✗ ADProcessor FAILED");
+  }
+  
+  // Test PWMProcessor
+  Serial.print("\r\n\n*** Testing PWMProcessor ***");
+  pwmPTR = PWMProcessor::getInstance();
+  if (pwmPTR->init())
+  {
+    Serial.print("\r\n✓ PWMProcessor SUCCESS");
+    
+    // Test direct frequency control
+    Serial.print("\r\n\r\n- Testing direct frequency control:");
+    Serial.print("\r\n  Setting 10Hz at 50% duty");
+    pwmPTR->setSpeedPulseHz(10.0f);
+    pwmPTR->setSpeedPulseDuty(0.5f);
+    pwmPTR->enableSpeedPulse(true);
+    
+    // Test speed-based control
+    Serial.print("\r\n\r\n- Testing speed-based control:");
+    Serial.print("\r\n  Setting 130 pulses per meter (ISO 11786)");
+    pwmPTR->setPulsesPerMeter(130.0f);  // ISO 11786 standard
+    Serial.print("\r\n  Setting speed to 10 km/h");
+    pwmPTR->setSpeedKmh(10.0f);
+    Serial.printf("\r\n  Calculated frequency: %.1f Hz", pwmPTR->getSpeedPulseHz());
+    
+    // Print status
+    pwmPTR->printStatus();
+  }
+  else
+  {
+    Serial.print("\r\n✗ PWMProcessor FAILED");
   }
 
   Serial.print("\r\n\n*** Class Testing Complete ***\r\n");
@@ -192,18 +261,69 @@ void setup()
     imuPTR->printStatus();
   }
 
+  // Motor Driver Testing
+  if (MOTOR_TEST_MODE) {
+    Serial.print("\r\n\n*** Motor Driver Test Mode ***");
+    
+    // Auto-detect motor type
+    MotorDriverType detectedType = MotorDriverFactory::detectMotorType(canPTR);
+    
+    // Create motor driver
+    Serial.print("\r\n- Creating motor driver...");
+    motorPTR = MotorDriverFactory::createMotorDriver(detectedType, hardwarePTR, canPTR);
+    
+    if (motorPTR) {
+      if (motorPTR->init()) {
+        Serial.printf("\r\n✓ %s motor driver initialized", motorPTR->getTypeName());
+      
+        // Skip automatic test for Keya
+        if (motorPTR->getType() != MotorDriverType::KEYA_CAN) {
+          // Run automatic test for PWM motors only
+          Serial.print("\r\n1. Enable motor");
+          motorPTR->enable(true);
+          delay(1000);
+          
+          Serial.print("\r\n2. Test forward 25%");
+          motorPTR->setSpeed(25.0f);
+          delay(2000);
+          
+          Serial.print("\r\n3. Test forward 50%");
+          motorPTR->setSpeed(50.0f);
+          delay(2000);
+          
+          Serial.print("\r\n4. Test stop");
+          motorPTR->stop();
+          delay(1000);
+          
+          Serial.print("\r\n5. Test reverse -25%");
+          motorPTR->setSpeed(-25.0f);
+          delay(2000);
+          
+          Serial.print("\r\n6. Test reverse -50%");
+          motorPTR->setSpeed(-50.0f);
+          delay(2000);
+          
+          Serial.print("\r\n7. Stop and disable");
+          motorPTR->stop();
+          motorPTR->enable(false);
+        }
+        
+        Serial.print("\r\n\r\nCommands: e/d (enable/disable), +/- (speed), s (stop), ? (status)");
+      } else {
+        if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN) {
+          Serial.print("\r\n✗ Keya motor not detected on CAN3");
+        } else {
+          Serial.print("\r\n✗ Motor driver init failed");
+        }
+      }
+    }
+  }
+
   Serial.print("\r\n\n=== New Dawn Initialization Complete ===");
   Serial.print("\r\nEntering main loop...\r\n");
 
   Serial.print("\r\n=== System Ready ===\r\n");
   
-  // Debug: List all registered PGN callbacks
-  PGNProcessor* pgnProcessor = PGNProcessor::instance;
-  if (pgnProcessor)
-  {
-    Serial.print("\r\n[MAIN] Final PGN callback list:");
-    pgnProcessor->listRegisteredCallbacks();
-  }
 }
 
 void loop()
@@ -211,15 +331,107 @@ void loop()
   mongoose_poll();
 
   static uint32_t lastPrint = 0;
-  static uint32_t lastIMUDebug = 0;
   static uint32_t lastDetailedStatus = 0;
   static uint32_t lastNAVStatus = 0;
   static uint32_t lastCANStatus = 0;
+  static uint32_t lastADStatus = 0;
+  static uint32_t lastPWMTest = 0;
+  
+  // Motor test mode variables
+  static float motorTestSpeed = 0.0f;
 
+  // Motor test mode interactive commands
+  if (MOTOR_TEST_MODE && motorPTR) {
+    
+    // Check for serial commands
+    
+    if (Serial.available()) {
+      char cmd = Serial.read();
+      
+      switch (cmd) {
+        case '+':
+          motorTestSpeed = constrain(motorTestSpeed + 10.0f, -100.0f, 100.0f);
+          motorPTR->setSpeed(motorTestSpeed);
+          Serial.printf("\r\n[Motor] Speed: %.1f%%", motorTestSpeed);
+          break;
+          
+        case '*':  // Add a way to set higher speed for testing
+          motorTestSpeed = 50.0f;  // 50% = 500 in Keya units
+          motorPTR->setSpeed(motorTestSpeed);
+          Serial.printf("\r\n[Motor] Speed set to: %.1f%%", motorTestSpeed);
+          break;
+          
+        case '-':
+          motorTestSpeed = constrain(motorTestSpeed - 10.0f, -100.0f, 100.0f);
+          motorPTR->setSpeed(motorTestSpeed);
+          Serial.printf("\r\n[Motor] Speed: %.1f%%", motorTestSpeed);
+          break;
+          
+        case 'e':
+        case 'E':
+          motorPTR->enable(true);
+          Serial.print("\r\n[Motor] ENABLED");
+          break;
+          
+        case 'd':
+        case 'D':
+          motorPTR->enable(false);
+          Serial.print("\r\n[Motor] DISABLED");
+          break;
+          
+        case 's':
+        case 'S':
+          motorTestSpeed = 0.0f;
+          motorPTR->stop();
+          Serial.print("\r\n[Motor] STOPPED");
+          break;
+          
+        case 'f':
+        case 'F':
+          motorTestSpeed = abs(motorTestSpeed);
+          motorPTR->setSpeed(motorTestSpeed);
+          Serial.printf("\r\n[Motor] Forward: %.1f%%", motorTestSpeed);
+          break;
+          
+        case 'r':
+        case 'R':
+          motorTestSpeed = -abs(motorTestSpeed);
+          motorPTR->setSpeed(motorTestSpeed);
+          Serial.printf("\r\n[Motor] Reverse: %.1f%%", motorTestSpeed);
+          break;
+          
+        case '?':
+          MotorStatus status = motorPTR->getStatus();
+          Serial.printf("\r\n[Motor Status]");
+          Serial.printf("\r\n  Type: %s", motorPTR->getTypeName());
+          Serial.printf("\r\n  Enabled: %s", status.enabled ? "YES" : "NO");
+          Serial.printf("\r\n  Target: %.1f%%", status.targetSpeed);
+          Serial.printf("\r\n  Actual: %.1f%%", status.actualSpeed);
+          if (motorPTR->hasCurrentSensing()) {
+            Serial.printf("\r\n  Current: %.2fA", status.currentDraw);
+          }
+          if (status.hasError) {
+            Serial.printf("\r\n  ERROR: %s", status.errorMessage);
+          }
+          break;
+      }
+    }
+    
+    
+    // Don't return - let motor process() run below
+  }
+
+  // Normal operation (non-test mode)
   // Process IMU data
   if (imuPTR)
   {
     imuPTR->process();
+  }
+  
+  // Process A/D inputs
+  if (adPTR)
+  {
+    adPTR->process();
   }
 
   // Process NAV messages
@@ -231,7 +443,13 @@ void loop()
   // Poll CAN messages (like NG-V6 does)
   if (canPTR)
   {
-    canPTR->pollCANMessages();
+    canPTR->pollForDevices();
+  }
+  
+  // Process motor driver (must be called regularly for CAN motors)
+  if (motorPTR)
+  {
+    motorPTR->process();
   }
 
   // Quick status print every second
@@ -248,19 +466,9 @@ void loop()
     }
   }
 
-  // Detailed IMU debug every 5 seconds
-  // if (millis() - lastIMUDebug > 5000)
-  // {
-  //   lastIMUDebug = millis();
 
-  //   if (imuPTR)
-  //   {
-  //     imuPTR->printStatus();
-  //   }
-  // }
-
-  // NAV processor status every 10 seconds
-  if (millis() - lastNAVStatus > 10000)
+  // NAV processor status every 30 seconds
+  if (millis() - lastNAVStatus > 30000)
   {
     lastNAVStatus = millis();
 
@@ -275,20 +483,101 @@ void loop()
   {
     lastCANStatus = millis();
 
-    if (canPTR && canPTR->isCAN3Initialized())
+    if (canPTR && canPTR->isCAN3Active())
     {
-      Serial.print("\r\n[CAN3 Status] ");
-      CANManager::CANBusInfo* can3Info = canPTR->getBusInfo(3);
-      if (can3Info)
+      Serial.printf("\r\n[CAN Status] CAN3 msgs: %lu, Keya detected: %s",
+                    canPTR->getCAN3MessageCount(),
+                    canPTR->isKeyaDetected() ? "YES" : "NO");
+    }
+  }
+  
+  // A/D status every 5 seconds with switch change detection
+  if (millis() - lastADStatus > 5000)
+  {
+    lastADStatus = millis();
+    
+    if (adPTR)
+    {
+      Serial.printf("\r\n[A/D] WAS: %.1f° (%.2fV) | Work: %s | Steer: %s",
+                    adPTR->getWASAngle(), 
+                    adPTR->getWASVoltage(),
+                    adPTR->isWorkSwitchOn() ? "ON" : "OFF",
+                    adPTR->isSteerSwitchOn() ? "ON" : "OFF");
+      
+      // Check for switch changes
+      if (adPTR->hasWorkSwitchChanged())
       {
-        Serial.printf("Total msgs: %lu, Keya motor msgs: %lu", 
-                      can3Info->messagesReceived, can3Info->keyaMotorMessages);
-        if (can3Info->keyaMotorMessages > 0)
+        Serial.printf("\r\n[A/D] Work switch changed to: %s", 
+                      adPTR->isWorkSwitchOn() ? "ON" : "OFF");
+        adPTR->clearWorkSwitchChange();
+      }
+      
+      if (adPTR->hasSteerSwitchChanged())
+      {
+        Serial.printf("\r\n[A/D] Steer switch changed to: %s", 
+                      adPTR->isSteerSwitchOn() ? "ON" : "OFF");
+        adPTR->clearSteerSwitchChange();
+      }
+    }
+  }
+  
+  // Update PWM speed pulse - TEST MODE with artificial speed
+  static uint32_t lastSpeedUpdate = 0;
+  static bool useTestSpeed = false;  // Set to true for testing without GPS
+  
+  if (millis() - lastSpeedUpdate > 200)  // Update every 200ms like V6-NG
+  {
+    lastSpeedUpdate = millis();
+    
+    if (pwmPTR && pwmPTR->isSpeedPulseEnabled())
+    {
+      float speedKmh = 0.0f;
+      
+      if (useTestSpeed)
+      {
+        // TEST MODE: Cycle through speeds automatically
+        static float testSpeed = 0.0f;
+        static uint32_t lastTestChange = 0;
+        
+        // Change speed every 5 seconds
+        if (millis() - lastTestChange > 5000)
         {
-          uint32_t timeSinceLast = millis() - can3Info->lastKeyaMessageTime;
-          Serial.printf(" (last %lums ago)", timeSinceLast);
+          lastTestChange = millis();
+          testSpeed += 5.0f;
+          if (testSpeed > 30.0f) testSpeed = 0.0f;
+        }
+        
+        speedKmh = testSpeed;
+        
+        // Debug output every 3 seconds
+        if (millis() - lastPWMTest > 3000)
+        {
+          lastPWMTest = millis();
+          Serial.printf("\r\n[PWM] TEST Speed: %.1f km/h = %.1f Hz (130 ppm)", 
+                        speedKmh, pwmPTR->getSpeedPulseHz());
         }
       }
+      else if (gnssPTR)
+      {
+        // GPS MODE: Use actual GPS speed
+        const auto &gpsData = gnssPTR->getData();
+        if (gpsData.hasVelocity)
+        {
+          // Convert knots to km/h
+          speedKmh = gpsData.speedKnots * 1.852f;
+          
+          // Debug output every 3 seconds
+          if (millis() - lastPWMTest > 3000)
+          {
+            lastPWMTest = millis();
+            Serial.printf("\r\n[PWM] GPS Speed: %.1f km/h = %.1f Hz", 
+                          speedKmh, pwmPTR->getSpeedPulseHz());
+          }
+        }
+      }
+      
+      // Set the speed
+      pwmPTR->setSpeedKmh(speedKmh);
     }
   }
 
@@ -336,47 +625,4 @@ void loop()
     gnssPTR->processUBXByte(b);
   }
 
-  // Print GNSS structure contents every 5 seconds to see if data is getting in
-  // static uint32_t lastCheck = 0;
-  // if (millis() - lastCheck > 5000)
-  // {
-  //   lastCheck = millis();
-
-  //   const auto &data = gnssPTR->getData();
-    
-  //   Serial.print("\r\n\n=== GNSSProcessor Data Structure ===");
-  //   Serial.printf("\r\nisValid: %s", data.isValid ? "YES" : "NO");
-  //   Serial.printf("\r\nhasPosition: %s", data.hasPosition ? "YES" : "NO");
-  //   Serial.printf("\r\nhasVelocity: %s", data.hasVelocity ? "YES" : "NO");
-  //   Serial.printf("\r\nhasDualHeading: %s", data.hasDualHeading ? "YES" : "NO");
-  //   Serial.printf("\r\nhasINS: %s", data.hasINS ? "YES" : "NO");
-  //   Serial.printf("\r\nlatitude: %.8f", data.latitude);
-  //   Serial.printf("\r\nlongitude: %.8f", data.longitude);
-  //   Serial.printf("\r\naltitude: %.2f", data.altitude);
-  //   Serial.printf("\r\nfixQuality: %d", data.fixQuality);
-  //   Serial.printf("\r\nnumSatellites: %d", data.numSatellites);
-  //   Serial.printf("\r\nhdop: %.1f", data.hdop);
-  //   Serial.printf("\r\nspeedKnots: %.1f", data.speedKnots);
-  //   Serial.printf("\r\nheadingTrue: %.1f", data.headingTrue);
-  //   Serial.printf("\r\ndataAge: %lu ms", gnssPTR->getDataAge());
-  //   Serial.printf("\r\ndual heading: %.2f", data.dualHeading);
-  //   Serial.printf("\r\ndual roll: %.2f", data.dualRoll);
-  //   Serial.printf("\r\nINS pitch: %.2f", data.insPitch);
-  //   Serial.printf("\r\nheading quality: %d", data.headingQuality);
-    
-  //   // Display INSPVAXA standard deviation data if available
-  //   if (data.hasINS && (data.posStdDevLat > 0 || data.posStdDevLon > 0))
-  //   {
-  //     Serial.print("\r\n--- INSPVAXA Std Dev Data ---");
-  //     Serial.printf("\r\nPos StdDev: Lat=%.3fm Lon=%.3fm Alt=%.3fm", 
-  //                   data.posStdDevLat, data.posStdDevLon, data.posStdDevAlt);
-  //     Serial.printf("\r\nVel StdDev: N=%.3fm/s E=%.3fm/s U=%.3fm/s", 
-  //                   data.velStdDevNorth, data.velStdDevEast, data.velStdDevUp);
-  //   }
-    
-  //   Serial.print("\r\n=====================================");
-    
-  //   gnssPTR->printStats();
-
-  // }
 }

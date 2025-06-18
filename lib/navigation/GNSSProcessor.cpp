@@ -41,6 +41,10 @@ bool GNSSProcessor::init()
 {
     resetStats();
     resetParser();
+    
+    // Register PGN callbacks for Hello and Scan Request broadcasts
+    registerPGNCallbacks();
+    
     return true;
 }
 
@@ -979,7 +983,7 @@ void GNSSProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len)
     if (pgn == 200)
     {
         // When we receive a Hello from AgIO, we should respond
-        Serial.print("\r\n[GNSSProcessor] Received Hello PGN, sending reply");
+        // Serial.print("\r\n[GNSSProcessor] Received Hello PGN, sending reply");
         
         // GPS Hello reply format from PGN.md: 
         // Source: 0x78 (120), PGN: 0x78 (120), Length: 5
@@ -991,7 +995,35 @@ void GNSSProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len)
         // Send the reply
         sendUDPbytes(helloFromGPS, sizeof(helloFromGPS));
     }
-    // Future: Handle other broadcast PGNs here (like Scan Request)
+    // Check if this is a Scan Request PGN
+    else if (pgn == 202)
+    {
+        // Serial.print("\r\n[GNSSProcessor] Received Scan Request PGN, sending subnet reply");
+        
+        // Subnet GPS reply format from PGN.md:
+        // Src: 0x78 (120), PGN: 0xCB (203), Len: 7
+        // IP_One, IP_Two, IP_Three, IP_Four, Subnet_One, Subnet_Two, Subnet_Three
+        uint8_t subnetReply[] = {
+            0x80, 0x81,          // PGN header
+            GPS_SOURCE_ID,       // Source: 0x78 (120)
+            0xCB,                // PGN: 203
+            7,                   // Data length
+            192,                 // IP_One
+            168,                 // IP_Two
+            5,                   // IP_Three
+            124,                 // IP_Four (GPS is at .124)
+            255,                 // Subnet_One
+            255,                 // Subnet_Two
+            255,                 // Subnet_Three
+            0                    // CRC placeholder
+        };
+        
+        // Calculate and set CRC
+        calculateAndSetCRC(subnetReply, sizeof(subnetReply));
+        
+        // Send the reply
+        sendUDPbytes(subnetReply, sizeof(subnetReply));
+    }
 }
 
 void GNSSProcessor::sendGPSData()
