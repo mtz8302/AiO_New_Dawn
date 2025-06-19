@@ -71,10 +71,10 @@ bool HardwareManager::initializePins()
     pinMode(getPWM2Pin(), OUTPUT);
 
     // Configure input pins
-    pinMode(getSteerPin(), INPUT_PULLUP);
+    // pinMode(getSteerPin(), INPUT_PULLUP);  // Handled by ADProcessor
     pinMode(getKickoutDPin(), INPUT_PULLUP);
     pinMode(getWASSensorPin(), INPUT_DISABLE);
-    pinMode(getWorkPin(), INPUT);
+    // pinMode(getWorkPin(), INPUT);  // Handled by ADProcessor
     pinMode(getCurrentPin(), INPUT);
     pinMode(getKickoutAPin(), INPUT);
 

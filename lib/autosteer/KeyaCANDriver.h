@@ -13,35 +13,14 @@ private:
     bool enabled = false;
     float targetSpeed = 0.0f;
     uint32_t lastSendTime = 0;
-    bool keyaDetected = false;
-    uint32_t lastHeartbeat = 0;
     
 public:
     KeyaCANDriver() : can3(&globalCAN3) {}
     
     bool init() override {
         // CAN3 already initialized by global init
-        // Check for Keya heartbeat
-        uint32_t startTime = millis();
-        CAN_message_t msg;
-        
-        while (millis() - startTime < 1000) {
-            if (can3->read(msg)) {
-                if (msg.flags.extended && msg.id == 0x07000001) {
-                    keyaDetected = true;
-                    lastHeartbeat = millis();
-                    Serial.print("\r\n[KeyaCANDriver] Keya motor detected");
-                    break;
-                }
-            }
-            delay(10);
-        }
-        
-        if (!keyaDetected) {
-            Serial.print("\r\n[KeyaCANDriver] No Keya motor detected on CAN3");
-        }
-        
-        return keyaDetected;
+        Serial.print("\r\n[KeyaCANDriver] Initialized");
+        return true;
     }
     
     void enable(bool en) override {
@@ -57,48 +36,60 @@ public:
     }
     
     void process() override {
-        if (!keyaDetected) return;
-        
-        // Check for heartbeat timeout (2 seconds)
-        CAN_message_t rxMsg;
-        while (can3->read(rxMsg)) {
-            if (rxMsg.flags.extended && rxMsg.id == 0x07000001) {
-                lastHeartbeat = millis();
-            }
-        }
-        
-        if (millis() - lastHeartbeat > 2000) {
-            keyaDetected = false;
-            Serial.print("\r\n[KeyaCANDriver] Lost connection to Keya motor");
-            return;
-        }
-        
-        // Send commands every 20ms
+        // Simple alternating pattern - send one command every 20ms
         if (millis() - lastSendTime >= 20) {
-            // Calculate speed value (targetSpeed is -100 to +100%)
-            // Keya uses 0-1000 where 1000 = 100rpm
-            int16_t speedValue = (int16_t)(targetSpeed * 10.0f);  // -1000 to +1000
-            
-            // Send speed command
             CAN_message_t msg;
             msg.id = 0x06000001;
             msg.flags.extended = 1;
             msg.len = 8;
-            msg.buf[0] = 0x23;
-            msg.buf[1] = 0x00;  // Speed command
-            msg.buf[2] = 0x20;
-            msg.buf[3] = 0x01;
-            msg.buf[4] = (speedValue >> 8) & 0xFF;  // High byte
-            msg.buf[5] = speedValue & 0xFF;         // Low byte
-            msg.buf[6] = 0x00;
-            msg.buf[7] = 0x00;
-            can3->write(msg);
             
-            // Send enable/disable command
-            msg.buf[1] = enabled ? 0x0D : 0x0C;  // Enable or Disable
-            msg.buf[4] = 0x00;
-            msg.buf[5] = 0x00;
-            can3->write(msg);
+            if (enabled) {
+                // Alternate between enable and speed commands
+                static bool sendEnable = true;
+                
+                if (sendEnable) {
+                    // Send enable command
+                    msg.buf[0] = 0x23;
+                    msg.buf[1] = 0x0D;  // Enable
+                    msg.buf[2] = 0x20;
+                    msg.buf[3] = 0x01;
+                    msg.buf[4] = 0x00;
+                    msg.buf[5] = 0x00;
+                    msg.buf[6] = 0x00;
+                    msg.buf[7] = 0x00;
+                    can3->write(msg);
+                    // Serial.printf("\r\n[Keya] Sent ENABLE");
+                } else {
+                    // Send speed command
+                    int32_t speedValue = (int32_t)(targetSpeed * 10.0f);  // -1000 to +1000 as 32-bit
+                    // Manual shows: 23 00 20 01 DATA_L(H) DATA_L(L) DATA_H(H) DATA_H(L)
+                    // Working log shows negative values use sign extension (FF FF for negative)
+                    msg.buf[0] = 0x23;
+                    msg.buf[1] = 0x00;  // Speed command
+                    msg.buf[2] = 0x20;
+                    msg.buf[3] = 0x01;
+                    msg.buf[4] = (speedValue >> 8) & 0xFF;   // DATA_L(H) - bits 15-8
+                    msg.buf[5] = speedValue & 0xFF;          // DATA_L(L) - bits 7-0
+                    msg.buf[6] = (speedValue >> 24) & 0xFF;  // DATA_H(H) - bits 31-24 (sign extension)
+                    msg.buf[7] = (speedValue >> 16) & 0xFF;  // DATA_H(L) - bits 23-16 (sign extension)
+                    can3->write(msg);
+                    // Serial.printf("\r\n[Keya] Sent SPEED %d (0x%08X)", speedValue, speedValue);
+                }
+                
+                // Toggle for next time
+                sendEnable = !sendEnable;
+            } else {
+                // Send disable command
+                msg.buf[0] = 0x23;
+                msg.buf[1] = 0x0C;  // Disable
+                msg.buf[2] = 0x20;
+                msg.buf[3] = 0x01;
+                msg.buf[4] = 0x00;
+                msg.buf[5] = 0x00;
+                msg.buf[6] = 0x00;
+                msg.buf[7] = 0x00;
+                can3->write(msg);
+            }
             
             lastSendTime = millis();
         }

@@ -59,8 +59,8 @@ public:
 
 private:
     // Pin assignments from pcb.h
-    static constexpr uint8_t AD_WORK_PIN = A17;        // Work switch input
-    static constexpr uint8_t AD_STEER_PIN = 2;         // Steer switch input  
+    static constexpr uint8_t AD_STEER_PIN = 2;         // Steer switch input (STEER_PIN from pcb.h)
+    static constexpr uint8_t AD_WORK_PIN = A17;        // Work switch input (WORK_PIN from pcb.h)  
     static constexpr uint8_t AD_WAS_PIN = A15;         // WAS sensor input
     
     // Switch debouncing structure

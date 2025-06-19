@@ -16,9 +16,10 @@
 #include "MotorDriverInterface.h"
 #include "MotorDriverFactory.h"
 #include "CANGlobals.h"
+#include "AutosteerProcessor.h"
 
 // Test mode flag - set to true to run motor tests
-static bool MOTOR_TEST_MODE = true;  // Enable for motor control
+static bool MOTOR_TEST_MODE = false;  // Disable for autosteer mode
 
 // ConfigManager pointer definition (same pattern as machinePTR)
 // This is the ONLY definition - all other files use extern declaration
@@ -261,6 +262,26 @@ void setup()
     imuPTR->printStatus();
   }
 
+  // Initialize Motor Driver
+  Serial.print("\r\n\n*** Initializing Motor Driver ***");
+  MotorDriverType detectedType = MotorDriverFactory::detectMotorType(canPTR);
+  motorPTR = MotorDriverFactory::createMotorDriver(detectedType, hardwarePTR, canPTR);
+  
+  if (motorPTR && motorPTR->init()) {
+    Serial.printf("\r\n✓ %s motor driver initialized", motorPTR->getTypeName());
+  } else {
+    Serial.print("\r\n✗ Motor driver init failed");
+  }
+
+  // Initialize AutosteerProcessor
+  Serial.print("\r\n\n*** Initializing AutosteerProcessor ***");
+  autosteerPTR = AutosteerProcessor::getInstance();
+  if (autosteerPTR->init()) {
+    Serial.print("\r\n✓ AutosteerProcessor initialized");
+  } else {
+    Serial.print("\r\n✗ AutosteerProcessor init failed");
+  }
+
   // Motor Driver Testing
   if (MOTOR_TEST_MODE) {
     Serial.print("\r\n\n*** Motor Driver Test Mode ***");
@@ -336,6 +357,7 @@ void loop()
   static uint32_t lastCANStatus = 0;
   static uint32_t lastADStatus = 0;
   static uint32_t lastPWMTest = 0;
+  static uint32_t lastAutosteerStatus = 0;
   
   // Motor test mode variables
   static float motorTestSpeed = 0.0f;
@@ -451,6 +473,31 @@ void loop()
   {
     motorPTR->process();
   }
+  
+  // Process autosteer
+  if (autosteerPTR && !MOTOR_TEST_MODE)
+  {
+    autosteerPTR->process();
+  }
+  
+  // Autosteer status every 2 seconds
+  if (autosteerPTR && !MOTOR_TEST_MODE && millis() - lastAutosteerStatus > 2000)
+  {
+    lastAutosteerStatus = millis();
+    
+    const char* stateStr = "OFF";
+    switch(autosteerPTR->getState()) {
+      case SteerState::OFF: stateStr = "OFF"; break;
+      case SteerState::READY: stateStr = "READY"; break;
+      case SteerState::ACTIVE: stateStr = "ACTIVE"; break;
+    }
+    
+    Serial.printf("\r\n[Autosteer] State: %s | Target: %.1f° | Current: %.1f° | Motor: %.1f%%",
+                  stateStr,
+                  autosteerPTR->getTargetAngle(),
+                  autosteerPTR->getCurrentAngle(),
+                  autosteerPTR->getMotorSpeed());
+  }
 
   // Quick status print every second
   if (millis() - lastPrint > 1000)
@@ -478,8 +525,8 @@ void loop()
     }
   }
 
-  // CAN status every 3 seconds to monitor Keya motor
-  if (millis() - lastCANStatus > 3000)
+  // CAN status every 30 seconds to monitor Keya motor
+  if (millis() - lastCANStatus > 30000)
   {
     lastCANStatus = millis();
 
@@ -491,16 +538,17 @@ void loop()
     }
   }
   
-  // A/D status every 5 seconds with switch change detection
-  if (millis() - lastADStatus > 5000)
+  // A/D status every 30 seconds with switch change detection
+  if (millis() - lastADStatus > 30000)
   {
     lastADStatus = millis();
     
     if (adPTR)
     {
-      Serial.printf("\r\n[A/D] WAS: %.1f° (%.2fV) | Work: %s | Steer: %s",
+      Serial.printf("\r\n[A/D] WAS: %.1f° (%.2fV) Raw:%d | Work: %s | Steer: %s",
                     adPTR->getWASAngle(), 
                     adPTR->getWASVoltage(),
+                    adPTR->getWASRaw(),
                     adPTR->isWorkSwitchOn() ? "ON" : "OFF",
                     adPTR->isSteerSwitchOn() ? "ON" : "OFF");
       
@@ -566,8 +614,8 @@ void loop()
           // Convert knots to km/h
           speedKmh = gpsData.speedKnots * 1.852f;
           
-          // Debug output every 3 seconds
-          if (millis() - lastPWMTest > 3000)
+          // Debug output every 30 seconds
+          if (millis() - lastPWMTest > 30000)
           {
             lastPWMTest = millis();
             Serial.printf("\r\n[PWM] GPS Speed: %.1f km/h = %.1f Hz", 
@@ -610,11 +658,11 @@ void loop()
     gnssPTR->processNMEAChar(c);
   }
   
-  // Report GPS1 byte count every 5 seconds
-  if (millis() - lastGPS1Report > 5000 && gps1ByteCount > 0)
+  // Report GPS1 byte count every 30 seconds
+  if (millis() - lastGPS1Report > 30000 && gps1ByteCount > 0)
   {
     lastGPS1Report = millis();
-    Serial.printf("\r\n[GPS1] Received %lu bytes in last 5s", gps1ByteCount);
+    Serial.printf("\r\n[GPS1] Received %lu bytes in last 30s", gps1ByteCount);
     gps1ByteCount = 0;
   }
   

@@ -106,7 +106,9 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
                 if (registrations[i].pgn == pgn)
                 {
                     // Found a registered handler - call it
-                    Serial.printf("\r\n[PGNProcessor] Routing PGN %d to %s", pgn, registrations[i].name);
+                    // if (pgn == 254) {
+                    //     Serial.printf("\r\n[PGNProcessor] Routing PGN %d to %s", pgn, registrations[i].name);
+                    // }
                     
                     // Pass the data starting after the 3-byte header and PGN type byte
                     const uint8_t* data = &udpPacket->recv.buf[4];
@@ -157,8 +159,43 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
                     processSteerData(udpPacket);
                 }
                 break;
+            case 100: // Unknown PGN from AOG - silently ignore
+                // 30 byte message of unknown purpose
+                // TODO: Determine what this is for
+                break;
+            case 229: // Extended Machine/Tool data - silently ignore
+                // Not implemented yet - extended section control data
+                break;
+            case 239: // Machine/Tool control - silently ignore
+                // Not implemented yet - for section control, etc.
+                break;
             default:
-                Serial.printf("Unknown PGN type: %d\r\n", pgn);
+                Serial.printf("\r\nUnknown PGN type: %d (0x%02X)", pgn, pgn);
+                Serial.printf("\r\n  Length: %d bytes", udpPacket->recv.len);
+                Serial.printf("\r\n  Header: %02X %02X %02X", 
+                    udpPacket->recv.buf[0], udpPacket->recv.buf[1], udpPacket->recv.buf[2]);
+                Serial.printf("\r\n  Data hex:   ");
+                int dataLen = udpPacket->recv.len - 1;
+                int displayLen = (dataLen < 20) ? dataLen : 20;
+                for (int i = 4; i < 4 + displayLen && i < udpPacket->recv.len - 1; i++) {
+                    Serial.printf("%02X ", udpPacket->recv.buf[i]);
+                }
+                if (dataLen > 20) {
+                    Serial.printf("...");
+                }
+                Serial.printf("\r\n  Data ascii: ");
+                for (int i = 4; i < 4 + displayLen && i < udpPacket->recv.len - 1; i++) {
+                    char c = udpPacket->recv.buf[i];
+                    if (c >= 32 && c <= 126) {
+                        Serial.printf(" %c ", c);
+                    } else {
+                        Serial.printf(" . ");
+                    }
+                }
+                if (dataLen > 20) {
+                    Serial.printf("...");
+                }
+                Serial.printf("\r\n");
                 break;
             }
         }
@@ -256,6 +293,15 @@ void PGNProcessor::processSteerConfig(struct mg_connection *udpPacket)
     Serial.printf("\r\n- PressureSensor: %d", configPTR->getPressureSensor());
     Serial.printf("\r\n- CurrentSensor: %d", configPTR->getCurrentSensor());
     Serial.printf("\r\n- UseYAxis: %d", configPTR->getIsUseYAxis());
+    
+    // Forward to registered callbacks
+    for (size_t i = 0; i < registrationCount; i++)
+    {
+        if (registrations[i].pgn == 251)
+        {
+            registrations[i].callback(251, &udpPacket->recv.buf[4], udpPacket->recv.len - 5);
+        }
+    }
 }
 
 void PGNProcessor::processSteerSettings(struct mg_connection *udpPacket)
@@ -312,15 +358,29 @@ void PGNProcessor::processSteerSettings(struct mg_connection *udpPacket)
     Serial.printf("\r\n- SensorCounts: %d", configPTR->getSteerSensorCounts());
     Serial.printf("\r\n- WAS Offset: %d", configPTR->getWasOffset());
     Serial.printf("\r\n- Ackerman Fix: %.2f", configPTR->getAckermanFix());
+    
+    // Forward to registered callbacks
+    for (size_t i = 0; i < registrationCount; i++)
+    {
+        if (registrations[i].pgn == 252)
+        {
+            registrations[i].callback(252, &udpPacket->recv.buf[4], udpPacket->recv.len - 5);
+        }
+    }
 }
 
 void PGNProcessor::processSteerData(struct mg_connection *udpPacket)
 {
-    printPgnAnnouncement(udpPacket, (char *)"Steer Data");
+    // printPgnAnnouncement(udpPacket, (char *)"Steer Data");
 
-    // Process real-time steer data
-    // Implementation depends on control system integration
-    Serial.print("Steer data received - integration with control system pending");
+    // Forward to registered callbacks
+    for (size_t i = 0; i < registrationCount; i++)
+    {
+        if (registrations[i].pgn == 254)
+        {
+            registrations[i].callback(254, &udpPacket->recv.buf[4], udpPacket->recv.len - 5);
+        }
+    }
 }
 
 void PGNProcessor::printPgnAnnouncement(struct mg_connection *udpPacket, char *pgnName)

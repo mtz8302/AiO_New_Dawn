@@ -30,9 +30,12 @@ bool ADProcessor::init()
     Serial.print("\r\n=== A/D Processor Initialization ===");
     
     // Configure pins
-    pinMode(AD_STEER_PIN, INPUT_PULLUP);      // Steer switch with pullup
+    pinMode(AD_STEER_PIN, INPUT_PULLUP);      // Steer switch with internal pullup
     pinMode(AD_WORK_PIN, INPUT_PULLUP);       // Work switch with pullup
     pinMode(AD_WAS_PIN, INPUT_DISABLE);       // WAS analog input (no pullup)
+    
+    // Test immediately after setting
+    Serial.printf("\r\n- After pinMode: Pin %d digital=%d", AD_STEER_PIN, digitalRead(AD_STEER_PIN));
     
     // Configure ADC for 12-bit resolution with averaging
     analogReadResolution(12);              // 12-bit (0-4095)
@@ -48,8 +51,9 @@ bool ADProcessor::init()
     
     Serial.print("\r\n- Pin configuration complete");
     Serial.printf("\r\n- Initial WAS reading: %d (%.2fV)", wasRaw, getWASVoltage());
-    Serial.printf("\r\n- Work switch: %s", workSwitch.debouncedState ? "ON" : "OFF");
-    Serial.printf("\r\n- Steer switch: %s", steerSwitch.debouncedState ? "ON" : "OFF");
+    Serial.printf("\r\n- Work switch: %s (pin A17)", workSwitch.debouncedState ? "ON" : "OFF");
+    Serial.printf("\r\n- Steer switch: %s (pin %d)", steerSwitch.debouncedState ? "ON" : "OFF", AD_STEER_PIN);
+    
     Serial.print("\r\n- A/D Processor initialization SUCCESS\r\n");
     
     return true;
@@ -59,6 +63,16 @@ void ADProcessor::process()
 {
     updateWAS();
     updateSwitches();
+    
+    // Debug pin 2 periodically
+    static uint32_t lastDebugTime = 0;
+    
+    if (millis() - lastDebugTime > 1000) {
+        int pin2Digital = digitalRead(AD_STEER_PIN);
+        Serial.printf("\r\n[AD] Pin %d: digital=%d", AD_STEER_PIN, pin2Digital);
+        lastDebugTime = millis();
+    }
+    
     lastProcessTime = millis();
 }
 
@@ -70,9 +84,21 @@ void ADProcessor::updateWAS()
 
 void ADProcessor::updateSwitches()
 {
-    // Read switch states (active LOW with pullup)
-    bool workRaw = !digitalRead(AD_WORK_PIN);
-    bool steerRaw = !digitalRead(AD_STEER_PIN);
+    // Simple digital read - just like old firmware
+    int steerPinRaw = digitalRead(AD_STEER_PIN);
+    int workPinRaw = digitalRead(AD_WORK_PIN);
+    
+    // Convert to active states
+    bool workRaw = !workPinRaw;     // Work is active LOW (pressed = 0)
+    bool steerRaw = !steerPinRaw;   // Steer is active LOW (pressed pulls down)
+    
+    // Debug raw pin state changes
+    static int lastSteerPinRaw = -1;
+    if (steerPinRaw != lastSteerPinRaw) {
+        Serial.printf("\r\n[AD] Steer pin %d: digital=%d, active=%d", 
+                      AD_STEER_PIN, steerPinRaw, steerRaw);
+        lastSteerPinRaw = steerPinRaw;
+    }
     
     // Apply debouncing
     if (debounceSwitch(workSwitch, workRaw)) {
@@ -81,6 +107,8 @@ void ADProcessor::updateSwitches()
     
     if (debounceSwitch(steerSwitch, steerRaw)) {
         steerSwitch.hasChanged = true;
+        Serial.printf("\r\n[AD] Steer switch debounced: %s", 
+                      steerSwitch.debouncedState ? "ON" : "OFF");
     }
 }
 
