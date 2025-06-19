@@ -79,16 +79,35 @@ public:
                 // Toggle for next time
                 sendEnable = !sendEnable;
             } else {
-                // Send disable command
-                msg.buf[0] = 0x23;
-                msg.buf[1] = 0x0C;  // Disable
-                msg.buf[2] = 0x20;
-                msg.buf[3] = 0x01;
-                msg.buf[4] = 0x00;
-                msg.buf[5] = 0x00;
-                msg.buf[6] = 0x00;
-                msg.buf[7] = 0x00;
-                can3->write(msg);
+                // Send alternating disable and zero speed commands
+                static bool sendDisable = true;
+                
+                if (sendDisable) {
+                    // Send disable command
+                    msg.buf[0] = 0x23;
+                    msg.buf[1] = 0x0C;  // Disable
+                    msg.buf[2] = 0x20;
+                    msg.buf[3] = 0x01;
+                    msg.buf[4] = 0x00;
+                    msg.buf[5] = 0x00;
+                    msg.buf[6] = 0x00;
+                    msg.buf[7] = 0x00;
+                    can3->write(msg);
+                } else {
+                    // Send zero speed command
+                    msg.buf[0] = 0x23;
+                    msg.buf[1] = 0x00;  // Speed command
+                    msg.buf[2] = 0x20;
+                    msg.buf[3] = 0x01;
+                    msg.buf[4] = 0x00;  // Speed 0
+                    msg.buf[5] = 0x00;
+                    msg.buf[6] = 0x00;
+                    msg.buf[7] = 0x00;
+                    can3->write(msg);
+                }
+                
+                // Toggle for next time
+                sendDisable = !sendDisable;
             }
             
             lastSendTime = millis();

@@ -1,7 +1,7 @@
 #include "ConfigManager.h"
 
-// Current EEPROM version
-#define CURRENT_EE_VERSION 106
+// Use shared EEPROM version from EEPROMLayout.h
+#define CURRENT_EE_VERSION EEPROM_VERSION
 
 // Static instance pointer
 ConfigManager *ConfigManager::instance = nullptr;
@@ -12,11 +12,14 @@ ConfigManager::ConfigManager()
     resetToDefaults();
     if (checkVersion())
     {
+        Serial.print("\r\n[ConfigManager] Version match - loading saved configs");
         loadAllConfigs();
+        Serial.printf("\r\n[ConfigManager] Loaded steerButton = %d, steerSwitch = %d", 
+                      steerButton, steerSwitch);
     }
     else
     {
-        // Version mismatch, save defaults and update version
+        Serial.print("\r\n[ConfigManager] Version mismatch - using defaults");
         saveAllConfigs();
         updateVersion();
     }
@@ -73,6 +76,9 @@ void ConfigManager::saveSteerConfig()
     if (isUseYAxis)
         configByte2 |= 0x08;
 
+    Serial.printf("\r\n[ConfigManager] Saving steer config: button=%d, switch=%d, byte1=0x%02X", 
+                  steerButton, steerSwitch, configByte1);
+
     int addr = STEER_CONFIG_ADDR;
     EEPROM.put(addr, configByte1);
     addr += sizeof(configByte1);
@@ -81,6 +87,12 @@ void ConfigManager::saveSteerConfig()
     EEPROM.put(addr, pulseCountMax);
     addr += sizeof(pulseCountMax);
     EEPROM.put(addr, minSpeed);
+    
+    // Verify the write
+    uint8_t verifyByte1;
+    EEPROM.get(STEER_CONFIG_ADDR, verifyByte1);
+    Serial.printf("\r\n[ConfigManager] Steer config verification: wrote=0x%02X, read=0x%02X", 
+                  configByte1, verifyByte1);
 }
 
 void ConfigManager::loadSteerConfig()
@@ -114,6 +126,9 @@ void ConfigManager::loadSteerConfig()
 
 void ConfigManager::saveSteerSettings()
 {
+    Serial.printf("\r\n[ConfigManager] Saving steer settings: Kp=%.1f, High=%d, Low=%.1f, Min=%d",
+                  kp, highPWM, lowPWM, minPWM);
+    
     int addr = STEER_SETTINGS_ADDR;
     EEPROM.put(addr, kp);
     addr += sizeof(kp);
@@ -128,6 +143,12 @@ void ConfigManager::saveSteerSettings()
     EEPROM.put(addr, wasOffset);
     addr += sizeof(wasOffset);
     EEPROM.put(addr, ackermanFix);
+    
+    // Verify the save
+    uint8_t verifyHighPWM;
+    EEPROM.get(STEER_SETTINGS_ADDR + sizeof(kp), verifyHighPWM);
+    Serial.printf("\r\n[ConfigManager] Steer settings verification: saved highPWM=%d, read back=%d",
+                  highPWM, verifyHighPWM);
 }
 
 void ConfigManager::loadSteerSettings()
@@ -146,6 +167,9 @@ void ConfigManager::loadSteerSettings()
     EEPROM.get(addr, wasOffset);
     addr += sizeof(wasOffset);
     EEPROM.get(addr, ackermanFix);
+    
+    Serial.printf("\r\n[ConfigManager] Loaded steer settings: Kp=%.1f, High=%d, Low=%.1f, Min=%d",
+                  kp, highPWM, lowPWM, minPWM);
 }
 
 void ConfigManager::saveGPSConfig()
@@ -404,10 +428,27 @@ bool ConfigManager::checkVersion()
 {
     uint16_t storedVersion;
     EEPROM.get(EE_VERSION_ADDR, storedVersion);
+    Serial.printf("\r\n[ConfigManager] EEPROM version check: stored=%d, current=%d", 
+                  storedVersion, CURRENT_EE_VERSION);
+    
+    // If EEPROM is uninitialized (0 or 0xFFFF), initialize it
+    if (storedVersion == 0 || storedVersion == 0xFFFF) {
+        Serial.print("\r\n[ConfigManager] EEPROM appears uninitialized, performing first-time setup");
+        return false;  // This will trigger saveAllConfigs() and updateVersion()
+    }
+    
     return (storedVersion == CURRENT_EE_VERSION);
 }
 
 void ConfigManager::updateVersion()
 {
-    EEPROM.put(EE_VERSION_ADDR, CURRENT_EE_VERSION);
+    Serial.printf("\r\n[ConfigManager] Writing version %d to EEPROM address %d", 
+                  CURRENT_EE_VERSION, EE_VERSION_ADDR);
+    EEPROM.put(EE_VERSION_ADDR, (uint16_t)CURRENT_EE_VERSION);
+    
+    // Verify the write
+    uint16_t verifyVersion;
+    EEPROM.get(EE_VERSION_ADDR, verifyVersion);
+    Serial.printf("\r\n[ConfigManager] Version write verification: wrote=%d, read back=%d", 
+                  CURRENT_EE_VERSION, verifyVersion);
 }

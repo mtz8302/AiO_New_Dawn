@@ -3,16 +3,7 @@
 
 #include "Arduino.h"
 #include <EEPROM.h>
-
-// EEPROM address definitions from layout
-#define EE_VERSION_ADDR 1
-#define NETWORK_CONFIG_ADDR 100
-#define STEER_CONFIG_ADDR 200
-#define STEER_SETTINGS_ADDR 300
-#define GPS_CONFIG_ADDR 400
-#define MACHINE_CONFIG_ADDR 500
-#define KWAS_CONFIG_ADDR 600
-#define INS_CONFIG_ADDR 700
+#include "EEPROMLayout.h"
 
 class ConfigManager
 {

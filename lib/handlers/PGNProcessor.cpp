@@ -88,8 +88,8 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
             // Commented out for quieter operation
             // Serial.printf("\r\n[PGNProcessor] Broadcasting PGN %d to all %d registered handlers", pgn, registrationCount);
             
-            const uint8_t* data = &udpPacket->recv.buf[4];
-            size_t dataLen = udpPacket->recv.len - 5; // Subtract header(3) + pgn(1) + crc(1)
+            const uint8_t* data = &udpPacket->recv.buf[5];
+            size_t dataLen = udpPacket->recv.len - 6; // Subtract header(3) + pgn(1) + len(1) + crc(1)
             
             for (size_t i = 0; i < registrationCount; i++)
             {
@@ -107,12 +107,12 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
                 {
                     // Found a registered handler - call it
                     // if (pgn == 254) {
-                    //     Serial.printf("\r\n[PGNProcessor] Routing PGN %d to %s", pgn, registrations[i].name);
+                    //     Serial.printf("\r\n[PGNProcessor] Routing PGN %d to %s, len=%d", pgn, registrations[i].name, udpPacket->recv.len);
                     // }
                     
-                    // Pass the data starting after the 3-byte header and PGN type byte
-                    const uint8_t* data = &udpPacket->recv.buf[4];
-                    size_t dataLen = udpPacket->recv.len - 5; // Subtract header(3) + pgn(1) + crc(1)
+                    // Pass the data starting after the header, pgn, and length byte
+                    const uint8_t* data = &udpPacket->recv.buf[5];
+                    size_t dataLen = udpPacket->recv.len - 6; // Subtract header(3) + pgn(1) + len(1) + crc(1)
                     
                     registrations[i].callback(pgn, data, dataLen);
                     handled = true;
@@ -142,32 +142,50 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
                 }
                 break;
             case 251: // Steer config
+                Serial.printf("\r\n[PGN] Received PGN 251, length=%d", udpPacket->recv.len);
                 if (udpPacket->recv.len == 14)
                 {
                     processSteerConfig(udpPacket);
                 }
+                else
+                {
+                    Serial.printf(" - WRONG LENGTH! Expected 14");
+                }
                 break;
             case 252: // Steer settings
+                Serial.printf("\r\n[PGN] Received PGN 252, length=%d", udpPacket->recv.len);
+                Serial.printf("\r\n[PGN252] Full packet: ");
+                for (int i = 0; i < udpPacket->recv.len && i < 16; i++) {
+                    Serial.printf("%02X ", udpPacket->recv.buf[i]);
+                }
                 if (udpPacket->recv.len == 14)
                 {
                     processSteerSettings(udpPacket);
                 }
+                else
+                {
+                    Serial.printf(" - WRONG LENGTH! Expected 14");
+                }
                 break;
             case 254: // Steer data
+                Serial.printf("\r\n[PGN] Received PGN 254, length=%d", udpPacket->recv.len);
                 if (udpPacket->recv.len == 14)
                 {
                     processSteerData(udpPacket);
                 }
+                else
+                {
+                    Serial.printf(" - WRONG LENGTH! Expected 14");
+                }
                 break;
-            case 100: // Unknown PGN from AOG - silently ignore
-                // 30 byte message of unknown purpose
-                // TODO: Determine what this is for
+            case 100: // PERMANENTLY DISABLED - Unknown PGN from AOG
+                // 30 byte message of unknown purpose - not needed
                 break;
-            case 229: // Extended Machine/Tool data - silently ignore
-                // Not implemented yet - extended section control data
+            case 229: // Extended Machine/Tool data - silently ignore for now
+                // TODO: Implement when machine control is added
                 break;
-            case 239: // Machine/Tool control - silently ignore
-                // Not implemented yet - for section control, etc.
+            case 239: // Machine/Tool control - silently ignore for now
+                // TODO: Implement when machine control is added
                 break;
             default:
                 Serial.printf("\r\nUnknown PGN type: %d (0x%02X)", pgn, pgn);
@@ -241,65 +259,13 @@ void PGNProcessor::processScanRequest(struct mg_connection *udpPacket)
 void PGNProcessor::processSteerConfig(struct mg_connection *udpPacket)
 {
     printPgnAnnouncement(udpPacket, (char *)"Steer Config");
-
-    if (!configPTR)
-    {
-        Serial.print("ConfigManager not available");
-        return;
-    }
-
-    // Parse PGN 251 data structure
-    uint8_t sett0 = udpPacket->recv.buf[5]; // setting0 byte
-    uint8_t pulseCountMax = udpPacket->recv.buf[6];
-    uint8_t minSpeed = udpPacket->recv.buf[7];
-    uint8_t sett1 = udpPacket->recv.buf[8]; // setting1 byte
-
-    // Extract boolean flags from setting0 byte
-    configPTR->setInvertWAS(bitRead(sett0, 0));
-    configPTR->setIsRelayActiveHigh(bitRead(sett0, 1));
-    configPTR->setMotorDriveDirection(bitRead(sett0, 2));
-    configPTR->setSingleInputWAS(bitRead(sett0, 3));
-    configPTR->setCytronDriver(bitRead(sett0, 4));
-    configPTR->setSteerSwitch(bitRead(sett0, 5));
-    configPTR->setSteerButton(bitRead(sett0, 6));
-    configPTR->setShaftEncoder(bitRead(sett0, 7));
-
-    // Set numeric values
-    configPTR->setPulseCountMax(pulseCountMax);
-    configPTR->setMinSpeed(minSpeed);
-
-    // Extract boolean flags from setting1 byte
-    configPTR->setIsDanfoss(bitRead(sett1, 0));
-    configPTR->setPressureSensor(bitRead(sett1, 1));
-    configPTR->setCurrentSensor(bitRead(sett1, 2));
-    configPTR->setIsUseYAxis(bitRead(sett1, 3));
-
-    // Save to EEPROM
-    configPTR->saveSteerConfig();
-
-    // Debug output
-    Serial.printf("\r\nSteer Config Updated:");
-    Serial.printf("\r\n- InvertWAS: %d", configPTR->getInvertWAS());
-    Serial.printf("\r\n- RelayActiveHigh: %d", configPTR->getIsRelayActiveHigh());
-    Serial.printf("\r\n- MotorDirection: %d", configPTR->getMotorDriveDirection());
-    Serial.printf("\r\n- SingleInputWAS: %d", configPTR->getSingleInputWAS());
-    Serial.printf("\r\n- CytronDriver: %d", configPTR->getCytronDriver());
-    Serial.printf("\r\n- SteerSwitch: %d", configPTR->getSteerSwitch());
-    Serial.printf("\r\n- SteerButton: %d", configPTR->getSteerButton());
-    Serial.printf("\r\n- ShaftEncoder: %d", configPTR->getShaftEncoder());
-    Serial.printf("\r\n- PulseCountMax: %d", configPTR->getPulseCountMax());
-    Serial.printf("\r\n- MinSpeed: %d", configPTR->getMinSpeed());
-    Serial.printf("\r\n- IsDanfoss: %d", configPTR->getIsDanfoss());
-    Serial.printf("\r\n- PressureSensor: %d", configPTR->getPressureSensor());
-    Serial.printf("\r\n- CurrentSensor: %d", configPTR->getCurrentSensor());
-    Serial.printf("\r\n- UseYAxis: %d", configPTR->getIsUseYAxis());
     
     // Forward to registered callbacks
     for (size_t i = 0; i < registrationCount; i++)
     {
         if (registrations[i].pgn == 251)
         {
-            registrations[i].callback(251, &udpPacket->recv.buf[4], udpPacket->recv.len - 5);
+            registrations[i].callback(251, &udpPacket->recv.buf[5], udpPacket->recv.len - 6);
         }
     }
 }
@@ -307,64 +273,13 @@ void PGNProcessor::processSteerConfig(struct mg_connection *udpPacket)
 void PGNProcessor::processSteerSettings(struct mg_connection *udpPacket)
 {
     printPgnAnnouncement(udpPacket, (char *)"Steer Settings");
-
-    if (!configPTR)
-    {
-        Serial.print("ConfigManager not available");
-        return;
-    }
-
-    // Parse PGN 252 data structure
-    float kp = (float)udpPacket->recv.buf[5];
-    uint8_t highPWM = udpPacket->recv.buf[6];
-    float lowPWM = (float)udpPacket->recv.buf[7];
-    uint8_t minPWM = udpPacket->recv.buf[8];
-    uint8_t steerSensorCounts = udpPacket->recv.buf[9];
-
-    // WAS offset is 16-bit value (Lo/Hi bytes)
-    int16_t wasOffset = udpPacket->recv.buf[10];
-    wasOffset |= (udpPacket->recv.buf[11] << 8);
-
-    // Ackerman fix is 16-bit value (Lo/Hi bytes)
-    int16_t ackermanRaw = udpPacket->recv.buf[12];
-    ackermanRaw |= (udpPacket->recv.buf[13] << 8);
-    float ackermanFix = (float)ackermanRaw * 0.01;
-
-    // Apply lowPWM adjustment
-    float adjustedLowPWM = (float)minPWM * 1.2;
-    if (adjustedLowPWM < 255)
-    {
-        lowPWM = adjustedLowPWM;
-    }
-
-    // Update ConfigManager
-    configPTR->setKp(kp);
-    configPTR->setHighPWM(highPWM);
-    configPTR->setLowPWM(lowPWM);
-    configPTR->setMinPWM(minPWM);
-    configPTR->setSteerSensorCounts(steerSensorCounts);
-    configPTR->setWasOffset(wasOffset);
-    configPTR->setAckermanFix(ackermanFix);
-
-    // Save to EEPROM
-    configPTR->saveSteerSettings();
-
-    // Debug output
-    Serial.printf("\r\nSteer Settings Updated:");
-    Serial.printf("\r\n- Kp: %.1f", configPTR->getKp());
-    Serial.printf("\r\n- HighPWM: %d", configPTR->getHighPWM());
-    Serial.printf("\r\n- LowPWM: %.1f", configPTR->getLowPWM());
-    Serial.printf("\r\n- MinPWM: %d", configPTR->getMinPWM());
-    Serial.printf("\r\n- SensorCounts: %d", configPTR->getSteerSensorCounts());
-    Serial.printf("\r\n- WAS Offset: %d", configPTR->getWasOffset());
-    Serial.printf("\r\n- Ackerman Fix: %.2f", configPTR->getAckermanFix());
     
     // Forward to registered callbacks
     for (size_t i = 0; i < registrationCount; i++)
     {
         if (registrations[i].pgn == 252)
         {
-            registrations[i].callback(252, &udpPacket->recv.buf[4], udpPacket->recv.len - 5);
+            registrations[i].callback(252, &udpPacket->recv.buf[5], udpPacket->recv.len - 6);
         }
     }
 }
@@ -378,7 +293,7 @@ void PGNProcessor::processSteerData(struct mg_connection *udpPacket)
     {
         if (registrations[i].pgn == 254)
         {
-            registrations[i].callback(254, &udpPacket->recv.buf[4], udpPacket->recv.len - 5);
+            registrations[i].callback(254, &udpPacket->recv.buf[5], udpPacket->recv.len - 6);
         }
     }
 }

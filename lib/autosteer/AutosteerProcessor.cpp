@@ -43,14 +43,23 @@ bool AutosteerProcessor::init() {
     // Get config values
     if (configPTR) {
         pid.setKp(configPTR->getKp());
-        pid.setOutputLimit(100.0f);  // Motor accepts -100 to +100
+        pid.setOutputLimit(100.0f);  // PID works with -100 to +100
+        
+        // Debug: Print button config on startup
+        Serial.printf("\r\n  SteerSwitch=%d, SteerButton=%d", 
+                      configPTR->getSteerSwitch(), 
+                      configPTR->getSteerButton());
     }
     
     // Register PGN handlers
     if (PGNProcessor::instance) {
-        PGNProcessor::instance->registerCallback(254, handleSteerDataStatic, "AutosteerData");
-        PGNProcessor::instance->registerCallback(252, handleSteerSettingsStatic, "AutosteerSettings");
-        PGNProcessor::instance->registerCallback(251, handleSteerConfigStatic, "AutosteerConfig");
+        Serial.print("\r\n  Registering PGN callbacks...");
+        bool reg254 = PGNProcessor::instance->registerCallback(254, handleSteerDataStatic, "AutosteerData");
+        bool reg252 = PGNProcessor::instance->registerCallback(252, handleSteerSettingsStatic, "AutosteerSettings");
+        bool reg251 = PGNProcessor::instance->registerCallback(251, handleSteerConfigStatic, "AutosteerConfig");
+        Serial.printf("\r\n  PGN registrations: 254=%d, 252=%d, 251=%d", reg254, reg252, reg251);
+    } else {
+        Serial.print("\r\n  ERROR: PGNProcessor not initialized!");
     }
     
     state = SteerState::READY;
@@ -154,16 +163,11 @@ void AutosteerProcessor::process() {
                 }
             }
             
-            // Always apply the latched state (not the physical button state)
+            // Check if external source (AgOpenGPS) changed the state
             if (steerEnabled != buttonLatchedState) {
-                Serial.printf("\r\n[Autosteer] Applying latched state: %d -> %d", steerEnabled, buttonLatchedState);
-                enable(buttonLatchedState);
-                
-                // Double-check it stuck
-                if (steerEnabled != buttonLatchedState) {
-                    Serial.printf("\r\n[Autosteer] ERROR: State didn't stick! enabled=%d, latched=%d", 
-                                  steerEnabled, buttonLatchedState);
-                }
+                // Sync the button latch to match current state
+                buttonLatchedState = steerEnabled;
+                Serial.printf("\r\n[Autosteer] External state change detected - syncing button latch to %d", buttonLatchedState);
             }
             
             lastPhysicalState = currentPhysicalState;
@@ -189,10 +193,54 @@ void AutosteerProcessor::process() {
         case SteerState::ACTIVE:
             // Calculate motor speed using PID
             if (steerEnabled) {
-                motorSpeed = pid.compute(targetAngle, currentAngle);
+                float pidOutput = pid.compute(targetAngle, currentAngle);
                 
-                // Serial.printf("\r\n[Autosteer] ACTIVE: Target=%.1f Current=%.1f Error=%.1f Motor=%.1f%%", 
-                //               targetAngle, currentAngle, targetAngle - currentAngle, motorSpeed);
+                // Apply PWM scaling based on AgOpenGPS settings
+                if (configPTR) {
+                    float highPWM = configPTR->getHighPWM();
+                    float lowPWM = configPTR->getLowPWM();
+                    float minPWM = configPTR->getMinPWM();
+                    
+                    // Scale PID output to PWM range
+                    if (abs(pidOutput) < 0.1f) {
+                        // Dead zone
+                        motorSpeed = 0.0f;
+                    } else {
+                        // PWM calculation:
+                        // - LowPWM = base PWM to start motor moving
+                        // - HighPWM = maximum PWM limit (not to exceed)
+                        // - PID output adds to base, but total is capped at HighPWM
+                        float absPID = abs(pidOutput);
+                        
+                        // Start with lowPWM as base, add PID contribution
+                        // Scale PID output (0-100%) to available headroom (lowPWM to highPWM)
+                        float pwmRange = highPWM - lowPWM;
+                        float scaledPWM = lowPWM + (absPID / 100.0f) * pwmRange;
+                        
+                        // Ensure we don't exceed highPWM limit
+                        if (scaledPWM > highPWM) {
+                            scaledPWM = highPWM;
+                        }
+                        
+                        // Apply minimum PWM threshold
+                        if (scaledPWM < minPWM) {
+                            scaledPWM = 0.0f;
+                        }
+                        
+                        // Convert back to percentage for motor driver (0-100%)
+                        motorSpeed = (scaledPWM / 255.0f) * 100.0f;
+                        if (pidOutput < 0) motorSpeed = -motorSpeed;
+                    }
+                } else {
+                    // No config, use raw PID output
+                    motorSpeed = pidOutput;
+                }
+                
+                // Serial.printf("\r\n[Autosteer] ACTIVE: Target=%.1f Current=%.1f PID=%.1f Motor=%.1f%% (H=%d L=%.0f M=%d)", 
+                //               targetAngle, currentAngle, pidOutput, motorSpeed,
+                //               configPTR ? configPTR->getHighPWM() : 255,
+                //               configPTR ? configPTR->getLowPWM() : 0,
+                //               configPTR ? configPTR->getMinPWM() : 0);
                 
                 if (motorPTR) {
                     motorPTR->enable(true);
@@ -249,42 +297,49 @@ void AutosteerProcessor::emergencyStop() {
 }
 
 void AutosteerProcessor::handleSteerData(uint8_t* data, uint8_t len) {
-    // Serial.printf("\r\n[DEBUG] handleSteerData: len=%d", len);
-    if (len < 9) {
-        // Serial.printf(" - TOO SHORT!");
-        return;
-    }
+    // Serial.printf("\r\n[DEBUG] handleSteerData called: len=%d", len);
+    // Serial.printf("\r\n[DEBUG] Data bytes: ");
+    // for (int i = 0; i < len && i < 8; i++) {
+    //     Serial.printf("[%d]=0x%02X ", i, data[i]);
+    // }
     
-    // PGN 254 format:
-    // 0: Speed
-    // 1: Status
-    // 2-3: Steer angle setpoint (int16)
-    // 4: Tram
-    // 5: Relay
-    // 6: Relay Hi
-    // 7-8: Reserved
-    // 9: Checksum
+    // PGN 254 format (data array positions after removing length byte):
+    // 0: Status
+    // 1-2: Steer angle setpoint (int16)
+    // 3: Tram
+    // 4: Relay
+    // 5: Relay Hi
+    // 6-7: Reserved
     
     lastCommand = millis();
     
     // Get steer angle setpoint (divide by 100)
-    int16_t steerAngleRaw = (int16_t)(data[3] << 8 | data[2]);
+    int16_t steerAngleRaw = (int16_t)(data[2] << 8 | data[1]);
     float steerAngle = steerAngleRaw / 100.0f;
     
     // Get status byte
-    uint8_t status = data[1];
+    uint8_t status = data[0];
     bool guidanceActive = (status & 0x01);
     bool autosteerActive = (status & 0x40);  // Bit 6 seems to be the autosteer enable
     
+    // Debug the status byte
+    // Serial.printf("\r\n[DEBUG] Status byte: 0x%02X, guidance=%d, autosteer=%d", 
+    //               status, guidanceActive, autosteerActive);
+    
     // Debug output only on status change
     static uint8_t lastStatus = 0xFF;
-    if (status != lastStatus) {
-        Serial.printf("\r\n[Autosteer] PGN254: Status=0x%02X (Bit0=%d, Bit6=%d) Angle=%.1f°", 
+    static bool lastAutosteerActive = false;
+    if (status != lastStatus || autosteerActive != lastAutosteerActive) {
+        Serial.printf("\r\n[Autosteer] PGN254: Status=0x%02X (Guidance=%d, Autosteer=%d) Angle=%.1f°", 
                       status, 
-                      guidanceActive,
+                      guidanceActive ? 1 : 0,
                       autosteerActive ? 1 : 0,
                       steerAngle);
+        if (autosteerActive != lastAutosteerActive) {
+            Serial.printf(" [AUTOSTEER STATE CHANGED: %d->%d]", lastAutosteerActive, autosteerActive);
+        }
         lastStatus = status;
+        lastAutosteerActive = autosteerActive;
     }
     
     // Update target angle
@@ -296,11 +351,12 @@ void AutosteerProcessor::handleSteerData(uint8_t* data, uint8_t len) {
             // No physical switch/button - use virtual button from AgOpenGPS
             enable(autosteerActive);
         } else if (configPTR->getSteerButton()) {
-            // In button mode - completely ignore virtual button
-            // Physical button has full control
+            // In button mode - both physical and onscreen buttons work
+            // If AgOpenGPS changes state, update our state to match
             if (autosteerActive != steerEnabled) {
-                Serial.printf("\r\n[Autosteer] WARNING: AgIO trying to set state to %d, but button mode active (keeping %d)", 
-                              autosteerActive, steerEnabled);
+                Serial.printf("\r\n[Autosteer] AgOpenGPS button pressed - setting state to %d", autosteerActive);
+                steerEnabled = autosteerActive;
+                enable(autosteerActive);
             }
         }
         // Physical switch handling is done in process()
@@ -311,15 +367,21 @@ void AutosteerProcessor::handleSteerData(uint8_t* data, uint8_t len) {
 }
 
 void AutosteerProcessor::handleSteerSettings(uint8_t* data, uint8_t len) {
-    if (len < 8) return;
     
-    // PGN 252 format:
-    // 0: Kp
-    // 1: highPWM  
-    // 2: lowPWM
+    // Debug: Print raw bytes
+    Serial.printf("\r\n[Autosteer] PGN252 raw data (%d bytes): ", len);
+    for (int i = 0; i < len && i < 10; i++) {
+        Serial.printf("[%d]=0x%02X(%d) ", i, data[i], data[i]);
+    }
+    
+    // PGN 252 format per PGN.md:
+    // 0: gainP (proportional gain)
+    // 1: highPWM (max limit)
+    // 2: lowPWM (minimum to move)
     // 3: minPWM
-    // 4-5: steer sensor counts
-    // 6-7: was offset
+    // 4: countsPerDeg
+    // 5-6: steerOffset
+    // 7: ackermanFix
     
     float kp = data[0] / 10.0f;  // Kp is sent as byte * 10
     pid.setKp(kp);
@@ -335,11 +397,11 @@ void AutosteerProcessor::handleSteerSettings(uint8_t* data, uint8_t len) {
         configPTR->saveSteerSettings();
     }
     
-    Serial.printf("\r\n[Autosteer] Settings updated: Kp=%.1f", kp);
+    Serial.printf("\r\n[Autosteer] Settings updated: Kp=%.1f, HighPWM=%d, LowPWM=%d, MinPWM=%d", 
+                  kp, data[1], data[2], data[3]);
 }
 
 void AutosteerProcessor::handleSteerConfig(uint8_t* data, uint8_t len) {
-    if (len < 4) return;
     
     // Debug raw data
     Serial.printf("\r\n[Autosteer] PGN 251 received, len=%d, bytes:", len);
@@ -347,14 +409,14 @@ void AutosteerProcessor::handleSteerConfig(uint8_t* data, uint8_t len) {
         Serial.printf(" %02X", data[i]);
     }
     
-    // PGN 251 format:
-    // 0: byte 0 (unused)
-    // 1: sett0 - bit flags
+    // PGN 251 format (data array positions after removing length byte):
+    // 0: sett0 - bit flags
+    // 1: byte 1 (unused)
     // 2: pulseCountMax  
     // 3: minSpeed
     // 4: sett1 - bit flags
     
-    uint8_t sett0 = data[1];
+    uint8_t sett0 = data[0];
     uint8_t pulseCountMax = data[2];
     uint8_t minSpeed = data[3];
     uint8_t sett1 = data[4];

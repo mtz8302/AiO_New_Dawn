@@ -11,12 +11,13 @@
 #include "mongoose.h"
 #include "RTCMProcessor.h"
 #include "PGNProcessor.h"
+#include "EEPROMLayout.h"
 
-// EEPROM storage layout
-#define eeVersionStore 1 // 100 bytes
-#define ipStore 100      // 100 bytes
+// EEPROM storage layout - use shared addresses
+#define eeVersionStore EE_VERSION_ADDR
+#define ipStore NETWORK_CONFIG_ADDR
 
-uint16_t ip_ver;
+uint16_t ip_ver = EEPROM_VERSION;
 
 // Networking variables
 struct NetConfigStruct
@@ -116,6 +117,7 @@ void save_current_net()
 
 void storedCfgSetup()
 {
+  Serial.println("Starting NetworkBase setup");
   uint16_t eth_ee_read;
   EEPROM.get(eeVersionStore, eth_ee_read);
 
