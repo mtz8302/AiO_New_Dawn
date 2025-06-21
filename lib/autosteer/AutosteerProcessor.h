@@ -26,6 +26,10 @@ private:
     
     bool steerEnabled;
     
+    // Kickout cooldown
+    uint32_t kickoutTime = 0;
+    static constexpr uint32_t KICKOUT_COOLDOWN_MS = 2000;  // 2 second cooldown after kickout
+    
     AutosteerProcessor();
     
 public:

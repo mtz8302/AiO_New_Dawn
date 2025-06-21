@@ -4,6 +4,8 @@
 #include "ConfigManager.h"
 #include "PGNProcessor.h"
 #include "IMUProcessor.h"
+#include "KickoutMonitor.h"
+#include "KeyaCANDriver.h"
 
 // External network function
 extern void sendUDPbytes(uint8_t* data, int len);
@@ -51,6 +53,9 @@ bool AutosteerProcessor::init() {
                       configPTR->getSteerButton());
     }
     
+    // Initialize kickout monitor
+    KickoutMonitor::getInstance()->init();
+    
     // Register PGN handlers
     if (PGNProcessor::instance) {
         Serial.print("\r\n  Registering PGN callbacks...");
@@ -82,6 +87,38 @@ void AutosteerProcessor::process() {
     if (adPTR) {
         currentAngle = adPTR->getWASAngle();
     }
+    
+    // Check kickout monitor FIRST
+    KickoutMonitor* kickoutMon = KickoutMonitor::getInstance();
+    kickoutMon->process();
+    
+    if (kickoutMon->hasKickout() && state == SteerState::ACTIVE) {
+        Serial.printf("\r\n[AUTOSTEER] KICKOUT TRIGGERED: %s", 
+                      kickoutMon->getReasonString());
+        emergencyStop();
+        steerEnabled = false;  // Just disable - no special state
+        kickoutTime = millis();  // Start cooldown timer
+        kickoutMon->clearKickout();  // Clear immediately
+        return;
+    }
+    
+    // Check Keya motor slip if using Keya driver
+    if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN && state == SteerState::ACTIVE) {
+        KeyaCANDriver* keya = static_cast<KeyaCANDriver*>(motorPTR);
+        if (keya->checkMotorSlip()) {
+            Serial.print("\r\n[AUTOSTEER] KICKOUT: Keya motor slip detected");
+            emergencyStop();
+            steerEnabled = false;  // Just disable - no special state
+            kickoutTime = millis();  // Start cooldown timer
+            return;
+        }
+    }
+    
+    // Clear kickout if we're not in active state
+    if (state != SteerState::ACTIVE && kickoutMon->hasKickout()) {
+        kickoutMon->clearKickout();
+    }
+    
     
     // Check for timeout (2 seconds)
     if (millis() - lastCommand > 2000 && state == SteerState::ACTIVE) {
@@ -190,6 +227,7 @@ void AutosteerProcessor::process() {
             }
             break;
             
+            
         case SteerState::ACTIVE:
             // Calculate motor speed using PID
             if (steerEnabled) {
@@ -236,11 +274,19 @@ void AutosteerProcessor::process() {
                     motorSpeed = pidOutput;
                 }
                 
-                // Serial.printf("\r\n[Autosteer] ACTIVE: Target=%.1f Current=%.1f PID=%.1f Motor=%.1f%% (H=%d L=%.0f M=%d)", 
-                //               targetAngle, currentAngle, pidOutput, motorSpeed,
-                //               configPTR ? configPTR->getHighPWM() : 255,
-                //               configPTR ? configPTR->getLowPWM() : 0,
-                //               configPTR ? configPTR->getMinPWM() : 0);
+                // Show RPM data if using Keya motor
+                if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN) {
+                    KeyaCANDriver* keya = static_cast<KeyaCANDriver*>(motorPTR);
+                    Serial.printf("\r\n[Autosteer] ACTIVE: Target=%.1f° Current=%.1f° PID=%.1f Motor=%.1f%% | CMD_RPM=%.0f ACT_RPM=%.0f", 
+                                  targetAngle, currentAngle, pidOutput, motorSpeed,
+                                  keya->getCommandedRPM(), keya->getActualRPM());
+                } else {
+                    Serial.printf("\r\n[Autosteer] ACTIVE: Target=%.1f Current=%.1f PID=%.1f Motor=%.1f%% (H=%d L=%.0f M=%d)", 
+                                  targetAngle, currentAngle, pidOutput, motorSpeed,
+                                  configPTR ? configPTR->getHighPWM() : 255,
+                                  configPTR ? configPTR->getLowPWM() : 0,
+                                  configPTR ? configPTR->getMinPWM() : 0);
+                }
                 
                 if (motorPTR) {
                     motorPTR->enable(true);
@@ -272,6 +318,24 @@ void AutosteerProcessor::setTargetAngle(float angle) {
 }
 
 void AutosteerProcessor::enable(bool enabled) {
+    // Check if we're in kickout cooldown period
+    if (enabled && kickoutTime > 0) {
+        if (millis() - kickoutTime < KICKOUT_COOLDOWN_MS) {
+            // Still in cooldown - ignore enable request
+            static uint32_t lastCooldownMsg = 0;
+            if (millis() - lastCooldownMsg > 500) {  // Only print message every 500ms
+                uint32_t remaining = KICKOUT_COOLDOWN_MS - (millis() - kickoutTime);
+                Serial.printf("\r\n[Autosteer] Kickout cooldown active - %lu ms remaining", remaining);
+                lastCooldownMsg = millis();
+            }
+            return;
+        } else {
+            // Cooldown expired
+            kickoutTime = 0;
+            Serial.print("\r\n[Autosteer] Kickout cooldown expired");
+        }
+    }
+    
     steerEnabled = enabled;
     
     if (enabled && state == SteerState::READY) {
@@ -297,6 +361,7 @@ void AutosteerProcessor::emergencyStop() {
 }
 
 void AutosteerProcessor::handleSteerData(uint8_t* data, uint8_t len) {
+    
     // Serial.printf("\r\n[DEBUG] handleSteerData called: len=%d", len);
     // Serial.printf("\r\n[DEBUG] Data bytes: ");
     // for (int i = 0; i < len && i < 8; i++) {

@@ -41,6 +41,10 @@ public:
     float getWASAngle() const;
     float getWASVoltage() const;
     
+    // Kickout sensor readings
+    uint16_t getKickoutAnalog() const { return kickoutAnalogRaw; }
+    uint16_t getMotorCurrent() const { return motorCurrentRaw; }
+    
     // Configuration
     void setWASOffset(int16_t offset) { wasOffset = offset; }
     void setWASCountsPerDegree(float counts) { wasCountsPerDegree = counts; }
@@ -62,6 +66,8 @@ private:
     static constexpr uint8_t AD_STEER_PIN = 2;         // Steer switch input (STEER_PIN from pcb.h)
     static constexpr uint8_t AD_WORK_PIN = A17;        // Work switch input (WORK_PIN from pcb.h)  
     static constexpr uint8_t AD_WAS_PIN = A15;         // WAS sensor input
+    static constexpr uint8_t AD_KICKOUT_A_PIN = A12;   // Pressure sensor input (KICKOUT_A from pcb.h)
+    static constexpr uint8_t AD_CURRENT_PIN = A13;     // Motor current sensor (CURRENT_PIN from pcb.h)
     
     // Switch debouncing structure
     struct SwitchState {
@@ -78,6 +84,10 @@ private:
     int16_t wasRaw;
     int16_t wasOffset;
     float wasCountsPerDegree;
+    
+    // Kickout sensor data
+    uint16_t kickoutAnalogRaw;
+    uint16_t motorCurrentRaw;
     
     // Configuration
     uint16_t debounceDelay;

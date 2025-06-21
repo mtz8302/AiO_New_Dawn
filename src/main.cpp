@@ -17,6 +17,7 @@
 #include "MotorDriverFactory.h"
 #include "CANGlobals.h"
 #include "AutosteerProcessor.h"
+#include "KeyaCANDriver.h"
 
 // Test mode flag - set to true to run motor tests
 static bool MOTOR_TEST_MODE = false;  // Disable for autosteer mode
@@ -492,11 +493,23 @@ void loop()
       case SteerState::ACTIVE: stateStr = "ACTIVE"; break;
     }
     
-    Serial.printf("\r\n[Autosteer] State: %s | Target: %.1f° | Current: %.1f° | Motor: %.1f%%",
-                  stateStr,
-                  autosteerPTR->getTargetAngle(),
-                  autosteerPTR->getCurrentAngle(),
-                  autosteerPTR->getMotorSpeed());
+    // Show RPM info if using Keya motor
+    if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN) {
+        KeyaCANDriver* keya = static_cast<KeyaCANDriver*>(motorPTR);
+        Serial.printf("\r\n[Autosteer] State: %s | Target: %.1f° | Current: %.1f° | Motor: %.1f%% | RPM: Cmd=%.0f Act=%.0f",
+                      stateStr,
+                      autosteerPTR->getTargetAngle(),
+                      autosteerPTR->getCurrentAngle(),
+                      autosteerPTR->getMotorSpeed(),
+                      keya->getCommandedRPM(),
+                      keya->getActualRPM());
+    } else {
+        Serial.printf("\r\n[Autosteer] State: %s | Target: %.1f° | Current: %.1f° | Motor: %.1f%%",
+                      stateStr,
+                      autosteerPTR->getTargetAngle(),
+                      autosteerPTR->getCurrentAngle(),
+                      autosteerPTR->getMotorSpeed());
+    }
   }
 
   // Quick status print every second

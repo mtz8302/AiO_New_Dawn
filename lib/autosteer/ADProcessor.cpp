@@ -7,6 +7,8 @@ ADProcessor::ADProcessor() :
     wasRaw(0),
     wasOffset(0),
     wasCountsPerDegree(1.0f),
+    kickoutAnalogRaw(0),
+    motorCurrentRaw(0),
     debounceDelay(50),  // 50ms default debounce
     lastProcessTime(0)
 {
@@ -33,6 +35,8 @@ bool ADProcessor::init()
     pinMode(AD_STEER_PIN, INPUT_PULLUP);      // Steer switch with internal pullup
     pinMode(AD_WORK_PIN, INPUT_PULLUP);       // Work switch with pullup
     pinMode(AD_WAS_PIN, INPUT_DISABLE);       // WAS analog input (no pullup)
+    pinMode(AD_KICKOUT_A_PIN, INPUT_DISABLE); // Pressure sensor analog input
+    pinMode(AD_CURRENT_PIN, INPUT_DISABLE);   // Current sensor analog input
     
     // Test immediately after setting
     Serial.printf("\r\n- After pinMode: Pin %d digital=%d", AD_STEER_PIN, digitalRead(AD_STEER_PIN));
@@ -63,6 +67,10 @@ void ADProcessor::process()
 {
     updateWAS();
     updateSwitches();
+    
+    // Read kickout sensors
+    kickoutAnalogRaw = analogRead(AD_KICKOUT_A_PIN);
+    motorCurrentRaw = analogRead(AD_CURRENT_PIN);
     
     // Debug pin 2 periodically
     static uint32_t lastDebugTime = 0;
