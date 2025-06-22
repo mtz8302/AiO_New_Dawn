@@ -63,11 +63,18 @@ public:
 
         // Status flags
         uint32_t lastUpdateTime;
-        bool isValid;
-        bool hasPosition;
+        bool isValid;           // Deprecated - use hasFix instead
+        bool hasPosition;       // Has lat/lon data with good fix
         bool hasVelocity;
         bool hasDualHeading;
         bool hasINS;            // Has INS data from INSPVAA/INSPVAXA
+        
+        // Message tracking (bit mask)
+        // Bit 0: GGA, Bit 1: VTG, Bit 2: GNS
+        // Bit 3: RELPOSNED, Bit 4: PVT
+        // Bit 5: HPR, Bit 6: KSXT
+        // Bit 7: INSPVA/INSPVAXA
+        uint8_t messageTypeMask;
     };
 
     // Statistics
@@ -111,6 +118,7 @@ private:
     // Data storage
     GNSSData gpsData;
     Statistics stats;
+    uint32_t messagesSeen;  // Total valid NMEA messages received
 
     // Configuration
     bool enableNoiseFilter;
@@ -165,7 +173,9 @@ public:
 
     // Data access
     const GNSSData &getData() const { return gpsData; }
-    bool isValid() const { return gpsData.isValid; }
+    bool isValid() const { return gpsData.isValid; }  // Deprecated - use hasFix()
+    bool hasGPS() const { return messagesSeen > 0 && (millis() - gpsData.lastUpdateTime < 5000); }
+    bool hasFix() const { return gpsData.hasPosition && gpsData.fixQuality > 0; }
     bool hasPosition() const { return gpsData.hasPosition; }
     bool hasVelocity() const { return gpsData.hasVelocity; }
     bool hasDualHeading() const { return gpsData.hasDualHeading; }
@@ -185,7 +195,7 @@ public:
     void printStats() const;
     
     // PGN support
-    void registerPGNCallbacks();
+    // registerPGNCallbacks removed - broadcast PGNs handled automatically
     void sendGPSData();  // Send PGN 214 (0xD6) - for future use
     
     // Static callback for PGN Hello (200)

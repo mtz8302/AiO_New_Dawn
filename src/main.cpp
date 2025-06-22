@@ -156,8 +156,7 @@ void setup()
     // Print initial stats
     gnssPTR->printStats();
     
-    // Register PGN callbacks
-    gnssPTR->registerPGNCallbacks();
+    // PGN callbacks handled automatically - no registration needed
   }
   else
   {
@@ -188,6 +187,7 @@ void setup()
     Serial.print("\r\n✗ IMUProcessor - No IMU detected");
     Serial.print("\r\n  - Check wiring and power");
     Serial.print("\r\n  - For TM171: TX on Teensy -> RX on TM171 (reversed labels!)");
+    // Don't register PGN callbacks when no IMU detected
   }
 
   // Test ADProcessor
@@ -663,19 +663,25 @@ void loop()
   // Process GPS1 data if available
   static uint32_t gps1ByteCount = 0;
   static uint32_t lastGPS1Report = 0;
+  static uint32_t gps1TotalBytes = 0;
   
   while (SerialGPS1.available())
   {
     char c = SerialGPS1.read();
     gps1ByteCount++;
+    gps1TotalBytes++;
     gnssPTR->processNMEAChar(c);
   }
   
-  // Report GPS1 byte count every 30 seconds
-  if (millis() - lastGPS1Report > 30000 && gps1ByteCount > 0)
+  // Report GPS1 byte count every 5 seconds for debugging
+  if (millis() - lastGPS1Report > 5000)
   {
     lastGPS1Report = millis();
-    Serial.printf("\r\n[GPS1] Received %lu bytes in last 30s", gps1ByteCount);
+    if (gps1ByteCount > 0) {
+      Serial.printf("\r\n[GPS1] Received %lu bytes in last 5s (total: %lu)", gps1ByteCount, gps1TotalBytes);
+    } else {
+      Serial.printf("\r\n[GPS1] No data received in last 5s");
+    }
     gps1ByteCount = 0;
   }
   

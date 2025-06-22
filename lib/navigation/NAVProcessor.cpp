@@ -22,6 +22,9 @@ NAVProcessor::NAVProcessor() {
     // Clear message buffer
     memset(messageBuffer, 0, BUFFER_SIZE);
     
+    // Initialize startup check
+    startupCheckComplete = false;
+    
     Serial.print("\r\n- NAVProcessor initialized");
 }
 
@@ -41,17 +44,23 @@ void NAVProcessor::init() {
 }
 
 NavMessageType NAVProcessor::selectMessageType() {
-    if (!gnssPTR || !gnssPTR->isValid()) {
+    if (!gnssPTR) {
         return NavMessageType::NONE;
     }
     
     const auto& gnssData = gnssPTR->getData();
     
-    if (gnssData.hasDualHeading) {
-        return NavMessageType::PAOGI;  // Dual GPS detected
-    } else {
-        return NavMessageType::PANDA;  // Single GPS
+    // For dual/INS systems, send PAOGI even without fix (for INS_ALIGNING state)
+    if (gnssData.hasDualHeading || gnssData.hasINS) {
+        return NavMessageType::PAOGI;  // Dual GPS/INS detected
     }
+    
+    // For single GPS, require fix
+    if (!gnssPTR->hasFix()) {
+        return NavMessageType::NONE;
+    }
+    
+    return NavMessageType::PANDA;  // Single GPS with fix
 }
 
 void NAVProcessor::convertToNMEACoordinates(double decimalDegrees, bool isLongitude, 
@@ -99,20 +108,19 @@ bool NAVProcessor::formatPANDAMessage() {
     convertToNMEACoordinates(gnssData.latitude, false, latNMEA, latDir);
     convertToNMEACoordinates(gnssData.longitude, true, lonNMEA, lonDir);
     
-    // Get IMU data if available
-    int16_t roll = 65535;  // Default "no IMU" value
-    int16_t pitch = -1;
-    float yawRate = 0.0;
+    // Get IMU data if available - using strings like old code
+    char imuHeading[10] = "65535";  // Default "no IMU" value
+    char imuRoll[10] = "0";         // Default "no IMU" value
+    char imuPitch[10] = "0";        // Default "no IMU" value
+    char imuYawRate[10] = "0";      // Default "no IMU" value
     
     if (imuPTR && imuPTR->hasValidData()) {
         const auto& imuData = imuPTR->getCurrentData();
-        roll = (int16_t)round(imuData.roll);
-        pitch = (int16_t)round(imuData.pitch);
-        yawRate = imuData.yawRate;
+        snprintf(imuHeading, sizeof(imuHeading), "%d", (int)(imuData.heading * 10.0));
+        snprintf(imuRoll, sizeof(imuRoll), "%d", (int)round(imuData.roll));
+        snprintf(imuPitch, sizeof(imuPitch), "%d", (int)round(imuData.pitch));
+        snprintf(imuYawRate, sizeof(imuYawRate), "%.2f", imuData.yawRate);
     }
-    
-    // Format heading from VTG (multiply by 10 for message format)
-    int headingX10 = (int)(gnssData.headingTrue * 10.0);
     
     // Format time (HHMMSS.S)
     // fixTime is stored as HHMMSS integer, convert to float with decimal
@@ -120,7 +128,7 @@ bool NAVProcessor::formatPANDAMessage() {
     
     // Build PANDA message without checksum
     int len = snprintf(messageBuffer, BUFFER_SIZE - 4,
-        "$PANDA,%.1f,%.6f,%c,%.6f,%c,%d,%d,%.1f,%.3f,%s,%.3f,%d,%d,%d,%.2f",
+        "$PANDA,%.1f,%.6f,%c,%.6f,%c,%d,%d,%.1f,%.3f,%.1f,%.3f,%s,%s,%s,%s",
         timeFloat,                          // Time
         latNMEA, latDir,                   // Latitude
         lonNMEA, lonDir,                   // Longitude
@@ -128,12 +136,12 @@ bool NAVProcessor::formatPANDAMessage() {
         gnssData.numSatellites,            // Satellites
         gnssData.hdop,                     // HDOP
         gnssData.altitude,                 // Altitude
-        gnssData.ageDGPS > 0 ? String(gnssData.ageDGPS).c_str() : "", // Age DGPS
+        (float)gnssData.ageDGPS,           // Age DGPS (always send value with decimal)
         gnssData.speedKnots,               // Speed
-        headingX10,                        // Heading * 10
-        roll,                              // Roll
-        pitch,                             // Pitch
-        yawRate                            // Yaw rate
+        imuHeading,                        // IMU Heading (65535 = no IMU)
+        imuRoll,                           // IMU Roll
+        imuPitch,                          // IMU Pitch
+        imuYawRate                         // IMU Yaw Rate
     );
     
     // Calculate and append checksum
@@ -144,9 +152,10 @@ bool NAVProcessor::formatPANDAMessage() {
 }
 
 bool NAVProcessor::formatPAOGIMessage() {
-    if (!gnssPTR || !gnssPTR->isValid() || !gnssPTR->getData().hasDualHeading) {
+    if (!gnssPTR || !gnssPTR->getData().hasDualHeading) {
         return false;
     }
+    // Allow PAOGI even without valid position for INS_ALIGNING state
     
     const auto& gnssData = gnssPTR->getData();
     
@@ -207,6 +216,8 @@ void NAVProcessor::sendMessage(const char* message) {
     // NMEA messages must end with CR+LF
     char buffer[BUFFER_SIZE];
     snprintf(buffer, BUFFER_SIZE, "%s\r\n", message);
+
+    Serial.println(buffer);
     
     // Send via UDP to AgIO
     sendUDPbytes((uint8_t*)buffer, strlen(buffer));
@@ -216,6 +227,68 @@ void NAVProcessor::sendMessage(const char* message) {
 }
 
 void NAVProcessor::process() {
+    // Simple startup detection and status reporting
+    static bool startupCheckComplete = false;
+    static uint32_t lastStatusPrint = 0;
+    
+    if (!startupCheckComplete && millis() > 3000) {  // Wait 3 seconds for systems to initialize
+        // Check GPS status
+        if (!gnssPTR || !gnssPTR->hasGPS()) {
+            Serial.print("\r\n[NAV] No GPS");
+        } else if (!gnssPTR->hasFix()) {
+            Serial.print("\r\n[NAV] GPS detected, waiting for fix...");
+        } else {
+            const auto& gnssData = gnssPTR->getData();
+            if (gnssData.hasDualHeading) {
+                Serial.print("\r\n[NAV] GPS Mode: Dual antenna with fix");
+            } else {
+                Serial.print("\r\n[NAV] GPS Mode: Single antenna with fix");
+            }
+        }
+        
+        // Check IMU status
+        if (!imuPTR || !imuPTR->hasValidData()) {
+            Serial.print("\r\n[NAV] No IMU");
+        } else {
+            Serial.printf("\r\n[NAV] IMU: %s detected", imuPTR->getIMUTypeName());
+        }
+        
+        startupCheckComplete = true;
+    }
+    
+    // Don't process if no GPS connection
+    if (!gnssPTR || !gnssPTR->hasGPS()) {
+        // Print status occasionally
+        if (millis() - lastStatusPrint > 5000) {
+            Serial.print("\r\n[NAV] No GPS detected");
+            lastStatusPrint = millis();
+        }
+        return;
+    }
+    
+    // Special handling for dual antenna/INS systems that need to send PAOGI even without fix
+    const auto& gnssData = gnssPTR->getData();
+    bool isDualSystem = gnssData.hasDualHeading || gnssData.hasINS;
+    
+    // Don't send messages if no fix (except for dual/INS systems)
+    if (!gnssPTR->hasFix() && !isDualSystem) {
+        // Print status occasionally
+        if (millis() - lastStatusPrint > 5000) {
+            Serial.print("\r\n[NAV] GPS detected, waiting for fix...");
+            lastStatusPrint = millis();
+        }
+        return;
+    }
+    
+    // For dual/INS systems without fix, print special status
+    if (!gnssPTR->hasFix() && isDualSystem) {
+        if (millis() - lastStatusPrint > 5000) {
+            Serial.print("\r\n[NAV] UM981 INS aligning - needs movement");
+            lastStatusPrint = millis();
+        }
+        // Continue to send PAOGI messages with timestamp updates
+    }
+    
     // Check if it's time to send a message
     if (timeSinceLastMessage < MESSAGE_INTERVAL_MS) {
         return;
@@ -280,6 +353,8 @@ void NAVProcessor::setMessageRate(uint32_t intervalMs) {
 NavMessageType NAVProcessor::getCurrentMessageType() {
     return selectMessageType();
 }
+
+// Removed complex detection methods - simplified checking in process()
 
 void NAVProcessor::printStatus() {
     Serial.print("\r\n\n=== NAVProcessor Status ===");

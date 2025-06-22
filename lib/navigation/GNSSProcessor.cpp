@@ -20,6 +20,7 @@ GNSSProcessor::GNSSProcessor() : bufferIndex(0),
     // Initialize data structures
     memset(&gpsData, 0, sizeof(gpsData));
     memset(&stats, 0, sizeof(stats));
+    messagesSeen = 0;
 
     gpsData.hdop = 99.9f;
     resetParser();
@@ -42,8 +43,7 @@ bool GNSSProcessor::init()
     resetStats();
     resetParser();
     
-    // Register PGN callbacks for Hello and Scan Request broadcasts
-    registerPGNCallbacks();
+    // No PGN registration needed - broadcast PGNs are handled automatically
     
     return true;
 }
@@ -316,6 +316,7 @@ bool GNSSProcessor::processMessage()
     if (processed)
     {
         stats.messagesProcessed++;
+        messagesSeen++;  // Track that we received valid GPS messages
         gpsData.lastUpdateTime = millis();
     }
     else
@@ -382,8 +383,15 @@ bool GNSSProcessor::parseGGA()
         gpsData.ageDGPS = atoi(fields[13]);
     }
 
-    gpsData.hasPosition = (gpsData.fixQuality > 0);
+    // Check if we have valid position data
+    // Need fix quality > 0 AND non-empty lat/lon fields
+    bool hasValidCoords = (strlen(fields[2]) > 0 && strlen(fields[3]) > 0 && 
+                          strlen(fields[4]) > 0 && strlen(fields[5]) > 0);
+    
+    gpsData.hasPosition = (gpsData.fixQuality > 0) && hasValidCoords && 
+                         (gpsData.latitude != 0.0 || gpsData.longitude != 0.0);
     gpsData.isValid = gpsData.hasPosition;
+    gpsData.messageTypeMask |= (1 << 0);  // Set GGA bit
 
     if (enableDebug)
     {
@@ -426,6 +434,7 @@ bool GNSSProcessor::parseGNS()
 
     gpsData.hasPosition = (gpsData.fixQuality > 0);
     gpsData.isValid = gpsData.hasPosition;
+    gpsData.messageTypeMask |= (1 << 2);  // Set GNS bit
 
     if (enableDebug)
     {
@@ -459,6 +468,7 @@ bool GNSSProcessor::parseVTG()
     }
 
     gpsData.hasVelocity = true;
+    gpsData.messageTypeMask |= (1 << 1);  // Set VTG bit
 
     if (enableDebug)
     {
@@ -492,6 +502,7 @@ bool GNSSProcessor::parseHPR()
     }
 
     gpsData.hasDualHeading = true;
+    gpsData.messageTypeMask |= (1 << 5);  // Set HPR bit
 
     if (enableDebug)
     {
@@ -520,6 +531,8 @@ bool GNSSProcessor::parseKSXT()
         gpsData.isValid = gpsData.hasPosition;
     }
 
+    gpsData.messageTypeMask |= (1 << 6);  // Set KSXT bit
+    
     if (enableDebug)
     {
         logDebug("KSXT processed");
@@ -702,6 +715,7 @@ bool GNSSProcessor::processUBXByte(uint8_t b)
         gpsData.dualRoll = ubxParser->ubxData.baseRelRoll;
         gpsData.hasDualHeading = true;
         gpsData.headingQuality = (ubxParser->ubxData.carrSoln > 1) ? 4 : 1; // 4=RTK fixed, 1=float
+        gpsData.messageTypeMask |= (1 << 3);  // Set RELPOSNED bit
         
         // Clear the ready flag
         ubxParser->relPosNedReady = false;
@@ -847,23 +861,50 @@ bool GNSSProcessor::parseINSPVAXA()
         return false;
     }
     
+    // Field 10: INS Status - check if still aligning
+    bool insAligning = false;
+    if (strstr(fields[10], "INS_ALIGNING") != nullptr)
+    {
+        insAligning = true;
+        if (enableDebug)
+        {
+            Serial.print("\r\n[GNSS] UM981 INS is still aligning - waiting for movement");
+        }
+    }
+    
     // Field 12: Latitude (degrees)
     if (strlen(fields[12]) > 0)
     {
-        gpsData.latitude = parseFloat(fields[12]);
-        gpsData.hasPosition = true;
+        if (insAligning) {
+            // Use Greenwich Observatory coordinates while aligning
+            gpsData.latitude = 51.4779;  // Greenwich Observatory latitude
+        } else {
+            gpsData.latitude = parseFloat(fields[12]);
+        }
+        // Only mark as having position if not aligning and coords are not 0,0
+        gpsData.hasPosition = !insAligning && 
+                             (gpsData.latitude != 0.0 || gpsData.longitude != 0.0);
     }
     
     // Field 13: Longitude (degrees)
     if (strlen(fields[13]) > 0)
     {
-        gpsData.longitude = parseFloat(fields[13]);
+        if (insAligning) {
+            // Use Greenwich Observatory coordinates while aligning
+            gpsData.longitude = -0.0015;  // Greenwich Observatory longitude (slightly west)
+        } else {
+            gpsData.longitude = parseFloat(fields[13]);
+        }
     }
     
     // Field 14: Height (meters)
     if (strlen(fields[14]) > 0)
     {
-        gpsData.altitude = parseFloat(fields[14]);
+        if (insAligning) {
+            gpsData.altitude = 100.0;  // Distinctive altitude for aligning state
+        } else {
+            gpsData.altitude = parseFloat(fields[14]);
+        }
     }
     
     // Field 15: Undulation (skip)
@@ -911,14 +952,30 @@ bool GNSSProcessor::parseINSPVAXA()
         gpsData.velStdDevUp = parseFloat(fields[28]);
     }
     
-    // Always set fix quality to 1 for valid INS data
-    gpsData.fixQuality = 1; // Good INS solution
-    gpsData.posType = 16; // INS position
-    gpsData.insStatus = 1; // Mark as having INS
-    
-    // Set number of satellites (not directly available in INSPVAXA, use a reasonable value)
-    gpsData.numSatellites = 12; // Typical for INS solution
-    gpsData.hdop = 0.9f; // Good HDOP for INS solution
+    // Set fix quality and other parameters based on INS status
+    if (insAligning) {
+        gpsData.fixQuality = 0;     // No fix while aligning
+        gpsData.posType = 0;        // No position type
+        gpsData.insStatus = 0;      // INS not ready
+        gpsData.numSatellites = 0;  // No solution yet
+        gpsData.hdop = 99.9f;       // Poor HDOP
+        
+        // Important: Mark that we have INS/dual antenna system
+        // This allows PAOGI messages to be sent even without fix
+        gpsData.hasINS = true;
+        gpsData.hasDualHeading = true;
+        
+        // Clear position but keep message tracking
+        gpsData.hasPosition = false;
+    } else {
+        gpsData.fixQuality = 1;     // Good INS solution (will be updated based on position type)
+        gpsData.posType = 16;       // INS position
+        gpsData.insStatus = 1;      // Mark as having INS
+        gpsData.numSatellites = 12; // Typical for INS solution
+        gpsData.hdop = 0.9f;        // Good HDOP for INS solution
+        gpsData.hasINS = true;
+        gpsData.hasDualHeading = true;
+    }
     
     // Set GPS time from fields 10,11 (week, seconds)
     if (strlen(fields[10]) > 0 && strlen(fields[11]) > 0)
@@ -933,6 +990,7 @@ bool GNSSProcessor::parseINSPVAXA()
     
     gpsData.hasINS = true;
     gpsData.isValid = true;
+    gpsData.messageTypeMask |= (1 << 7);  // Set INSPVA bit
     
     // Update the last update time
     gpsData.lastUpdateTime = millis();
@@ -961,20 +1019,7 @@ extern void sendUDPbytes(uint8_t *message, int msgLen);
 // Static instance pointer for callback access
 static GNSSProcessor* gnssInstance = nullptr;
 
-void GNSSProcessor::registerPGNCallbacks()
-{
-    // Store instance pointer for static callback
-    gnssInstance = this;
-    
-    // Get PGNProcessor instance and register for Hello messages
-    PGNProcessor* pgnProcessor = PGNProcessor::instance;
-    if (pgnProcessor)
-    {
-        // Register for Hello PGN (200) - broadcast message
-        pgnProcessor->registerCallback(200, handleHelloPGN, "GPS Hello Handler");
-        Serial.print("\r\n[GNSSProcessor] Registered PGN callbacks");
-    }
-}
+// Removed registerPGNCallbacks - broadcast PGNs are handled automatically
 
 // Static callback for broadcast PGNs (like Hello)
 void GNSSProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len)

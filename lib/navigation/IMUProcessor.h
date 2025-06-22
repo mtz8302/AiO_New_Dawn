@@ -7,6 +7,7 @@
 #include "TM171AiOParser.h"
 #include "elapsedMillis.h"
 #include "PGNProcessor.h"
+#include "NavigationTypes.h"
 
 // PGN Constants for IMU module
 constexpr uint8_t IMU_SOURCE_ID = 0x79;     // 121 decimal - IMU source address

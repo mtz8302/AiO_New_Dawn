@@ -57,42 +57,30 @@ bool IMUProcessor::initialize()
         return false;
     }
 
-    // Get detected IMU type
-    detectedType = serialMgr->getIMUType();
-    Serial.printf("\r\n- Detected IMU: %s", getIMUTypeName());
-
-    // Initialize based on type
-    bool result = false;
-    switch (detectedType)
-    {
-    case IMUType::BNO085:
-        result = initBNO085();
-        break;
-
-    case IMUType::TM171:
-        result = initTM171();
-        break;
-
-    case IMUType::NONE:
-        Serial.print("\r\n- No IMU detected");
-        return false;
-
-    default:
-        Serial.printf("\r\n- IMU type %s not yet supported", getIMUTypeName());
-        return false;
-    }
-
-    if (result)
-    {
+    // Try to detect IMU type by attempting initialization
+    Serial.print("\r\n- Detecting IMU type...");
+    
+    // Try BNO085 first
+    if (initBNO085()) {
+        detectedType = IMUType::BNO085;
         isInitialized = true;
-        Serial.print("\r\n- IMU initialization SUCCESS");
+        Serial.print(" BNO085 detected");
+        return true;
     }
-    else
-    {
-        Serial.print("\r\n** IMU initialization FAILED **");
+    
+    // Try TM171
+    if (initTM171()) {
+        detectedType = IMUType::TM171;
+        isInitialized = true;
+        Serial.print(" TM171 detected");
+        return true;
     }
-
-    return result;
+    
+    // No IMU detected
+    detectedType = IMUType::NONE;
+    isInitialized = false;
+    Serial.print(" No IMU detected");
+    return false;
 }
 
 bool IMUProcessor::initBNO085()
@@ -125,6 +113,8 @@ bool IMUProcessor::initTM171()
     if (!imuSerial)
     {
         Serial.print("\r\n  - ERROR: IMU serial port is NULL!");
+        delete tm171Parser;
+        tm171Parser = nullptr;
         return false;
     }
 
@@ -134,11 +124,27 @@ bool IMUProcessor::initTM171()
         imuSerial->read();
     }
 
-    // For TM171, we'll consider it initialized even without initial data
-    // The device may need configuration or time to start
-    Serial.print("\r\n  - TM171 initialization complete");
-    Serial.print("\r\n  - Waiting for RPY packets (Object ID 0x23)...");
-
+    // Wait a bit for TM171 to send data
+    Serial.print("\r\n  - Waiting for TM171 data...");
+    uint32_t startTime = millis();
+    bool dataReceived = false;
+    
+    while (millis() - startTime < 500) {  // Wait up to 500ms
+        if (imuSerial->available()) {
+            dataReceived = true;
+            break;
+        }
+        delay(10);
+    }
+    
+    if (!dataReceived) {
+        Serial.print(" No data received");
+        delete tm171Parser;
+        tm171Parser = nullptr;
+        return false;
+    }
+    
+    Serial.print(" Data detected!");
     return true;
 }
 
@@ -224,7 +230,20 @@ void IMUProcessor::processTM171Data()
 
 const char *IMUProcessor::getIMUTypeName() const
 {
-    return serialMgr ? serialMgr->getIMUTypeName(detectedType) : "Unknown";
+    switch (detectedType) {
+        case IMUType::BNO085:
+            return "BNO085";
+        case IMUType::TM171:
+            return "TM171";
+        case IMUType::UM981_INTEGRATED:
+            return "UM981 Integrated";
+        case IMUType::CMPS14:
+            return "CMPS14";
+        case IMUType::GENERIC:
+            return "Generic";
+        default:
+            return "None";
+    }
 }
 
 void IMUProcessor::printStatus()
@@ -279,6 +298,12 @@ extern void sendUDPbytes(uint8_t *message, int msgLen);
 
 void IMUProcessor::registerPGNCallbacks()
 {
+    // Only register PGN callbacks if we actually have an IMU detected
+    if (detectedType == IMUType::NONE) {
+        Serial.print("\r\n[IMUProcessor] No IMU detected - skipping PGN registration");
+        return;
+    }
+    
     Serial.print("\r\n[IMUProcessor] Attempting to register PGN callbacks...");
     
     // Get PGNProcessor instance and register for IMU messages

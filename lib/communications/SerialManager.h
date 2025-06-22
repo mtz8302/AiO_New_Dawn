@@ -17,28 +17,7 @@ const int32_t baudRS232 = 38400;
 const int32_t baudESP32 = 460800;
 const int32_t baudIMU = 115200;
 
-// GPS type enumeration
-enum class GPSType
-{
-    UNKNOWN = 0,
-    F9P_SINGLE,   // u-blox F9P single antenna
-    F9P_DUAL,     // u-blox F9P dual antenna (moving base)
-    UM981,        // Unicore UM981 single antenna with IMU
-    UM982_SINGLE, // Unicore UM982 single antenna
-    UM982_DUAL,   // Unicore UM982 dual antenna
-    GENERIC_NMEA  // Generic NMEA GPS
-};
-
-// IMU type enumeration
-enum class IMUType
-{
-    NONE = 0,
-    BNO085,           // BNO085 in RVC mode
-    TM171,            // TM171 IMU
-    CMPS14,           // CMPS14 compass
-    UM981_INTEGRATED, // IMU integrated in UM981 GPS
-    GENERIC           // Generic IMU
-};
+// GPS and IMU type enumerations removed - all detection moved to NAVProcessor
 
 class SerialManager
 {
@@ -62,28 +41,6 @@ private:
     // Bridge mode tracking
     bool prevUSB1DTR;
     bool prevUSB2DTR;
-
-    // Detected device types
-    GPSType detectedGPS1Type;
-    GPSType detectedGPS2Type;
-    IMUType detectedIMUType;
-
-    // Detection timeouts (ms)
-    static const uint32_t GPS_DETECT_TIMEOUT = 2000;
-    static const uint32_t IMU_DETECT_TIMEOUT = 1000;
-
-    // Detection helper methods
-    GPSType detectGPSType(HardwareSerial &port, const char *portName);
-    IMUType detectIMUType();
-    int32_t detectGPSBaudRate(HardwareSerial &port, const char *portName);
-    GPSType detectUnicoreGPS(int portNum); // New method for Unicore detection with buffer expansion
-    bool sendAndWaitForResponse(HardwareSerial &port, const uint8_t *cmd, uint16_t cmdLen,
-                                uint8_t *response, uint16_t &responseLen, uint32_t timeout);
-    bool checkForNMEASentence(HardwareSerial &port, const char *sentenceType, uint32_t timeout);
-
-    // Supported GPS baud rates for detection
-    static const int32_t GPS_BAUD_RATES[];
-    static const uint8_t NUM_GPS_BAUD_RATES;
 
 public:
     // Buffer sizes (matching pcb.h values - using existing global buffers)
@@ -110,13 +67,7 @@ public:
     bool initializeSerial();
     bool initializeSerialPorts();
 
-    // Device detection
-    void detectConnectedDevices();
-    GPSType getGPS1Type() const { return detectedGPS1Type; }
-    GPSType getGPS2Type() const { return detectedGPS2Type; }
-    IMUType getIMUType() const { return detectedIMUType; }
-    const char *getGPSTypeName(GPSType type) const;
-    const char *getIMUTypeName(IMUType type) const;
+    // All device detection moved to NAVProcessor
 
     // Serial processing methods
     void processGPS1();

@@ -41,6 +41,9 @@ private:
     bool formatPANDAMessage();
     bool formatPAOGIMessage();
     
+    // Simple startup checks
+    bool startupCheckComplete;
+    
     // Utility methods
     void convertToNMEACoordinates(double decimalDegrees, bool isLongitude, 
                                   double& nmeaValue, char& direction);
