@@ -1,8 +1,17 @@
 #include "AutosteerProcessor.h"
 #include "PGNProcessor.h"
+#include "ADProcessor.h"
+#include "MotorDriverInterface.h"
+#include "KeyaCANDriver.h"
+#include "ConfigManager.h"
+#include "LEDManager.h"
 
 // External network function
 extern void sendUDPbytes(uint8_t* data, int len);
+
+// External pointers
+extern ConfigManager* configPTR;
+extern LEDManager* ledPTR;
 
 // Global pointer definition
 AutosteerProcessor* autosteerPTR = nullptr;
@@ -39,6 +48,11 @@ bool AutosteerProcessor::init() {
     // Initialize button pin
     pinMode(2, INPUT_PULLUP);
     Serial.print("\r\n  Button pin 2 configured as INPUT_PULLUP");
+    
+    // Initialize PID controller with default values
+    pid.setKp(5.0f);  // Default proportional gain
+    pid.setOutputLimit(100.0f);  // Motor speed limit (±100%)
+    Serial.print("\r\n  PID controller initialized");
     
     // Register PGN handlers with PGNProcessor
     if (PGNProcessor::instance) {
@@ -120,8 +134,30 @@ void AutosteerProcessor::process() {
         lastButtonPrint = currentTime;
     }
     
+    // Check Keya motor slip if steering is active
+    if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN && 
+        steerState == 0 && guidanceActive) {
+        KeyaCANDriver* keya = static_cast<KeyaCANDriver*>(motorPTR);
+        if (keya->checkMotorSlip()) {
+            Serial.print("\r\n[Autosteer] KICKOUT: Keya motor slip detected");
+            emergencyStop();
+            return;  // Skip the rest of this cycle
+        }
+    }
+    
+    // Update motor control
+    updateMotorControl();
+    
     // Send PGN 253 status to AgOpenGPS
     sendPGN253();
+    
+    // Update LED status
+    if (ledPTR) {
+        bool wasReady = (adPTR != nullptr);  // Have WAS sensor
+        bool enabled = (steerState == 0);    // Button/OSB active
+        bool active = (shouldSteerBeActive() && motorSpeed != 0.0f);  // Actually steering
+        ledPTR->setSteerState(wasReady, enabled, active);
+    }
 }
 
 void AutosteerProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -241,6 +277,10 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     Serial.print("\r\n  steerSensorCounts: "); Serial.print(steerSettings.steerSensorCounts);
     Serial.print("\r\n  wasOffset: "); Serial.print(steerSettings.wasOffset);
     Serial.print("\r\n  AckermanFix: "); Serial.print(steerSettings.AckermanFix);
+    
+    // Update PID controller with new Kp
+    pid.setKp(steerSettings.Kp);  // Use Kp from settings
+    Serial.printf("\r\n  PID updated with Kp=%d", steerSettings.Kp);
 }
 
 void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -256,6 +296,7 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     }
     
     lastPGN254Time = millis();
+    lastCommandTime = millis();  // Update watchdog timer
     
     // Debug: print first few data bytes (commented out for now)
     // Serial.print(" Data:");
@@ -280,6 +321,14 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     // Extract status
     uint8_t status = data[2];
     bool newAutosteerState = (status & 0x40) != 0;  // Bit 6 is autosteer enable
+    
+    // Debug speed and autosteer state
+    static uint32_t lastSpeedDebug = 0;
+    if (millis() - lastSpeedDebug > 1000) {
+        Serial.printf("\r\n[Autosteer] PGN254: Speed=%dcm/s (%.1fkm/h) AutosteerBit=%d", 
+                      speedCmS, vehicleSpeed, newAutosteerState);
+        lastSpeedDebug = millis();
+    }
     
     // Track guidance status changes
     prevGuidanceStatus = guidanceActive;
@@ -348,11 +397,11 @@ void AutosteerProcessor::sendPGN253() {
     //          pwmDisplay,                     // byte 12: PWM value
     //          checksum}
     
-    // For now, send zeros for angle, heading, roll, and PWM
-    int16_t actualSteerAngle = 0;  // TODO: Get from WAS
+    // Get actual values
+    int16_t actualSteerAngle = (int16_t)(currentAngle * 100.0f);  // Current angle * 100
     int16_t heading = 0;            // Deprecated - sent by GNSS
     int16_t roll = 0;               // Deprecated - sent by GNSS  
-    uint8_t pwmDisplay = 0;         // TODO: Get from motor driver
+    uint8_t pwmDisplay = (uint8_t)(abs(motorSpeed) * 2.55f);  // Convert % to 0-255
     
     // Build switch byte
     // Bit 0: work switch (inverted)
@@ -388,4 +437,133 @@ void AutosteerProcessor::sendPGN253() {
     
     // Send via UDP
     sendUDPbytes(pgn253, sizeof(pgn253));
+}
+
+void AutosteerProcessor::updateMotorControl() {
+    // Get current WAS angle
+    if (adPTR) {
+        currentAngle = adPTR->getWASAngle();
+    }
+    
+    // Check if steering should be active
+    if (!shouldSteerBeActive()) {
+        // Debug why it's not active
+        static uint32_t lastInactiveDebug = 0;
+        if (millis() - lastInactiveDebug > 1000) {
+            Serial.printf("\r\n[Autosteer] Motor disabled - guidance:%d enabled:%d state:%d speed:%.1fkm/h watchdog:%lums", 
+                          guidanceActive, autosteerEnabled, steerState, vehicleSpeed,
+                          millis() - lastCommandTime);
+            lastInactiveDebug = millis();
+        }
+        
+        // Stop motor
+        motorSpeed = 0.0f;
+        if (motorPTR) {
+            motorPTR->enable(false);
+            motorPTR->setSpeed(0.0f);
+        }
+        return;
+    }
+    
+    // Calculate PID output
+    float pidOutput = pid.compute(targetAngle, currentAngle);
+    
+    // Apply PWM scaling based on config
+    if (configPTR) {
+        float highPWM = configPTR->getHighPWM();
+        float lowPWM = configPTR->getLowPWM();
+        float minPWM = configPTR->getMinPWM();
+        
+        if (abs(pidOutput) < 0.1f) {
+            // Dead zone
+            motorSpeed = 0.0f;
+        } else {
+            // Scale PID output to PWM range
+            float absPID = abs(pidOutput);
+            float pwmRange = highPWM - lowPWM;
+            float scaledPWM = lowPWM + (absPID / 100.0f) * pwmRange;
+            
+            // Ensure we don't exceed highPWM
+            if (scaledPWM > highPWM) {
+                scaledPWM = highPWM;
+            }
+            
+            // Apply minimum PWM threshold
+            if (scaledPWM < minPWM) {
+                scaledPWM = 0.0f;
+            }
+            
+            // Convert to percentage for motor driver
+            motorSpeed = (scaledPWM / 255.0f) * 100.0f;
+            if (pidOutput < 0) motorSpeed = -motorSpeed;
+        }
+    } else {
+        // No config, use raw PID output
+        motorSpeed = pidOutput;
+    }
+    
+    // Apply motor direction from config
+    if (configPTR && configPTR->getMotorDriveDirection()) {
+        motorSpeed = -motorSpeed;  // Invert if configured
+    }
+    
+    // Send to motor
+    if (motorPTR) {
+        motorPTR->enable(true);
+        motorPTR->setSpeed(motorSpeed);
+    }
+    
+    // Debug output (reduced frequency)
+    static uint32_t lastMotorDebug = 0;
+    if (millis() - lastMotorDebug > 250) {  // Every 250ms
+        Serial.printf("\r\n[Autosteer] Motor: Target=%.1f° Current=%.1f° PID=%.1f Speed=%.1f%%", 
+                      targetAngle, currentAngle, pidOutput, motorSpeed);
+        lastMotorDebug = millis();
+    }
+}
+
+bool AutosteerProcessor::shouldSteerBeActive() const {
+    // Check kickout cooldown
+    if (kickoutTime > 0 && (millis() - kickoutTime < KICKOUT_COOLDOWN_MS)) {
+        return false;  // Still in cooldown
+    }
+    
+    // Check watchdog timeout
+    if (millis() - lastCommandTime > WATCHDOG_TIMEOUT) {
+        return false;  // No recent commands
+    }
+    
+    // Check all enable conditions
+    // Note: We use guidanceActive (bit 0) and steerState instead of autosteerEnabled (bit 6)
+    // because AgOpenGPS may not set bit 6 until it receives confirmation from us
+    bool active = guidanceActive &&           // Guidance line active (bit 0 from PGN 254)
+                  (steerState == 0) &&        // Our button/OSB state (0=active)
+                  (vehicleSpeed > 0.1f);      // Moving (TODO: use MinSpeed from config)
+    
+    // Debug output
+    static uint32_t lastActiveDebug = 0;
+    if (!active && millis() - lastActiveDebug > 1000) {
+        Serial.printf("\r\n[Autosteer] Not active: guidance=%d steerState=%d speed=%.1f", 
+                      guidanceActive, steerState, vehicleSpeed);
+        lastActiveDebug = millis();
+    }
+    
+    return active;
+}
+
+void AutosteerProcessor::emergencyStop() {
+    Serial.print("\r\n[Autosteer] EMERGENCY STOP");
+    
+    // Disable motor immediately
+    motorSpeed = 0.0f;
+    if (motorPTR) {
+        motorPTR->setSpeed(0.0f);
+        motorPTR->enable(false);
+    }
+    
+    // Set inactive state
+    steerState = 1;
+    
+    // Start kickout cooldown
+    kickoutTime = millis();
 }

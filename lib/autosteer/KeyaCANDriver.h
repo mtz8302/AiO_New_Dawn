@@ -52,11 +52,19 @@ public:
     }
     
     void setSpeed(float percent) override {
-        targetSpeed = constrain(percent, -100.0f, 100.0f);
+        float newSpeed = constrain(percent, -100.0f, 100.0f);
+        
+        // Only print if speed changed significantly (more than 0.1%)
+        static float lastPrintedSpeed = 999.0f;  // Initialize to impossible value
+        if (fabs(newSpeed - lastPrintedSpeed) > 0.1f) {
+            Serial.printf("\r\n[Keya] setSpeed: %.1f%% = %.1f RPM", newSpeed, newSpeed);
+            lastPrintedSpeed = newSpeed;
+        }
+        
+        targetSpeed = newSpeed;
         // For a 100 RPM motor: -100% to +100% = -100 RPM to +100 RPM
         // The CAN command multiplies by 10, so -1000 to +1000 = -100 RPM to +100 RPM
         commandedRPM = targetSpeed;  // 100% = 100 RPM
-        Serial.printf("\r\n[Keya] setSpeed: %.1f%% = %.1f RPM", targetSpeed, commandedRPM);
     }
     
     void stop() override {

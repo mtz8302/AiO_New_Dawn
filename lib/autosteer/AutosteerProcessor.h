@@ -2,6 +2,14 @@
 #define AUTOSTEER_PROCESSOR_H
 
 #include <Arduino.h>
+#include "PIDController.h"
+
+// External pointers
+class ADProcessor;
+extern ADProcessor* adPTR;
+
+class MotorDriverInterface;
+extern MotorDriverInterface* motorPTR;
 
 // Steer Config structure (PGN 251)
 struct SteerConfig {
@@ -72,6 +80,19 @@ private:
     bool prevGuidanceStatus = false;     // Previous guidance status from AgOpenGPS
     bool guidanceStatusChanged = false;  // Flag for guidance status change
     
+    // Motor control
+    float currentAngle = 0.0f;           // Current WAS angle
+    float motorSpeed = 0.0f;             // Current motor speed command
+    PIDController pid;                   // PID controller for steering
+    
+    // Watchdog
+    uint32_t lastCommandTime = 0;        // Last time we received PGN 254
+    static constexpr uint32_t WATCHDOG_TIMEOUT = 2000; // 2 seconds
+    
+    // Kickout
+    uint32_t kickoutTime = 0;            // Time of last kickout
+    static constexpr uint32_t KICKOUT_COOLDOWN_MS = 2000; // 2 second cooldown
+    
 public:
     // Singleton access
     static AutosteerProcessor* getInstance();
@@ -95,6 +116,11 @@ public:
     
     // Send PGN 253 status to AgOpenGPS
     void sendPGN253();
+    
+    // Motor control
+    void updateMotorControl();
+    void emergencyStop();
+    bool shouldSteerBeActive() const;
     
     // Static callback wrapper for PGN registration
     static void handlePGNStatic(uint8_t pgn, const uint8_t* data, size_t len);
