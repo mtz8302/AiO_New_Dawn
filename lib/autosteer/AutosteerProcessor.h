@@ -2,68 +2,113 @@
 #define AUTOSTEER_PROCESSOR_H
 
 #include <Arduino.h>
-#include "PIDController.h"
 
-enum class SteerState {
-    OFF,
-    READY,
-    ACTIVE
+// Steer Config structure (PGN 251)
+struct SteerConfig {
+    uint8_t InvertWAS;
+    uint8_t IsRelayActiveHigh;
+    uint8_t MotorDriveDirection;
+    uint8_t SingleInputWAS;
+    uint8_t CytronDriver;
+    uint8_t SteerSwitch;
+    uint8_t SteerButton;
+    uint8_t ShaftEncoder;
+    uint8_t PulseCountMax;
+    uint8_t MinSpeed;
+    uint8_t IsDanfoss;
+    uint8_t PressureSensor;
+    uint8_t CurrentSensor;
+    uint8_t IsUseY_Axis;
+};
+
+// Steer Settings structure (PGN 252)
+struct SteerSettings {
+    float Kp;
+    uint8_t highPWM;
+    uint8_t lowPWM;
+    uint8_t minPWM;
+    uint8_t steerSensorCounts;
+    int16_t wasOffset;
+    float AckermanFix;
 };
 
 class AutosteerProcessor {
 private:
     static AutosteerProcessor* instance;
     
-    SteerState state;
-    PIDController pid;
+    // Pin definitions
+    static constexpr uint8_t BUTTON_PIN = 2;  // Physical button on pin 2
     
-    float targetAngle;
-    float currentAngle;
-    float motorSpeed;
-    
-    uint32_t lastUpdate;
-    uint32_t lastCommand;
-    
-    bool steerEnabled;
-    
-    // Kickout cooldown
-    uint32_t kickoutTime = 0;
-    static constexpr uint32_t KICKOUT_COOLDOWN_MS = 2000;  // 2 second cooldown after kickout
-    
+    // Private constructor for singleton
     AutosteerProcessor();
     
+    // Configuration storage
+    SteerConfig steerConfig;
+    SteerSettings steerSettings;
+    
+    // State tracking
+    bool autosteerEnabled = false;
+    float targetAngle = 0.0f;
+    uint32_t lastPGN254Time = 0;
+    
+    // PGN 254 data
+    float vehicleSpeed = 0.0f;      // km/h
+    bool guidanceActive = false;     // Guidance line active
+    int8_t crossTrackError = 0;      // cm off line
+    uint16_t machineSections = 0;    // 16 section states
+    
+    // Button state tracking
+    bool physicalButtonState = false;     // Current physical button state
+    bool lastPhysicalButtonState = false; // Previous physical button state
+    uint32_t lastButtonDebounceTime = 0;  // Debounce timer
+    static constexpr uint32_t DEBOUNCE_DELAY = 50; // 50ms debounce
+    
+    // Autosteer loop timing
+    uint32_t lastLoopTime = 0;           // Timer for 100Hz autosteer loop
+    static constexpr uint32_t LOOP_TIME = 10; // 10ms = 100Hz
+    
+    // Steer state management
+    uint8_t steerState = 1;              // 0 = steering active, 1 = steering inactive
+    bool prevGuidanceStatus = false;     // Previous guidance status from AgOpenGPS
+    bool guidanceStatusChanged = false;  // Flag for guidance status change
+    
 public:
+    // Singleton access
     static AutosteerProcessor* getInstance();
     
+    // Initialization
     bool init();
     void process();
     
-    // Control interface
-    void setTargetAngle(float angle);
-    void enable(bool enabled);
-    void emergencyStop();
-    
     // PGN handlers
-    void handleSteerData(uint8_t* data, uint8_t len);
-    void handleSteerSettings(uint8_t* data, uint8_t len);
-    void handleSteerConfig(uint8_t* data, uint8_t len);
+    void handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len);
+    void handleSteerConfig(uint8_t pgn, const uint8_t* data, size_t len);
+    void handleSteerSettings(uint8_t pgn, const uint8_t* data, size_t len);
+    void handleSteerData(uint8_t pgn, const uint8_t* data, size_t len);
     
-    // Status
-    SteerState getState() const { return state; }
-    float getCurrentAngle() const { return currentAngle; }
-    float getTargetAngle() const { return targetAngle; }
-    float getMotorSpeed() const { return motorSpeed; }
+    // Send hello reply
+    void sendHelloReply();
     
-    // Send PGN 253 data to AgOpenGPS
+    // Button handling
+    void readPhysicalButton();
+    void sendButtonStateToAOG(bool buttonPressed);
+    
+    // Send PGN 253 status to AgOpenGPS
     void sendPGN253();
     
-    // Static PGN handlers for callback registration
-    static void handleSteerDataStatic(uint8_t pgn, const uint8_t* data, size_t len);
-    static void handleSteerSettingsStatic(uint8_t pgn, const uint8_t* data, size_t len);
-    static void handleSteerConfigStatic(uint8_t pgn, const uint8_t* data, size_t len);
+    // Static callback wrapper for PGN registration
+    static void handlePGNStatic(uint8_t pgn, const uint8_t* data, size_t len);
+    
+    // Public getters for config/settings
+    const SteerConfig& getConfig() const { return steerConfig; }
+    const SteerSettings& getSettings() const { return steerSettings; }
+    
+    // Public getters for state
+    bool isEnabled() const { return autosteerEnabled; }
+    float getTargetAngle() const { return targetAngle; }
 };
 
 // Global pointer
 extern AutosteerProcessor* autosteerPTR;
 
-#endif
+#endif // AUTOSTEER_PROCESSOR_H

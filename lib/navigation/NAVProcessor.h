@@ -48,6 +48,7 @@ private:
     void convertToNMEACoordinates(double decimalDegrees, bool isLongitude, 
                                   double& nmeaValue, char& direction);
     uint8_t calculateNMEAChecksum(const char* sentence);
+    float convertGPStoUTC(uint16_t gpsWeek, float gpsSeconds);
     void sendMessage(const char* message);
     
 public:
@@ -67,6 +68,12 @@ public:
     void printStatus();
     const Stats& getStats() const { return stats; }
     NavMessageType getCurrentMessageType();
+    
+    // AgIO connection status (based on recent message sending)
+    bool hasAgIOConnection() const { 
+        return (millis() - stats.lastMessageTime) < 5000 && 
+               (stats.pandaMessagesSent > 0 || stats.paogiMessagesSent > 0);
+    }
 };
 
 // Global pointer declaration

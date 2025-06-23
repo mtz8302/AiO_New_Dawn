@@ -110,10 +110,32 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
                     //     Serial.printf("\r\n[PGNProcessor] Routing PGN %d to %s, len=%d", pgn, registrations[i].name, udpPacket->recv.len);
                     // }
                     
-                    // Pass the data starting after the header, pgn, and length byte
-                    const uint8_t* data = &udpPacket->recv.buf[5];
-                    size_t dataLen = udpPacket->recv.len - 6; // Subtract header(3) + pgn(1) + len(1) + crc(1)
+                    // Debug: Print full packet for PGN 254 (commented out for now)
+                    // if (pgn == 254) {
+                    //     Serial.printf("\r\n[PGNProcessor] PGN 254 full packet:");
+                    //     for (size_t j = 0; j < udpPacket->recv.len; j++) {
+                    //         Serial.printf(" %02X", udpPacket->recv.buf[j]);
+                    //     }
+                    //     Serial.printf("\r\n[PGNProcessor] Header(5): %02X %02X %02X %02X %02X",
+                    //                   udpPacket->recv.buf[0], udpPacket->recv.buf[1], 
+                    //                   udpPacket->recv.buf[2], udpPacket->recv.buf[3], 
+                    //                   udpPacket->recv.buf[4]);
+                    //     Serial.printf("\r\n[PGNProcessor] Speed(2): %02X %02X", 
+                    //                   udpPacket->recv.buf[5], udpPacket->recv.buf[6]);
+                    //     Serial.printf("\r\n[PGNProcessor] Status: %02X", udpPacket->recv.buf[7]);
+                    //     Serial.printf("\r\n[PGNProcessor] SteerAngle(2): %02X %02X", 
+                    //                   udpPacket->recv.buf[8], udpPacket->recv.buf[9]);
+                    // }
                     
+                    // Pass the data starting after the 5-byte header
+                    // PGN 254 data starts at position 5: speed(2), status(1), steerAngle(2), etc.
+                    const uint8_t* data = &udpPacket->recv.buf[5];
+                    size_t dataLen = udpPacket->recv.len - 6; // Subtract header(5) + crc(1)
+                    
+                    // Only print for non-254 PGNs to reduce noise
+                    if (pgn != 254) {
+                        Serial.printf("\r\n[PGNProcessor] Calling %s for PGN %d", registrations[i].name, pgn);
+                    }
                     registrations[i].callback(pgn, data, dataLen);
                     handled = true;
                     break; // Only one handler per non-broadcast PGN
@@ -121,102 +143,8 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
             }
         }
         
-        // If not handled by a registered callback (or it's a broadcast), use built-in handlers
-        if (!handled || isBroadcast)
-        {
-            switch (pgn)
-            {
-            case 200: // Hello from AgIO
-                // Now handled by registered callbacks (IMU, GPS, etc.)
-                break;
-            case 201: // Subnet change
-                if (udpPacket->recv.len == 8)
-                {
-                    processSubnetChange(udpPacket);
-                }
-                break;
-            case 202: // Scan request
-                if (udpPacket->recv.len == 7)
-                {
-                    processScanRequest(udpPacket);
-                }
-                break;
-            case 251: // Steer config
-                Serial.printf("\r\n[PGN] Received PGN 251, length=%d", udpPacket->recv.len);
-                if (udpPacket->recv.len == 14)
-                {
-                    processSteerConfig(udpPacket);
-                }
-                else
-                {
-                    Serial.printf(" - WRONG LENGTH! Expected 14");
-                }
-                break;
-            case 252: // Steer settings
-                Serial.printf("\r\n[PGN] Received PGN 252, length=%d", udpPacket->recv.len);
-                Serial.printf("\r\n[PGN252] Full packet: ");
-                for (int i = 0; i < udpPacket->recv.len && i < 16; i++) {
-                    Serial.printf("%02X ", udpPacket->recv.buf[i]);
-                }
-                if (udpPacket->recv.len == 14)
-                {
-                    processSteerSettings(udpPacket);
-                }
-                else
-                {
-                    Serial.printf(" - WRONG LENGTH! Expected 14");
-                }
-                break;
-            case 254: // Steer data
-                Serial.printf("\r\n[PGN] Received PGN 254, length=%d", udpPacket->recv.len);
-                if (udpPacket->recv.len == 14)
-                {
-                    processSteerData(udpPacket);
-                }
-                else
-                {
-                    Serial.printf(" - WRONG LENGTH! Expected 14");
-                }
-                break;
-            case 100: // PERMANENTLY DISABLED - Unknown PGN from AOG
-                // 30 byte message of unknown purpose - not needed
-                break;
-            case 229: // Extended Machine/Tool data - silently ignore for now
-                // TODO: Implement when machine control is added
-                break;
-            case 239: // Machine/Tool control - silently ignore for now
-                // TODO: Implement when machine control is added
-                break;
-            default:
-                Serial.printf("\r\nUnknown PGN type: %d (0x%02X)", pgn, pgn);
-                Serial.printf("\r\n  Length: %d bytes", udpPacket->recv.len);
-                Serial.printf("\r\n  Header: %02X %02X %02X", 
-                    udpPacket->recv.buf[0], udpPacket->recv.buf[1], udpPacket->recv.buf[2]);
-                Serial.printf("\r\n  Data hex:   ");
-                int dataLen = udpPacket->recv.len - 1;
-                int displayLen = (dataLen < 20) ? dataLen : 20;
-                for (int i = 4; i < 4 + displayLen && i < udpPacket->recv.len - 1; i++) {
-                    Serial.printf("%02X ", udpPacket->recv.buf[i]);
-                }
-                if (dataLen > 20) {
-                    Serial.printf("...");
-                }
-                Serial.printf("\r\n  Data ascii: ");
-                for (int i = 4; i < 4 + displayLen && i < udpPacket->recv.len - 1; i++) {
-                    char c = udpPacket->recv.buf[i];
-                    if (c >= 32 && c <= 126) {
-                        Serial.printf(" %c ", c);
-                    } else {
-                        Serial.printf(" . ");
-                    }
-                }
-                if (dataLen > 20) {
-                    Serial.printf("...");
-                }
-                Serial.printf("\r\n");
-                break;
-            }
-        }
+        // PGNProcessor only routes - no built-in handlers
+        // Unhandled PGNs are simply dropped
 
         mg_iobuf_del(&udpPacket->recv, 0, udpPacket->recv.len);
     }
@@ -226,77 +154,14 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
     }
 }
 
-
-void PGNProcessor::processSubnetChange(struct mg_connection *udpPacket)
-{
-    printPgnAnnouncement(udpPacket, (char *)"Subnet Change");
-
-    // Extract new subnet from PGN message
-    netConfig.currentIP[0] = udpPacket->recv.buf[4];
-    netConfig.currentIP[1] = udpPacket->recv.buf[5];
-    netConfig.currentIP[2] = udpPacket->recv.buf[6];
-
-    Serial.printf("New subnet: %d.%d.%d.x\r\n",
-                  netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
-
-    // Call the NetworkBase function to save to EEPROM
-    save_current_net();
-}
-
-void PGNProcessor::processScanRequest(struct mg_connection *udpPacket)
-{
-    printPgnAnnouncement(udpPacket, (char *)"Scan Request");
-
-    // Send scan reply with module info
-    uint8_t scanReply[] = {128, 129, 203, 203,
-                           netConfig.currentIP[3], // Module IP last octet
-                           202,                    // Source address
-                           0, 0, 0, 0,             // Reserved
-                           75};                    // CRC
-    ::sendUDPbytes(scanReply, sizeof(scanReply));
-}
-
-void PGNProcessor::processSteerConfig(struct mg_connection *udpPacket)
-{
-    printPgnAnnouncement(udpPacket, (char *)"Steer Config");
-    
-    // Forward to registered callbacks
-    for (size_t i = 0; i < registrationCount; i++)
-    {
-        if (registrations[i].pgn == 251)
-        {
-            registrations[i].callback(251, &udpPacket->recv.buf[5], udpPacket->recv.len - 6);
-        }
-    }
-}
-
-void PGNProcessor::processSteerSettings(struct mg_connection *udpPacket)
-{
-    printPgnAnnouncement(udpPacket, (char *)"Steer Settings");
-    
-    // Forward to registered callbacks
-    for (size_t i = 0; i < registrationCount; i++)
-    {
-        if (registrations[i].pgn == 252)
-        {
-            registrations[i].callback(252, &udpPacket->recv.buf[5], udpPacket->recv.len - 6);
-        }
-    }
-}
-
-void PGNProcessor::processSteerData(struct mg_connection *udpPacket)
-{
-    // printPgnAnnouncement(udpPacket, (char *)"Steer Data");
-
-    // Forward to registered callbacks
-    for (size_t i = 0; i < registrationCount; i++)
-    {
-        if (registrations[i].pgn == 254)
-        {
-            registrations[i].callback(254, &udpPacket->recv.buf[5], udpPacket->recv.len - 6);
-        }
-    }
-}
+// REMOVED ALL BUILT-IN HANDLERS
+// PGNProcessor now ONLY routes to registered callbacks
+// The following functions were removed:
+// - processSubnetChange
+// - processScanRequest  
+// - processSteerConfig
+// - processSteerSettings
+// - processSteerData
 
 void PGNProcessor::printPgnAnnouncement(struct mg_connection *udpPacket, char *pgnName)
 {

@@ -169,6 +169,9 @@ I2CDeviceType I2CManager::identifyDevice(TwoWire& wire, uint8_t address) {
         case MCP23017_ADDRESS + 7:
             return I2CDeviceType::MCP23017;
             
+        case PCA9685_ADDRESS:
+            return I2CDeviceType::PCA9685;
+            
         default:
             return I2CDeviceType::GENERIC;
     }
@@ -192,6 +195,8 @@ const char* I2CManager::getDeviceTypeName(I2CDeviceType type) {
             return "ADS1115 ADC";
         case I2CDeviceType::MCP23017:
             return "MCP23017 I/O Expander";
+        case I2CDeviceType::PCA9685:
+            return "PCA9685 LED Driver";
         case I2CDeviceType::GENERIC:
             return "Generic I2C Device";
         case I2CDeviceType::UNKNOWN:

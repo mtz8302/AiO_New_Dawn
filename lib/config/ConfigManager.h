@@ -69,6 +69,9 @@ private:
     float insVarianceRoll;
     float insVariancePitch;
 
+    // LED settings
+    uint8_t ledBrightness;
+    
     // Version control
     uint16_t eeVersion;
 
@@ -126,6 +129,12 @@ public:
     float getAckermanFix() const { return ackermanFix; }
     void setAckermanFix(float value) { ackermanFix = value; }
 
+    // LED configuration
+    uint8_t getLEDBrightness() const { return ledBrightness; }
+    void setLEDBrightness(uint8_t value) { 
+        ledBrightness = constrain(value, 5, 100); 
+    }
+    
     // GPS configuration methods
     uint32_t getGPSBaudRate() const { return gpsBaudRate; }
     void setGPSBaudRate(uint32_t value) { gpsBaudRate = value; }

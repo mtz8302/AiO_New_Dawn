@@ -420,6 +420,9 @@ void ConfigManager::resetToDefaults()
     insVarianceHeading = 1.0;
     insVarianceRoll = 1.0;
     insVariancePitch = 1.0;
+    
+    // LED defaults
+    ledBrightness = 25;  // 25% default brightness
 
     eeVersion = CURRENT_EE_VERSION;
 }

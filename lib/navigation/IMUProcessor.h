@@ -68,6 +68,7 @@ public:
     bool initialize();
     void process();
     bool isActive() const { return isInitialized && timeSinceLastPacket < 100; }
+    bool isIMUInitialized() const { return isInitialized; }
 
     // Data access
     IMUData getCurrentData() const { return currentData; }

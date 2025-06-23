@@ -18,6 +18,7 @@
 #include "CANGlobals.h"
 #include "AutosteerProcessor.h"
 #include "KeyaCANDriver.h"
+#include "LEDManager.h"
 
 // Test mode flag - set to true to run motor tests
 static bool MOTOR_TEST_MODE = false;  // Disable for autosteer mode
@@ -101,6 +102,25 @@ void setup()
   else
   {
     Serial.print("\r\n✗ I2CManager FAILED");
+  }
+
+  // Initialize LED Manager
+  Serial.print("\r\n\n*** Testing LEDManager ***");
+  ledPTR = new LEDManager();
+  if (ledPTR->init()) 
+  {
+    Serial.print("\r\n✓ LEDManager SUCCESS");
+    
+    // Load saved brightness from config
+    ledPTR->setBrightness(configPTR->getLEDBrightness());
+    Serial.printf("\r\n  - Brightness: %d%%", ledPTR->getBrightness());
+    
+    // Optional: Run LED test
+    // ledPTR->testLEDs();
+  }
+  else
+  {
+    Serial.print("\r\n✗ LEDManager FAILED");
   }
 
   // Test CANManager with global instances
@@ -481,7 +501,78 @@ void loop()
     autosteerPTR->process();
   }
   
-  // Autosteer status every 2 seconds
+  // Update LEDs
+  static uint32_t lastLEDUpdate = 0;
+  static bool ledDebugPrinted = false;
+  if (ledPTR && millis() - lastLEDUpdate > 100)  // Update every 100ms
+  {
+    lastLEDUpdate = millis();
+    
+    // Debug print once
+    if (!ledDebugPrinted) {
+      Serial.print("\r\n[LED] Update loop started");
+      ledDebugPrinted = true;
+    }
+    
+    // Power/Ethernet LED
+    // TODO: Add proper ethernet link detection when NetworkBase is updated
+    bool ethernetUp = true;  // For now assume ethernet is up
+    ledPTR->setPowerState(ethernetUp, navPTR && navPTR->hasAgIOConnection());
+    
+    // GPS LED
+    if (gnssPTR) {
+      ledPTR->setGPSState(gnssPTR->getData().fixQuality, gnssPTR->hasGPS());
+    }
+    
+    // Steer LED - commented out for minimal AutosteerProcessor
+    /*
+    if (adPTR && autosteerPTR) {
+      bool wasReady = adPTR->getWASRaw() > 0;  // Simple WAS presence check
+      ledPTR->setSteerState(wasReady, 
+                           autosteerPTR->isEnabled(), 
+                           autosteerPTR->getState() == SteerState::ACTIVE);
+    }
+    */
+    
+    // IMU/INS LED
+    if (imuPTR && imuPTR->getIMUType() != IMUType::NONE) {
+      // Separate IMU detected (BNO08x or TM171)
+      ledPTR->setIMUState(true,
+                         imuPTR->isIMUInitialized(),
+                         imuPTR->hasValidData());
+    } else if (gnssPTR && gnssPTR->getData().hasINS) {
+      // UM981 INS system
+      const auto& gpsData = gnssPTR->getData();
+      bool insDetected = true;
+      bool insInitialized = gpsData.insAlignmentStatus != 0;
+      bool insValid = gpsData.insAlignmentStatus == 3; // Solution good
+      
+      // Special handling for aligning state - show as initialized but not valid
+      if (gpsData.insAlignmentStatus == 7) { // INS_ALIGNING
+        insInitialized = true;
+        insValid = false;
+      }
+      
+      // Debug output once
+      static bool insDebugPrinted = false;
+      if (!insDebugPrinted) {
+        Serial.printf("\r\n[LED] INS: alignStatus=%d, detected=%d, init=%d, valid=%d",
+                     gpsData.insAlignmentStatus, insDetected, insInitialized, insValid);
+        insDebugPrinted = true;
+      }
+      
+      ledPTR->setIMUState(insDetected, insInitialized, insValid);
+    } else {
+      // No IMU/INS detected
+      ledPTR->setIMUState(false, false, false);
+    }
+    
+    // Update LED hardware (handles blinking)
+    ledPTR->update();
+  }
+  
+  // Autosteer status - commented out for minimal AutosteerProcessor
+  /*
   if (autosteerPTR && !MOTOR_TEST_MODE && millis() - lastAutosteerStatus > 2000)
   {
     lastAutosteerStatus = millis();
@@ -511,6 +602,7 @@ void loop()
                       autosteerPTR->getMotorSpeed());
     }
   }
+  */
 
   // Quick status print every second
   if (millis() - lastPrint > 1000)

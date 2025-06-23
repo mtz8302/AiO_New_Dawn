@@ -95,6 +95,32 @@ uint8_t NAVProcessor::calculateNMEAChecksum(const char* sentence) {
     return checksum;
 }
 
+float NAVProcessor::convertGPStoUTC(uint16_t gpsWeek, float gpsSeconds) {
+    // GPS epoch (January 6, 1980) to Unix epoch (January 1, 1970) offset
+    const uint32_t GPS_EPOCH_OFFSET = 315964800UL;
+    
+    // Current leap seconds as of 2024
+    const uint8_t LEAP_SECONDS = 18;
+    
+    // Calculate total seconds since GPS epoch
+    uint32_t totalGPSSeconds = (uint32_t)gpsWeek * 7 * 24 * 60 * 60 + (uint32_t)gpsSeconds;
+    
+    // Convert to Unix time and adjust for leap seconds
+    uint32_t unixTime = GPS_EPOCH_OFFSET + totalGPSSeconds - LEAP_SECONDS;
+    
+    // Extract UTC time components
+    uint32_t secondsToday = unixTime % (24 * 60 * 60);
+    uint8_t hours = secondsToday / 3600;
+    uint8_t minutes = (secondsToday % 3600) / 60;
+    uint8_t seconds = secondsToday % 60;
+    
+    // Get milliseconds from the fractional part of gpsSeconds
+    float fractionalSeconds = gpsSeconds - (uint32_t)gpsSeconds;
+    
+    // Return as HHMMSS.S format
+    return hours * 10000.0f + minutes * 100.0f + seconds + fractionalSeconds;
+}
+
 bool NAVProcessor::formatPANDAMessage() {
     if (!gnssPTR || !gnssPTR->isValid()) {
         return false;
@@ -183,12 +209,20 @@ bool NAVProcessor::formatPAOGIMessage() {
     float dualHeading = gnssData.dualHeading;
     int16_t roll = (int16_t)round(gnssData.dualRoll);
     
-    // Format time
-    float timeFloat = gnssData.fixTime + (millis() % 1000) / 1000.0;
+    // Format time - use UTC from GPS week/seconds if available
+    float timeFloat;
+    if (gnssData.gpsWeek > 0 && gnssData.gpsSeconds > 0) {
+        // Convert GPS time to UTC
+        timeFloat = convertGPStoUTC(gnssData.gpsWeek, gnssData.gpsSeconds);
+    } else {
+        // Fallback to fixTime with milliseconds
+        timeFloat = gnssData.fixTime + (millis() % 1000) / 1000.0;
+    }
     
     // Build PAOGI message without checksum
+    // NMEA format: Lat DDMM.MMMMM (4 digits before decimal), Lon DDDMM.MMMMM (5 digits before decimal)
     int len = snprintf(messageBuffer, BUFFER_SIZE - 4,
-        "$PAOGI,%.1f,%.6f,%c,%.6f,%c,%d,%d,%.1f,%.3f,%.1f,%.3f,%.1f,%d,%d,%.2f",
+        "$PAOGI,%.1f,%010.6f,%c,%011.6f,%c,%d,%d,%.1f,%.3f,%.1f,%.3f,%.1f,%d,%d,%.2f",
         timeFloat,                          // Time
         latNMEA, latDir,                   // Latitude
         lonNMEA, lonDir,                   // Longitude
@@ -216,8 +250,6 @@ void NAVProcessor::sendMessage(const char* message) {
     // NMEA messages must end with CR+LF
     char buffer[BUFFER_SIZE];
     snprintf(buffer, BUFFER_SIZE, "%s\r\n", message);
-
-    Serial.println(buffer);
     
     // Send via UDP to AgIO
     sendUDPbytes((uint8_t*)buffer, strlen(buffer));

@@ -349,6 +349,13 @@ void GNSSProcessor::parseFields()
             fields[fieldCount][fieldIndex++] = c;
         }
     }
+    
+    // Handle the last field if we haven't terminated it yet
+    if (fieldIndex > 0 && fieldCount < 35)
+    {
+        fields[fieldCount][fieldIndex] = '\0';
+        fieldCount++;
+    }
 }
 
 bool GNSSProcessor::parseGGA()
@@ -741,15 +748,12 @@ bool GNSSProcessor::parseINSPVAA()
     if (fieldCount < 18)
         return false;
     
-    // Debug field output - commented out now that parsing is working
-    // if (enableDebug)
-    // {
-    //     Serial.printf("\r\n[GNSS] INSPVAA Fields:");
-    //     for (int i = 0; i < min(fieldCount, 15); i++)
-    //     {
-    //         Serial.printf("\r\n  [%d]: %s", i, fields[i]);
-    //     }
-    // }
+    // Debug field output - show all fields to debug INS status
+    Serial.printf("\r\n[GNSS] INSPVAA Fields (total=%d):", fieldCount);
+    for (int i = 0; i < min(fieldCount, 25); i++)
+    {
+        Serial.printf("\r\n  [%d]: %s", i, fields[i]);
+    }
     
     // Field 12: Latitude (degrees)
     if (strlen(fields[12]) > 0)
@@ -797,9 +801,45 @@ bool GNSSProcessor::parseINSPVAA()
         gpsData.hasDualHeading = true;
     }
     
-    // Always set fix quality to 1 for valid INS data
-    // The INS status field parsing was not working reliably
-    gpsData.fixQuality = 1; // Good INS solution
+    // Debug field count
+    Serial.printf("\r\n[GNSS] INSPVAA fieldCount=%d", fieldCount);
+    
+    // Field 21: INS status (e.g., "INS_ALIGNING", "INS_SOLUTION_GOOD", etc.)
+    if (fieldCount > 21 && strlen(fields[21]) > 0)
+    {
+        // Parse INS alignment status string
+        if (strstr(fields[21], "INS_ALIGNING"))
+        {
+            gpsData.insAlignmentStatus = 7;  // Aligning
+            gpsData.fixQuality = 0;  // No fix during alignment
+        }
+        else if (strstr(fields[21], "INS_SOLUTION_GOOD") || strstr(fields[21], "INS_HIGH_VARIANCE"))
+        {
+            gpsData.insAlignmentStatus = 3;  // Solution good
+            gpsData.fixQuality = 4;  // RTK-like quality for good INS
+        }
+        else if (strstr(fields[21], "INS_INACTIVE"))
+        {
+            gpsData.insAlignmentStatus = 0;  // Inactive
+            gpsData.fixQuality = 1;  // Basic GPS fix
+        }
+        else
+        {
+            gpsData.insAlignmentStatus = 0;  // Unknown
+            gpsData.fixQuality = 1;  // Basic fix
+        }
+        
+        // Debug output - always show INS status for now
+        Serial.printf("\r\n[GNSS] INS Status: '%s' (alignment=%d, fixQuality=%d)", 
+                     fields[21], gpsData.insAlignmentStatus, gpsData.fixQuality);
+    }
+    else
+    {
+        // Fallback if status field is missing
+        gpsData.fixQuality = 1;
+        gpsData.insAlignmentStatus = 3;
+    }
+    
     gpsData.posType = 16; // INS position
     gpsData.insStatus = 1; // Mark as having INS
     
@@ -807,12 +847,15 @@ bool GNSSProcessor::parseINSPVAA()
     gpsData.numSatellites = 12; // Typical for INS solution
     gpsData.hdop = 0.9f; // Good HDOP for INS solution
     
-    // Set GPS time from fields 10,11 (week, seconds)
-    if (strlen(fields[10]) > 0 && strlen(fields[11]) > 0)
+    // Set GPS time from fields 5,6 (week, seconds) from header
+    if (strlen(fields[5]) > 0 && strlen(fields[6]) > 0)
     {
-        // Convert GPS week seconds to time
-        // For now, just use the seconds part as fixTime
-        float seconds = parseFloat(fields[11]);
+        // Store GPS week and seconds for UTC conversion
+        gpsData.gpsWeek = (uint16_t)atoi(fields[5]);
+        gpsData.gpsSeconds = parseFloat(fields[6]);
+        
+        // Also store as fixTime for compatibility
+        float seconds = gpsData.gpsSeconds;
         int hours = (int)(seconds / 3600) % 24;
         int minutes = (int)((seconds - hours * 3600) / 60);
         int secs = (int)(seconds) % 60;
@@ -977,11 +1020,15 @@ bool GNSSProcessor::parseINSPVAXA()
         gpsData.hasDualHeading = true;
     }
     
-    // Set GPS time from fields 10,11 (week, seconds)
-    if (strlen(fields[10]) > 0 && strlen(fields[11]) > 0)
+    // Set GPS time from fields 5,6 (week, seconds) from header
+    if (strlen(fields[5]) > 0 && strlen(fields[6]) > 0)
     {
-        // Convert GPS week seconds to time
-        float seconds = parseFloat(fields[11]);
+        // Store GPS week and seconds for UTC conversion
+        gpsData.gpsWeek = (uint16_t)atoi(fields[5]);
+        gpsData.gpsSeconds = parseFloat(fields[6]);
+        
+        // Also store as fixTime for compatibility
+        float seconds = gpsData.gpsSeconds;
         int hours = (int)(seconds / 3600) % 24;
         int minutes = (int)((seconds - hours * 3600) / 60);
         int secs = (int)(seconds) % 60;

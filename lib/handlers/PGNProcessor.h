@@ -42,12 +42,8 @@ public:
     // Utility methods
     void printPgnAnnouncement(struct mg_connection *udpPacket, char *pgnName);
 
-    // PGN processing methods
-    void processSubnetChange(struct mg_connection *udpPacket);
-    void processScanRequest(struct mg_connection *udpPacket);
-    void processSteerConfig(struct mg_connection *udpPacket);
-    void processSteerSettings(struct mg_connection *udpPacket);
-    void processSteerData(struct mg_connection *udpPacket);
+    // PGN processing methods - REMOVED
+    // PGNProcessor only routes to registered callbacks
 
     // Initialize the handler
     static void init();

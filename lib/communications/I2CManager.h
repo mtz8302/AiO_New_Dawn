@@ -14,6 +14,7 @@
 #define ADS1115_ADDRESS_SDA     0x4A  // ADS1115 ADC with ADDR->SDA
 #define ADS1115_ADDRESS_SCL     0x4B  // ADS1115 ADC with ADDR->SCL
 #define MCP23017_ADDRESS        0x20  // MCP23017 I/O expander base address
+#define PCA9685_ADDRESS         0x70  // PCA9685 PWM LED driver
 
 // I2C speeds
 #define I2C_SPEED_STANDARD      100000  // 100 kHz
@@ -27,6 +28,7 @@ enum class I2CDeviceType {
     CMPS14,
     ADS1115,
     MCP23017,
+    PCA9685,
     GENERIC
 };
 

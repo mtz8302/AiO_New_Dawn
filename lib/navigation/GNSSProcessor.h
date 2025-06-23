@@ -27,6 +27,10 @@ public:
         double longitude; // decimal degrees
         float altitude;   // meters
         uint32_t fixTime; // HHMMSS as integer
+        
+        // GPS time data (for UTC conversion)
+        uint16_t gpsWeek;    // GPS week number
+        float gpsSeconds;    // Seconds of week
 
         // Quality indicators
         uint8_t fixQuality; // 0=invalid, 1=GPS, 2=DGPS, 4=RTK, 5=Float
@@ -52,6 +56,7 @@ public:
         float upVelocity;       // m/s
         uint32_t insStatus;     // INS status word
         uint8_t posType;        // Position type (for INS quality)
+        uint8_t insAlignmentStatus; // INS alignment status (0=inactive, 3=good, 7=aligning)
         
         // Extended INS data (from INSPVAXA)
         float posStdDevLat;     // Position std dev latitude (m)
