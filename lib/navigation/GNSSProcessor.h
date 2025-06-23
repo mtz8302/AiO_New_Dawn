@@ -204,7 +204,7 @@ public:
     void sendGPSData();  // Send PGN 214 (0xD6) - for future use
     
     // Static callback for PGN Hello (200)
-    static void handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len);
+    static void handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len);
 };
 
 // Global pointer following established pattern

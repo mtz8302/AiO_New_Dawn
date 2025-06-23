@@ -89,7 +89,7 @@ public:
     void sendIMUData();  // Send PGN 211 (0xD3)
     
     // Static callback for PGN Hello (200)
-    static void handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len);
+    static void handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len);
 };
 
 // Global pointer

@@ -102,13 +102,14 @@ public:
     void process();
     
     // PGN handlers
-    void handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len);
+    void handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len);
     void handleSteerConfig(uint8_t pgn, const uint8_t* data, size_t len);
     void handleSteerSettings(uint8_t pgn, const uint8_t* data, size_t len);
     void handleSteerData(uint8_t pgn, const uint8_t* data, size_t len);
     
-    // Send hello reply
+    // Send replies
     void sendHelloReply();
+    void sendScanReply();
     
     // Button handling
     void readPhysicalButton();

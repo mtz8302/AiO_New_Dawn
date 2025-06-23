@@ -43,7 +43,23 @@ bool GNSSProcessor::init()
     resetStats();
     resetParser();
     
-    // No PGN registration needed - broadcast PGNs are handled automatically
+    // Register with PGNProcessor to receive broadcast messages
+    if (PGNProcessor::instance)
+    {
+        // Register using GPS_SOURCE_ID (120) to receive broadcast PGNs like 200 and 202
+        bool success = PGNProcessor::instance->registerCallback(GPS_SOURCE_ID, handleBroadcastPGN, "GPS Handler");
+        if (!success)
+        {
+            Serial.print("\r\n[GNSSProcessor] ERROR: Failed to register PGN callback");
+            return false;
+        }
+        Serial.print("\r\n[GNSSProcessor] Successfully registered for broadcast PGNs");
+    }
+    else
+    {
+        Serial.print("\r\n[GNSSProcessor] ERROR: PGNProcessor not initialized");
+        return false;
+    }
     
     return true;
 }
@@ -1063,13 +1079,20 @@ bool GNSSProcessor::parseINSPVAXA()
 // External reference to NetworkBase send function
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 
+// External network config
+extern struct NetConfigStruct {
+    uint8_t currentIP[5];
+    uint8_t gatewayIP[5];
+    uint8_t broadcastIP[5];
+} netConfig;
+
 // Static instance pointer for callback access
 static GNSSProcessor* gnssInstance = nullptr;
 
 // Removed registerPGNCallbacks - broadcast PGNs are handled automatically
 
-// Static callback for broadcast PGNs (like Hello)
-void GNSSProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len)
+// Static callback for broadcast PGNs (Hello and Scan Request)
+void GNSSProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len)
 {
     // Check if this is a Hello PGN
     if (pgn == 200)
@@ -1096,18 +1119,18 @@ void GNSSProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len)
         // Src: 0x78 (120), PGN: 0xCB (203), Len: 7
         // IP_One, IP_Two, IP_Three, IP_Four, Subnet_One, Subnet_Two, Subnet_Three
         uint8_t subnetReply[] = {
-            0x80, 0x81,          // PGN header
-            GPS_SOURCE_ID,       // Source: 0x78 (120)
-            0xCB,                // PGN: 203
-            7,                   // Data length
-            192,                 // IP_One
-            168,                 // IP_Two
-            5,                   // IP_Three
-            124,                 // IP_Four (GPS is at .124)
-            255,                 // Subnet_One
-            255,                 // Subnet_Two
-            255,                 // Subnet_Three
-            0                    // CRC placeholder
+            0x80, 0x81,              // PGN header
+            GPS_SOURCE_ID,           // Source: 0x78 (120)
+            0xCB,                    // PGN: 203
+            7,                       // Data length
+            netConfig.currentIP[0],  // IP_One
+            netConfig.currentIP[1],  // IP_Two
+            netConfig.currentIP[2],  // IP_Three
+            netConfig.currentIP[3],  // IP_Four
+            netConfig.currentIP[0],  // Subnet_One
+            netConfig.currentIP[1],  // Subnet_Two
+            netConfig.currentIP[2],  // Subnet_Three
+            0                        // CRC placeholder
         };
         
         // Calculate and set CRC
@@ -1115,6 +1138,9 @@ void GNSSProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len)
         
         // Send the reply
         sendUDPbytes(subnetReply, sizeof(subnetReply));
+        Serial.printf("\r\n[GNSSProcessor] Scan reply sent: %d.%d.%d.%d / Subnet: %d.%d.%d", 
+                      netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2], netConfig.currentIP[3],
+                      netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
     }
 }
 

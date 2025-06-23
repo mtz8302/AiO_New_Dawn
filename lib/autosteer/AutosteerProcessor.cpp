@@ -13,6 +13,13 @@ extern void sendUDPbytes(uint8_t* data, int len);
 extern ConfigManager* configPTR;
 extern LEDManager* ledPTR;
 
+// External network config
+extern struct NetConfigStruct {
+    uint8_t currentIP[5];
+    uint8_t gatewayIP[5];
+    uint8_t broadcastIP[5];
+} netConfig;
+
 // Global pointer definition
 AutosteerProcessor* autosteerPTR = nullptr;
 
@@ -160,10 +167,19 @@ void AutosteerProcessor::process() {
     }
 }
 
-void AutosteerProcessor::handleHelloPGN(uint8_t pgn, const uint8_t* data, size_t len) {
-    // PGN 200 - Hello from AgIO, send reply
-    // Serial.print("\r\n[Autosteer] Hello from AgIO received - sending reply");
-    sendHelloReply();
+void AutosteerProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len) {
+    // Check if this is a Hello PGN
+    if (pgn == 200) {
+        // PGN 200 - Hello from AgIO, send reply
+        // Serial.print("\r\n[Autosteer] Hello from AgIO received - sending reply");
+        sendHelloReply();
+    }
+    // Check if this is a Scan Request PGN
+    else if (pgn == 202) {
+        // PGN 202 - Scan request from AgIO
+        Serial.print("\r\n[Autosteer] Scan request received - sending reply");
+        sendScanReply();
+    }
 }
 
 void AutosteerProcessor::sendHelloReply() {
@@ -186,6 +202,39 @@ void AutosteerProcessor::sendHelloReply() {
     // Send via UDP
     sendUDPbytes(helloFromSteer, sizeof(helloFromSteer));
     // Serial.print(" - SENT");
+}
+
+void AutosteerProcessor::sendScanReply() {
+    // Scan reply from AutoSteer - PGN 203 (0xCB)
+    // Format: {header, source, pgn, length, ip1, ip2, ip3, subnet1, subnet2, subnet3, checksum}
+    
+    uint8_t scanReply[] = {
+        0x80, 0x81,                    // Header
+        0x7E,                          // Source: Steer module
+        0xCB,                          // PGN: 203 Scan reply
+        0x07,                          // Length (data only)
+        netConfig.currentIP[0],        // IP octet 1
+        netConfig.currentIP[1],        // IP octet 2
+        netConfig.currentIP[2],        // IP octet 3
+        netConfig.currentIP[3],        // IP octet 4
+        netConfig.currentIP[0],        // Subnet octet 1 (repeat IP)
+        netConfig.currentIP[1],        // Subnet octet 2 (repeat IP)
+        netConfig.currentIP[2],        // Subnet octet 3 (repeat IP)
+        0                              // CRC placeholder
+    };
+    
+    // Calculate CRC
+    uint8_t crc = 0;
+    for (int i = 2; i < sizeof(scanReply) - 1; i++) {
+        crc += scanReply[i];
+    }
+    scanReply[sizeof(scanReply) - 1] = crc;
+    
+    // Send via UDP
+    sendUDPbytes(scanReply, sizeof(scanReply));
+    Serial.printf("\r\n[Autosteer] Scan reply sent: %d.%d.%d.%d / Subnet: %d.%d.%d", 
+                  netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2], netConfig.currentIP[3],
+                  netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
 }
 
 void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -363,14 +412,14 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
 // Static callback wrapper
 void AutosteerProcessor::handlePGNStatic(uint8_t pgn, const uint8_t* data, size_t len) {
     if (instance) {
-        // Don't print for PGN 254 or 200 since they come frequently
-        if (pgn != 254 && pgn != 200) {
+        // Don't print for PGN 254, 200, or 202 since they come frequently
+        if (pgn != 254 && pgn != 200 && pgn != 202) {
             Serial.printf("\r\n[Autosteer] Received PGN %d", pgn);
         }
         
         // Handle broadcast PGNs
-        if (pgn == 200) {
-            instance->handleHelloPGN(pgn, data, len);
+        if (pgn == 200 || pgn == 202) {
+            instance->handleBroadcastPGN(pgn, data, len);
         }
         else if (pgn == 251) {
             instance->handleSteerConfig(pgn, data, len);
