@@ -328,8 +328,9 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     Serial.print("\r\n  AckermanFix: "); Serial.print(steerSettings.AckermanFix);
     
     // Update PID controller with new Kp
-    pid.setKp(steerSettings.Kp);  // Use Kp from settings
-    Serial.printf("\r\n  PID updated with Kp=%d", steerSettings.Kp);
+    float scaledKp = steerSettings.Kp / 10.0f;  // AgOpenGPS sends Kp * 10
+    pid.setKp(scaledKp);
+    Serial.printf("\r\n  PID updated with Kp=%.1f", scaledKp);
 }
 
 void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -517,11 +518,19 @@ void AutosteerProcessor::updateMotorControl() {
     // Calculate PID output
     float pidOutput = pid.compute(targetAngle, currentAngle);
     
-    // Apply PWM scaling based on config
-    if (configPTR) {
-        float highPWM = configPTR->getHighPWM();
-        float lowPWM = configPTR->getLowPWM();
-        float minPWM = configPTR->getMinPWM();
+    // Apply PWM scaling - use steerSettings directly, not configPTR
+    if (steerSettings.highPWM > 0) {  // Check if we have valid settings
+        float highPWM = steerSettings.highPWM;
+        float lowPWM = steerSettings.lowPWM;
+        float minPWM = steerSettings.minPWM;
+        
+        // Debug what settings we're using
+        static uint32_t lastConfigDebug = 0;
+        if (millis() - lastConfigDebug > 1000) {
+            Serial.printf("\r\n[Autosteer] Using settings: High=%.0f Low=%.0f Min=%.0f", 
+                         highPWM, lowPWM, minPWM);
+            lastConfigDebug = millis();
+        }
         
         if (abs(pidOutput) < 0.1f) {
             // Dead zone
@@ -532,6 +541,14 @@ void AutosteerProcessor::updateMotorControl() {
             float pwmRange = highPWM - lowPWM;
             float scaledPWM = lowPWM + (absPID / 100.0f) * pwmRange;
             
+            // Debug PWM calculation
+            static uint32_t lastCalcDebug = 0;
+            if (millis() - lastCalcDebug > 500) {
+                Serial.printf("\r\n[Autosteer] PWM Calc: PID=%.1f absPID=%.1f range=%.0f scaledPWM=%.1f", 
+                             pidOutput, absPID, pwmRange, scaledPWM);
+                lastCalcDebug = millis();
+            }
+            
             // Ensure we don't exceed highPWM
             if (scaledPWM > highPWM) {
                 scaledPWM = highPWM;
@@ -540,6 +557,7 @@ void AutosteerProcessor::updateMotorControl() {
             // Apply minimum PWM threshold
             if (scaledPWM < minPWM) {
                 scaledPWM = 0.0f;
+                Serial.printf(" ZEROED(<%d)", (int)minPWM);
             }
             
             // Convert to percentage for motor driver
