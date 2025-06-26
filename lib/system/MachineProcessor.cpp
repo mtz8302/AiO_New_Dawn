@@ -197,7 +197,7 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
         // Serial.println("[MachineProcessor] Sent Hello reply (PGN 123)");
     }
     else if (pgn == 202) {
-        Serial.println("\r\n[MachineProcessor] Received Scan Request (PGN 202)");
+        // Serial.println("\r\n[MachineProcessor] Received Scan Request (PGN 202)");
         
         uint8_t scanReply[] = {
             0x80, 0x81,                    // Header
@@ -217,9 +217,9 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
         calculateAndSetCRC(scanReply, sizeof(scanReply));
         sendUDPbytes(scanReply, sizeof(scanReply));
         
-        Serial.printf("[MachineProcessor] Sent Scan reply IP: %d.%d.%d.%d",
-                      netConfig.currentIP[0], netConfig.currentIP[1], 
-                      netConfig.currentIP[2], netConfig.currentIP[3]);
+        // Serial.printf("[MachineProcessor] Sent Scan reply IP: %d.%d.%d.%d",
+        //               netConfig.currentIP[0], netConfig.currentIP[1], 
+        //               netConfig.currentIP[2], netConfig.currentIP[3]);
     }
 }
 
@@ -228,7 +228,6 @@ void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len
     
     // First check if this is a broadcast PGN
     if (pgn == 200 || pgn == 202) {
-        Serial.printf("\r\n[Machine] Received broadcast PGN %d via handler 238", pgn);
         handleBroadcastPGN(pgn, data, len);
         return;
     }
@@ -259,7 +258,6 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
     
     // First check if this is a broadcast PGN
     if (pgn == 200 || pgn == 202) {
-        Serial.printf("\r\n[Machine] Received broadcast PGN %d via handler 239", pgn);
         handleBroadcastPGN(pgn, data, len);
         return;
     }
@@ -281,26 +279,14 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
         }
     }
     
-    // Print when data changes or every 2 seconds
-    if (dataChanged || (millis() - lastPGN239Debug > 2000)) {
-        Serial.printf("\r\n[Machine] PGN 239 len=%d:", len);
-        // Print all bytes with labels
-        if (len >= 8) {
-            Serial.printf(" [0]uturn=0x%02X", data[0]);
-            Serial.printf(" [1]speed=0x%02X", data[1]);
-            Serial.printf(" [2]hydLift=0x%02X", data[2]);
-            Serial.printf(" [3]tram=0x%02X", data[3]);
-            Serial.printf(" [4]geoStop=0x%02X", data[4]);  // Per PGN.md
-            Serial.printf(" [5]reserved=0x%02X", data[5]);  // Per PGN.md
-            Serial.printf(" [6]SC1-8=0x%02X", data[6]);     // Section states 1-8
-            Serial.printf(" [7]SC9-16=0x%02X", data[7]);    // Section states 9-16
-        }
-        
-        // Show any extra bytes
-        for (int i = 8; i < len && i < 16; i++) {
-            Serial.printf(" [%d]=0x%02X", i, data[i]);
-        }
-        
+    // Only print when section data (bytes 6-7) changes
+    static uint8_t lastSectionBytes[2] = {0xFF, 0xFF};
+    bool sectionChanged = (len >= 8) && (data[6] != lastSectionBytes[0] || data[7] != lastSectionBytes[1]);
+    
+    if (sectionChanged) {
+        Serial.printf("\r\n[Machine] Sections changed: [6]SC1-8=0x%02X [7]SC9-16=0x%02X", data[6], data[7]);
+        lastSectionBytes[0] = data[6];
+        lastSectionBytes[1] = data[7];
         lastPGN239Debug = millis();
     }
     

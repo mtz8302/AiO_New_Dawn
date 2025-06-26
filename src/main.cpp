@@ -20,6 +20,7 @@
 #include "KeyaCANDriver.h"
 #include "LEDManager.h"
 #include "MachineProcessor.h"
+#include "SubnetManager.h"
 
 // Test mode flag - set to true to run motor tests
 static bool MOTOR_TEST_MODE = false;  // Disable for autosteer mode
@@ -310,6 +311,14 @@ void setup()
     Serial.print("\r\n✓ MachineProcessor initialized");
   } else {
     Serial.print("\r\n✗ MachineProcessor init failed");
+  }
+
+  // Initialize SubnetManager for PGN 201 handling
+  Serial.print("\r\n\n*** Initializing SubnetManager ***");
+  if (SubnetManager::init()) {
+    Serial.print("\r\n✓ SubnetManager initialized");
+  } else {
+    Serial.print("\r\n✗ SubnetManager init failed");
   }
 
   // Motor Driver Testing
@@ -748,13 +757,13 @@ void loop()
           // Convert knots to km/h
           speedKmh = gpsData.speedKnots * 1.852f;
           
-          // Debug output every 30 seconds
-          if (millis() - lastPWMTest > 30000)
-          {
-            lastPWMTest = millis();
-            Serial.printf("\r\n[PWM] GPS Speed: %.1f km/h = %.1f Hz", 
-                          speedKmh, pwmPTR->getSpeedPulseHz());
-          }
+          // Debug output every 30 seconds - commented out for quieter operation
+          // if (millis() - lastPWMTest > 30000)
+          // {
+          //   lastPWMTest = millis();
+          //   Serial.printf("\r\n[PWM] GPS Speed: %.1f km/h = %.1f Hz", 
+          //                 speedKmh, pwmPTR->getSpeedPulseHz());
+          // }
         }
       }
       

@@ -177,7 +177,7 @@ void AutosteerProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, si
     // Check if this is a Scan Request PGN
     else if (pgn == 202) {
         // PGN 202 - Scan request from AgIO
-        Serial.print("\r\n[Autosteer] Scan request received - sending reply");
+        // Serial.print("\r\n[Autosteer] Scan request received - sending reply");
         sendScanReply();
     }
 }
@@ -232,9 +232,9 @@ void AutosteerProcessor::sendScanReply() {
     
     // Send via UDP
     sendUDPbytes(scanReply, sizeof(scanReply));
-    Serial.printf("\r\n[Autosteer] Scan reply sent: %d.%d.%d.%d / Subnet: %d.%d.%d", 
-                  netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2], netConfig.currentIP[3],
-                  netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
+    // Serial.printf("\r\n[Autosteer] Scan reply sent: %d.%d.%d.%d / Subnet: %d.%d.%d", 
+    //               netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2], netConfig.currentIP[3],
+    //               netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
 }
 
 void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, size_t len) {

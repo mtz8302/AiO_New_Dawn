@@ -1138,9 +1138,9 @@ void GNSSProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t 
         
         // Send the reply
         sendUDPbytes(subnetReply, sizeof(subnetReply));
-        Serial.printf("\r\n[GNSSProcessor] Scan reply sent: %d.%d.%d.%d / Subnet: %d.%d.%d", 
-                      netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2], netConfig.currentIP[3],
-                      netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
+        // Serial.printf("\r\n[GNSSProcessor] Scan reply sent: %d.%d.%d.%d / Subnet: %d.%d.%d", 
+        //               netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2], netConfig.currentIP[3],
+        //               netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
     }
 }
 
