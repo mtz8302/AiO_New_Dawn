@@ -54,12 +54,12 @@ public:
     void setSpeed(float percent) override {
         float newSpeed = constrain(percent, -100.0f, 100.0f);
         
-        // Only print if speed changed significantly (more than 0.1%)
-        static float lastPrintedSpeed = 999.0f;  // Initialize to impossible value
-        if (fabs(newSpeed - lastPrintedSpeed) > 0.1f) {
-            Serial.printf("\r\n[Keya] setSpeed: %.1f%% = %.1f RPM", newSpeed, newSpeed);
-            lastPrintedSpeed = newSpeed;
-        }
+        // Only print if speed changed significantly (more than 0.1%) - commented out for quieter operation
+        // static float lastPrintedSpeed = 999.0f;  // Initialize to impossible value
+        // if (fabs(newSpeed - lastPrintedSpeed) > 0.1f) {
+        //     Serial.printf("\r\n[Keya] setSpeed: %.1f%% = %.1f RPM", newSpeed, newSpeed);
+        //     lastPrintedSpeed = newSpeed;
+        // }
         
         targetSpeed = newSpeed;
         // For a 100 RPM motor: -100% to +100% = -100 RPM to +100 RPM
@@ -201,13 +201,13 @@ public:
         // Calculate error as absolute difference between actual and commanded
         float error = abs(actualRPM - commandedRPM);
         
-        // Debug output every 500ms
-        static uint32_t lastSlipDebug = 0;
-        if (millis() - lastSlipDebug > 500) {
-            Serial.printf("\r\n[Keya] Slip check: Cmd=%.1f Act=%.1f Error=%.1f Counter=%d/%d", 
-                         commandedRPM, actualRPM, error, slipCounter, SLIP_COUNT_THRESHOLD);
-            lastSlipDebug = millis();
-        }
+        // Debug output every 500ms - commented out for quieter operation
+        // static uint32_t lastSlipDebug = 0;
+        // if (millis() - lastSlipDebug > 500) {
+        //     Serial.printf("\r\n[Keya] Slip check: Cmd=%.1f Act=%.1f Error=%.1f Counter=%d/%d", 
+        //                  commandedRPM, actualRPM, error, slipCounter, SLIP_COUNT_THRESHOLD);
+        //     lastSlipDebug = millis();
+        // }
         
         // Check if error exceeds commanded speed + tolerance
         // This matches the working example: if (error > abs(keyaCurrentSetSpeed) + 10)
@@ -258,22 +258,22 @@ private:
                 heartbeatValid = true;
                 lastHeartbeat = millis();
                 
-                // Debug output occasionally
-                static uint32_t lastHeartbeatDebug = 0;
-                if (millis() - lastHeartbeatDebug > 1000) {
-                    const char* errorStatus = (motorErrorCode == 0x4001) ? "Normal" : 
-                                            (motorErrorCode == 0) ? "Disabled" : "ERROR";
-                    Serial.printf("\r\n[Keya] Heartbeat: Pos=%u Speed=%.0f Current=%u Status=%s(0x%04X)",
-                                 motorPosition, actualRPM, motorCurrent, errorStatus, motorErrorCode);
-                    lastHeartbeatDebug = millis();
-                }
+                // Debug output occasionally - commented out for quieter operation
+                // static uint32_t lastHeartbeatDebug = 0;
+                // if (millis() - lastHeartbeatDebug > 1000) {
+                //     const char* errorStatus = (motorErrorCode == 0x4001) ? "Normal" : 
+                //                             (motorErrorCode == 0) ? "Disabled" : "ERROR";
+                //     Serial.printf("\r\n[Keya] Heartbeat: Pos=%u Speed=%.0f Current=%u Status=%s(0x%04X)",
+                //                  motorPosition, actualRPM, motorCurrent, errorStatus, motorErrorCode);
+                //     lastHeartbeatDebug = millis();
+                // }
             }
         }
         
         // Invalidate heartbeat if not received for 500ms
         if (heartbeatValid && millis() - lastHeartbeat > 500) {
             heartbeatValid = false;
-            Serial.print("\r\n[Keya] Heartbeat lost");
+            // Serial.print("\r\n[Keya] Heartbeat lost");
         }
     }
     

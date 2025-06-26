@@ -133,7 +133,7 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
                     size_t dataLen = udpPacket->recv.len - 6; // Subtract header(5) + crc(1)
                     
                     // Only print for non-254 PGNs to reduce noise
-                    if (pgn != 254) {
+                    if (pgn != 254 && pgn != 239) {  // Also skip PGN 239 (frequent machine data)
                         Serial.printf("\r\n[PGNProcessor] Calling %s for PGN %d", registrations[i].name, pgn);
                     }
                     registrations[i].callback(pgn, data, dataLen);

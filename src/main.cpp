@@ -19,6 +19,7 @@
 #include "AutosteerProcessor.h"
 #include "KeyaCANDriver.h"
 #include "LEDManager.h"
+#include "MachineProcessor.h"
 
 // Test mode flag - set to true to run motor tests
 static bool MOTOR_TEST_MODE = false;  // Disable for autosteer mode
@@ -303,6 +304,14 @@ void setup()
     Serial.print("\r\n✗ AutosteerProcessor init failed");
   }
 
+  // Initialize MachineProcessor
+  Serial.print("\r\n\n*** Initializing MachineProcessor ***");
+  if (MachineProcessor::init()) {
+    Serial.print("\r\n✓ MachineProcessor initialized");
+  } else {
+    Serial.print("\r\n✗ MachineProcessor init failed");
+  }
+
   // Motor Driver Testing
   if (MOTOR_TEST_MODE) {
     Serial.print("\r\n\n*** Motor Driver Test Mode ***");
@@ -464,6 +473,20 @@ void loop()
     // Don't return - let motor process() run below
   }
 
+  // Section diagnostics command handler (available in all modes)
+  if (Serial.available()) {
+    char cmd = Serial.read();
+    
+    if (cmd == 'd' || cmd == 'D') {
+      Serial.print("\r\n\n*** Running Section Diagnostics ***");
+      if (machinePTR) {
+        machinePTR->runSectionDiagnostics();
+      } else {
+        Serial.print("\r\nERROR: MachineProcessor not initialized!");
+      }
+    }
+  }
+  
   // Normal operation (non-test mode)
   // Process IMU data
   if (imuPTR)
@@ -499,6 +522,12 @@ void loop()
   if (autosteerPTR && !MOTOR_TEST_MODE)
   {
     autosteerPTR->process();
+  }
+  
+  // Process machine
+  if (machinePTR)
+  {
+    machinePTR->process();
   }
   
   // Update LEDs
@@ -619,60 +648,60 @@ void loop()
   }
 
 
-  // NAV processor status every 30 seconds
-  if (millis() - lastNAVStatus > 30000)
-  {
-    lastNAVStatus = millis();
+  // NAV processor status every 30 seconds - commented out for quieter operation
+  // if (millis() - lastNAVStatus > 30000)
+  // {
+  //   lastNAVStatus = millis();
 
-    if (navPTR)
-    {
-      navPTR->printStatus();
-    }
-  }
+  //   if (navPTR)
+  //   {
+  //     navPTR->printStatus();
+  //   }
+  // }
 
-  // CAN status every 30 seconds to monitor Keya motor
-  if (millis() - lastCANStatus > 30000)
-  {
-    lastCANStatus = millis();
+  // CAN status every 30 seconds to monitor Keya motor - commented out for quieter operation
+  // if (millis() - lastCANStatus > 30000)
+  // {
+  //   lastCANStatus = millis();
 
-    if (canPTR && canPTR->isCAN3Active())
-    {
-      Serial.printf("\r\n[CAN Status] CAN3 msgs: %lu, Keya detected: %s",
-                    canPTR->getCAN3MessageCount(),
-                    canPTR->isKeyaDetected() ? "YES" : "NO");
-    }
-  }
+  //   if (canPTR && canPTR->isCAN3Active())
+  //   {
+  //     Serial.printf("\r\n[CAN Status] CAN3 msgs: %lu, Keya detected: %s",
+  //                   canPTR->getCAN3MessageCount(),
+  //                   canPTR->isKeyaDetected() ? "YES" : "NO");
+  //   }
+  // }
   
-  // A/D status every 30 seconds with switch change detection
-  if (millis() - lastADStatus > 30000)
-  {
-    lastADStatus = millis();
+  // A/D status every 30 seconds with switch change detection - commented out for quieter operation
+  // if (millis() - lastADStatus > 30000)
+  // {
+  //   lastADStatus = millis();
     
-    if (adPTR)
-    {
-      Serial.printf("\r\n[A/D] WAS: %.1f° (%.2fV) Raw:%d | Work: %s | Steer: %s",
-                    adPTR->getWASAngle(), 
-                    adPTR->getWASVoltage(),
-                    adPTR->getWASRaw(),
-                    adPTR->isWorkSwitchOn() ? "ON" : "OFF",
-                    adPTR->isSteerSwitchOn() ? "ON" : "OFF");
+  //   if (adPTR)
+  //   {
+  //     Serial.printf("\r\n[A/D] WAS: %.1f° (%.2fV) Raw:%d | Work: %s | Steer: %s",
+  //                   adPTR->getWASAngle(), 
+  //                   adPTR->getWASVoltage(),
+  //                   adPTR->getWASRaw(),
+  //                   adPTR->isWorkSwitchOn() ? "ON" : "OFF",
+  //                   adPTR->isSteerSwitchOn() ? "ON" : "OFF");
       
-      // Check for switch changes
-      if (adPTR->hasWorkSwitchChanged())
-      {
-        Serial.printf("\r\n[A/D] Work switch changed to: %s", 
-                      adPTR->isWorkSwitchOn() ? "ON" : "OFF");
-        adPTR->clearWorkSwitchChange();
-      }
+  //     // Check for switch changes
+  //     if (adPTR->hasWorkSwitchChanged())
+  //     {
+  //       Serial.printf("\r\n[A/D] Work switch changed to: %s", 
+  //                     adPTR->isWorkSwitchOn() ? "ON" : "OFF");
+  //       adPTR->clearWorkSwitchChange();
+  //     }
       
-      if (adPTR->hasSteerSwitchChanged())
-      {
-        Serial.printf("\r\n[A/D] Steer switch changed to: %s", 
-                      adPTR->isSteerSwitchOn() ? "ON" : "OFF");
-        adPTR->clearSteerSwitchChange();
-      }
-    }
-  }
+  //     if (adPTR->hasSteerSwitchChanged())
+  //     {
+  //       Serial.printf("\r\n[A/D] Steer switch changed to: %s", 
+  //                     adPTR->isSteerSwitchOn() ? "ON" : "OFF");
+  //       adPTR->clearSteerSwitchChange();
+  //     }
+  //   }
+  // }
   
   // Update PWM speed pulse - TEST MODE with artificial speed
   static uint32_t lastSpeedUpdate = 0;
@@ -734,23 +763,23 @@ void loop()
     }
   }
 
-  // Very detailed status every 30 seconds
-  if (millis() - lastDetailedStatus > 30000)
-  {
-    lastDetailedStatus = millis();
+  // Very detailed status every 30 seconds - commented out for quieter operation
+  // if (millis() - lastDetailedStatus > 30000)
+  // {
+  //   lastDetailedStatus = millis();
 
-    Serial.print("\r\n\n=== Detailed System Status ===");
-    hardwarePTR->printHardwareStatus();
-    serialPTR->printSerialStatus();
-    gnssPTR->printStats();
+  //   Serial.print("\r\n\n=== Detailed System Status ===");
+  //   hardwarePTR->printHardwareStatus();
+  //   serialPTR->printSerialStatus();
+  //   gnssPTR->printStats();
 
-    if (imuPTR)
-    {
-      imuPTR->printStatus();
-    }
+  //   if (imuPTR)
+  //   {
+  //     imuPTR->printStatus();
+  //   }
 
-    Serial.print("\r\n=== End Status ===\r\n");
-  }
+  //   Serial.print("\r\n=== End Status ===\r\n");
+  // }
 
   // Process GPS1 data if available
   static uint32_t gps1ByteCount = 0;
@@ -765,15 +794,21 @@ void loop()
     gnssPTR->processNMEAChar(c);
   }
   
-  // Report GPS1 byte count every 5 seconds for debugging
-  if (millis() - lastGPS1Report > 5000)
-  {
+  // Report GPS1 byte count every 5 seconds for debugging - commented out for quieter operation
+  // if (millis() - lastGPS1Report > 5000)
+  // {
+  //   lastGPS1Report = millis();
+  //   if (gps1ByteCount > 0) {
+  //     Serial.printf("\r\n[GPS1] Received %lu bytes in last 5s (total: %lu)", gps1ByteCount, gps1TotalBytes);
+  //   } else {
+  //     Serial.printf("\r\n[GPS1] No data received in last 5s");
+  //   }
+  //   gps1ByteCount = 0;
+  // }
+  
+  // Still update the counter
+  if (millis() - lastGPS1Report > 5000) {
     lastGPS1Report = millis();
-    if (gps1ByteCount > 0) {
-      Serial.printf("\r\n[GPS1] Received %lu bytes in last 5s (total: %lu)", gps1ByteCount, gps1TotalBytes);
-    } else {
-      Serial.printf("\r\n[GPS1] No data received in last 5s");
-    }
     gps1ByteCount = 0;
   }
   
