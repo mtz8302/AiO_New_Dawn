@@ -183,12 +183,12 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
         // Serial.println("\r\n[MachineProcessor] Received Hello broadcast (PGN 200)");
         
         uint8_t helloReply[] = {
-            0x80, 0x81,
-            MACHINE_SOURCE_ID,
-            MACHINE_HELLO_REPLY,
-            5,
-            0, 0, 0, 0, 0,
-            0
+            0x80, 0x81,               // Header
+            MACHINE_HELLO_REPLY,      // Source: Machine module (123)
+            MACHINE_HELLO_REPLY,      // PGN: Machine reply (123)
+            5,                        // Length
+            0, 0, 0, 0, 0,           // Data
+            0                         // CRC placeholder
         };
         
         calculateAndSetCRC(helloReply, sizeof(helloReply));
@@ -200,24 +200,26 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
         Serial.println("\r\n[MachineProcessor] Received Scan Request (PGN 202)");
         
         uint8_t scanReply[] = {
-            0x80, 0x81,
-            MACHINE_SOURCE_ID,
-            0xCB,
-            7,
+            0x80, 0x81,                    // Header
+            MACHINE_HELLO_REPLY,           // Source: Machine module (123)
+            0xCB,                          // PGN: 203 Scan reply
+            7,                             // Length
             netConfig.currentIP[0],
             netConfig.currentIP[1],
             netConfig.currentIP[2],
             netConfig.currentIP[3],
-            netConfig.currentIP[0],
+            netConfig.currentIP[0],        // Subnet (repeat IP)
             netConfig.currentIP[1],
             netConfig.currentIP[2],
-            0
+            0                              // CRC placeholder
         };
         
         calculateAndSetCRC(scanReply, sizeof(scanReply));
         sendUDPbytes(scanReply, sizeof(scanReply));
         
-        Serial.println("[MachineProcessor] Sent Scan reply (PGN 203)");
+        Serial.printf("[MachineProcessor] Sent Scan reply IP: %d.%d.%d.%d",
+                      netConfig.currentIP[0], netConfig.currentIP[1], 
+                      netConfig.currentIP[2], netConfig.currentIP[3]);
     }
 }
 
@@ -226,6 +228,7 @@ void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len
     
     // First check if this is a broadcast PGN
     if (pgn == 200 || pgn == 202) {
+        Serial.printf("\r\n[Machine] Received broadcast PGN %d via handler 238", pgn);
         handleBroadcastPGN(pgn, data, len);
         return;
     }
@@ -256,6 +259,7 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
     
     // First check if this is a broadcast PGN
     if (pgn == 200 || pgn == 202) {
+        Serial.printf("\r\n[Machine] Received broadcast PGN %d via handler 239", pgn);
         handleBroadcastPGN(pgn, data, len);
         return;
     }
