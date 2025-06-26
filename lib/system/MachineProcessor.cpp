@@ -180,7 +180,6 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
     }
     
     if (pgn == 200) {
-        // Serial.println("\r\n[MachineProcessor] Received Hello broadcast (PGN 200)");
         
         uint8_t helloReply[] = {
             0x80, 0x81,               // Header
@@ -194,10 +193,8 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
         calculateAndSetCRC(helloReply, sizeof(helloReply));
         sendUDPbytes(helloReply, sizeof(helloReply));
         
-        // Serial.println("[MachineProcessor] Sent Hello reply (PGN 123)");
     }
     else if (pgn == 202) {
-        // Serial.println("\r\n[MachineProcessor] Received Scan Request (PGN 202)");
         
         uint8_t scanReply[] = {
             0x80, 0x81,                    // Header
@@ -217,9 +214,6 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
         calculateAndSetCRC(scanReply, sizeof(scanReply));
         sendUDPbytes(scanReply, sizeof(scanReply));
         
-        // Serial.printf("[MachineProcessor] Sent Scan reply IP: %d.%d.%d.%d",
-        //               netConfig.currentIP[0], netConfig.currentIP[1], 
-        //               netConfig.currentIP[2], netConfig.currentIP[3]);
     }
 }
 
@@ -466,11 +460,9 @@ void MachineProcessor::updateSectionOutputs() {
         if (sectionState.isOn[i]) {
             // Section ON: HIGH = LED ON
             getSectionOutputs().setPin(SECTION_PINS[i], 0, 1);
-            // Serial.printf("Section %d: ON (LED lit)\n", i+1);
         } else {
             // Section OFF: LOW = LED OFF
             getSectionOutputs().setPin(SECTION_PINS[i], 0, 0);
-            // Serial.printf("Section %d: OFF\n", i+1);
         }
     }
 }

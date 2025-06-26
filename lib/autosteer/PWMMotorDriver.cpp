@@ -78,7 +78,6 @@ void PWMMotorDriver::enable(bool en) {
         status.actualSpeed = 0.0f;
     }
     
-    // Serial.printf("\r\n[PWMMotor] Motor %s", en ? "ENABLED" : "DISABLED");  // Commented out to reduce spam
 }
 
 void PWMMotorDriver::setSpeed(float speedPercent) {

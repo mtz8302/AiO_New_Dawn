@@ -45,7 +45,6 @@ void SubnetManager::handlePGN201(uint8_t pgn, const uint8_t* data, size_t len) {
         return;
     }
 
-    //Serial.print("\r\n[SubnetManager] PGN 201 Subnet Change received");
     
     // Verify packet length (need at least 6 bytes after header)
     if (len < 3) {

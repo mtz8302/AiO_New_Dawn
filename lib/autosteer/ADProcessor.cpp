@@ -72,14 +72,6 @@ void ADProcessor::process()
     kickoutAnalogRaw = analogRead(AD_KICKOUT_A_PIN);
     motorCurrentRaw = analogRead(AD_CURRENT_PIN);
     
-    // Debug pin 2 periodically - commented out for quieter operation
-    // static uint32_t lastDebugTime = 0;
-    
-    // if (millis() - lastDebugTime > 1000) {
-    //     int pin2Digital = digitalRead(AD_STEER_PIN);
-    //     Serial.printf("\r\n[AD] Pin %d: digital=%d", AD_STEER_PIN, pin2Digital);
-    //     lastDebugTime = millis();
-    // }
     
     lastProcessTime = millis();
 }

@@ -247,11 +247,6 @@ bool GNSSProcessor::validateChecksum()
 
 bool GNSSProcessor::processMessage()
 {
-    // Debug disabled - buffer shows garbage during errors
-    // if (enableDebug && isUnicoreMessage)
-    // {
-    //     Serial.printf("\r\n[GNSS] Processing Unicore message: %s", parseBuffer);
-    // }
     
     parseFields();
 
@@ -884,13 +879,6 @@ bool GNSSProcessor::parseINSPVAA()
     // Update the last update time - this is critical!
     gpsData.lastUpdateTime = millis();
     
-    // Debug output disabled to reduce noise - uncomment when needed
-    // if (enableDebug)
-    // {
-    //     Serial.printf("\r\n[GNSS] INSPVAA processed: Lat=%.8f Lon=%.8f Alt=%.1f Hdg=%.1f Roll=%.1f Pitch=%.1f",
-    //                   gpsData.latitude, gpsData.longitude, gpsData.altitude, 
-    //                   gpsData.dualHeading, gpsData.dualRoll, gpsData.insPitch);
-    // }
     
     return true;
 }
@@ -903,12 +891,6 @@ bool GNSSProcessor::parseINSPVAXA()
     // ext_sol_stat,time_since_update*checksum
     // NOTE: Field 15 is undulation, velocities start at field 16
     
-    // Debug: show first few fields
-    // if (enableDebug)
-    // {
-    //     Serial.printf("\r\n[GNSS] INSPVAXA fields: [0]=%s [1]=%s [2]=%s [10]=%s [11]=%s [12]=%s", 
-    //                   fields[0], fields[1], fields[2], fields[10], fields[11], fields[12]);
-    // }
     
     // INSPVAXA typically has 32-33 fields depending on trailing fields
     if (fieldCount < 32)
@@ -1098,7 +1080,6 @@ void GNSSProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t 
     if (pgn == 200)
     {
         // When we receive a Hello from AgIO, we should respond
-        // Serial.print("\r\n[GNSSProcessor] Received Hello PGN, sending reply");
         
         // GPS Hello reply format from PGN.md: 
         // Source: 0x78 (120), PGN: 0x78 (120), Length: 5
@@ -1113,7 +1094,6 @@ void GNSSProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t 
     // Check if this is a Scan Request PGN
     else if (pgn == 202)
     {
-        // Serial.print("\r\n[GNSSProcessor] Received Scan Request PGN, sending subnet reply");
         
         // Subnet GPS reply format from PGN.md:
         // Src: 0x78 (120), PGN: 0xCB (203), Len: 7
@@ -1138,9 +1118,6 @@ void GNSSProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t 
         
         // Send the reply
         sendUDPbytes(subnetReply, sizeof(subnetReply));
-        // Serial.printf("\r\n[GNSSProcessor] Scan reply sent: %d.%d.%d.%d / Subnet: %d.%d.%d", 
-        //               netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2], netConfig.currentIP[3],
-        //               netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
     }
 }
 

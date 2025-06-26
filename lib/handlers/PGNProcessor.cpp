@@ -57,7 +57,6 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
 
     if (ev == MG_EV_READ && mg_ntohs(udpPacket->rem.port) == 9999 && udpPacket->recv.len >= 5)
     {
-        // Serial.printf("PGN received: type=%d, len=%d\r\n", udpPacket->recv.buf[3], udpPacket->recv.len);
 
         // Verify first 3 PGN header bytes
         if (udpPacket->recv.buf[0] != 128 || udpPacket->recv.buf[1] != 129 || udpPacket->recv.buf[2] != 127)
@@ -70,7 +69,6 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
         
         // Debug: show registered callbacks for this PGN
         if (pgn == 200) {
-            // Serial.printf("\r\n[DEBUG] Hello PGN 200 received, %d callbacks registered", registrationCount);
             for (size_t i = 0; i < registrationCount; i++) {
                 if (registrations[i].pgn == 200) {
                     Serial.printf("\r\n  - Found callback: %s", registrations[i].name);
@@ -85,15 +83,12 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
         // For broadcast PGNs, call ALL registered callbacks
         if (isBroadcast)
         {
-            // Commented out for quieter operation
-            // Serial.printf("\r\n[PGNProcessor] Broadcasting PGN %d to all %d registered handlers", pgn, registrationCount);
             
             const uint8_t* data = &udpPacket->recv.buf[5];
             size_t dataLen = udpPacket->recv.len - 6; // Subtract header(3) + pgn(1) + len(1) + crc(1)
             
             for (size_t i = 0; i < registrationCount; i++)
             {
-                // Serial.printf("\r\n[PGNProcessor] Broadcasting to %s", registrations[i].name);
                 registrations[i].callback(pgn, data, dataLen);
                 handled = true;
             }
@@ -106,26 +101,7 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
                 if (registrations[i].pgn == pgn)
                 {
                     // Found a registered handler - call it
-                    // if (pgn == 254) {
-                    //     Serial.printf("\r\n[PGNProcessor] Routing PGN %d to %s, len=%d", pgn, registrations[i].name, udpPacket->recv.len);
-                    // }
                     
-                    // Debug: Print full packet for PGN 254 (commented out for now)
-                    // if (pgn == 254) {
-                    //     Serial.printf("\r\n[PGNProcessor] PGN 254 full packet:");
-                    //     for (size_t j = 0; j < udpPacket->recv.len; j++) {
-                    //         Serial.printf(" %02X", udpPacket->recv.buf[j]);
-                    //     }
-                    //     Serial.printf("\r\n[PGNProcessor] Header(5): %02X %02X %02X %02X %02X",
-                    //                   udpPacket->recv.buf[0], udpPacket->recv.buf[1], 
-                    //                   udpPacket->recv.buf[2], udpPacket->recv.buf[3], 
-                    //                   udpPacket->recv.buf[4]);
-                    //     Serial.printf("\r\n[PGNProcessor] Speed(2): %02X %02X", 
-                    //                   udpPacket->recv.buf[5], udpPacket->recv.buf[6]);
-                    //     Serial.printf("\r\n[PGNProcessor] Status: %02X", udpPacket->recv.buf[7]);
-                    //     Serial.printf("\r\n[PGNProcessor] SteerAngle(2): %02X %02X", 
-                    //                   udpPacket->recv.buf[8], udpPacket->recv.buf[9]);
-                    // }
                     
                     // Pass the data starting after the 5-byte header
                     // PGN 254 data starts at position 5: speed(2), status(1), steerAngle(2), etc.

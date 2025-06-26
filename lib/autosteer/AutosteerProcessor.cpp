@@ -134,12 +134,6 @@ void AutosteerProcessor::process() {
     }
     lastButtonReading = buttonReading;
     
-    // Print button state every 500ms (for debugging) - commented out for quieter operation
-    // if (currentTime - lastButtonPrint > 500) {
-    //     Serial.printf("\r\n[Autosteer] Button: %s, steerState: %d, guidance: %d", 
-    //                   buttonReading ? "HIGH" : "LOW", steerState, guidanceActive);
-    //     lastButtonPrint = currentTime;
-    // }
     
     // Check Keya motor slip if steering is active
     if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN && 
@@ -171,13 +165,11 @@ void AutosteerProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, si
     // Check if this is a Hello PGN
     if (pgn == 200) {
         // PGN 200 - Hello from AgIO, send reply
-        // Serial.print("\r\n[Autosteer] Hello from AgIO received - sending reply");
         sendHelloReply();
     }
     // Check if this is a Scan Request PGN
     else if (pgn == 202) {
         // PGN 202 - Scan request from AgIO
-        // Serial.print("\r\n[Autosteer] Scan request received - sending reply");
         sendScanReply();
     }
 }
@@ -185,8 +177,6 @@ void AutosteerProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, si
 void AutosteerProcessor::sendHelloReply() {
     // Hello from AutoSteer - PGN 126 (0x7E)
     // Format: {header, source, pgn, length, angleLo, angleHi, countsLo, countsHi, switches, checksum}
-    
-    // Serial.print("\r\n[Autosteer] Sending hello reply...");
     
     uint8_t helloFromSteer[] = {
         128, 129,       // Header (0x80, 0x81)
@@ -201,7 +191,6 @@ void AutosteerProcessor::sendHelloReply() {
     
     // Send via UDP
     sendUDPbytes(helloFromSteer, sizeof(helloFromSteer));
-    // Serial.print(" - SENT");
 }
 
 void AutosteerProcessor::sendScanReply() {
@@ -232,9 +221,6 @@ void AutosteerProcessor::sendScanReply() {
     
     // Send via UDP
     sendUDPbytes(scanReply, sizeof(scanReply));
-    // Serial.printf("\r\n[Autosteer] Scan reply sent: %d.%d.%d.%d / Subnet: %d.%d.%d", 
-    //               netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2], netConfig.currentIP[3],
-    //               netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
 }
 
 void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -345,9 +331,6 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     // PGN 254 - Steer Data (comes at 10Hz from AgOpenGPS)
     // For now, we only care about the autosteer enable bit
     
-    // Comment out frequent logging
-    // Serial.printf("\r\n[Autosteer] handleSteerData called! pgn=%d, len=%d", pgn, len);
-    
     if (len < 3) {
         Serial.print(" - Too short, ignoring");
         return;  // Too short, ignore
@@ -356,11 +339,6 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     lastPGN254Time = millis();
     lastCommandTime = millis();  // Update watchdog timer
     
-    // Debug: print first few data bytes (commented out for now)
-    // Serial.print(" Data:");
-    // for (int i = 0; i < 8 && i < len; i++) {
-    //     Serial.printf(" %02X", data[i]);
-    // }
     
     // Data format (from PGNProcessor we get data starting at speed):
     // [0-1] = Speed (uint16, cm/s)
@@ -380,19 +358,11 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     uint8_t status = data[2];
     bool newAutosteerState = (status & 0x40) != 0;  // Bit 6 is autosteer enable
     
-    // Debug speed and autosteer state - commented out for quieter operation
-    // static uint32_t lastSpeedDebug = 0;
-    // if (millis() - lastSpeedDebug > 1000) {
-    //     Serial.printf("\r\n[Autosteer] PGN254: Speed=%dcm/s (%.1fkm/h) AutosteerBit=%d", 
-    //                   speedCmS, vehicleSpeed, newAutosteerState);
-    //     lastSpeedDebug = millis();
-    // }
     
     // Track guidance status changes
     prevGuidanceStatus = guidanceActive;
     guidanceActive = (status & 0x01) != 0;           // Bit 0 is guidance active
     guidanceStatusChanged = (guidanceActive != prevGuidanceStatus);
-    
     // Extract steer angle
     int16_t angleRaw = (int16_t)(data[4] << 8 | data[3]);
     targetAngle = angleRaw / 100.0f;
@@ -404,10 +374,6 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     uint8_t sections1_8 = data[6];
     uint8_t sections9_16 = data[7];
     machineSections = (uint16_t)(sections9_16 << 8 | sections1_8);
-    
-    // Only print detailed info on state changes (commented out frequent logging)
-    // Serial.printf(" Speed=%.1fkm/h Status=0x%02X(Auto=%d,Guide=%d) Angle=%.1f° XTE=%d Sections=%04X", 
-    //               vehicleSpeed, status, newAutosteerState, guidanceActive, targetAngle, crossTrackError, machineSections);
     
     // Only print on state change to avoid spam
     if (newAutosteerState != autosteerEnabled) {
@@ -505,15 +471,6 @@ void AutosteerProcessor::updateMotorControl() {
     
     // Check if steering should be active
     if (!shouldSteerBeActive()) {
-        // Debug why it's not active - commented out for quieter operation
-        // static uint32_t lastInactiveDebug = 0;
-        // if (millis() - lastInactiveDebug > 1000) {
-        //     Serial.printf("\r\n[Autosteer] Motor disabled - guidance:%d enabled:%d state:%d speed:%.1fkm/h watchdog:%lums", 
-        //                   guidanceActive, autosteerEnabled, steerState, vehicleSpeed,
-        //                   millis() - lastCommandTime);
-        //     lastInactiveDebug = millis();
-        // }
-        
         // Stop motor
         motorSpeed = 0.0f;
         if (motorPTR) {
@@ -532,14 +489,6 @@ void AutosteerProcessor::updateMotorControl() {
         float lowPWM = steerSettings.lowPWM;
         float minPWM = steerSettings.minPWM;
         
-        // Debug what settings we're using - commented out for quieter operation
-        // static uint32_t lastConfigDebug = 0;
-        // if (millis() - lastConfigDebug > 1000) {
-        //     Serial.printf("\r\n[Autosteer] Using settings: High=%.0f Low=%.0f Min=%.0f", 
-        //                  highPWM, lowPWM, minPWM);
-        //     lastConfigDebug = millis();
-        // }
-        
         if (abs(pidOutput) < 0.1f) {
             // Dead zone
             motorSpeed = 0.0f;
@@ -548,14 +497,6 @@ void AutosteerProcessor::updateMotorControl() {
             float absPID = abs(pidOutput);
             float pwmRange = highPWM - lowPWM;
             float scaledPWM = lowPWM + (absPID / 100.0f) * pwmRange;
-            
-            // Debug PWM calculation - commented out for quieter operation
-            // static uint32_t lastCalcDebug = 0;
-            // if (millis() - lastCalcDebug > 500) {
-            //     Serial.printf("\r\n[Autosteer] PWM Calc: PID=%.1f absPID=%.1f range=%.0f scaledPWM=%.1f", 
-            //                  pidOutput, absPID, pwmRange, scaledPWM);
-            //     lastCalcDebug = millis();
-            // }
             
             // Ensure we don't exceed highPWM
             if (scaledPWM > highPWM) {
@@ -588,13 +529,6 @@ void AutosteerProcessor::updateMotorControl() {
         motorPTR->setSpeed(motorSpeed);
     }
     
-    // Debug output (reduced frequency) - commented out for quieter operation
-    // static uint32_t lastMotorDebug = 0;
-    // if (millis() - lastMotorDebug > 250) {  // Every 250ms
-    //     Serial.printf("\r\n[Autosteer] Motor: Target=%.1f° Current=%.1f° PID=%.1f Speed=%.1f%%", 
-    //                   targetAngle, currentAngle, pidOutput, motorSpeed);
-    //     lastMotorDebug = millis();
-    // }
 }
 
 bool AutosteerProcessor::shouldSteerBeActive() const {
@@ -614,14 +548,6 @@ bool AutosteerProcessor::shouldSteerBeActive() const {
     bool active = guidanceActive &&           // Guidance line active (bit 0 from PGN 254)
                   (steerState == 0) &&        // Our button/OSB state (0=active)
                   (vehicleSpeed > 0.1f);      // Moving (TODO: use MinSpeed from config)
-    
-    // Debug output - commented out for quieter operation
-    // static uint32_t lastActiveDebug = 0;
-    // if (!active && millis() - lastActiveDebug > 1000) {
-    //     Serial.printf("\r\n[Autosteer] Not active: guidance=%d steerState=%d speed=%.1f", 
-    //                   guidanceActive, steerState, vehicleSpeed);
-    //     lastActiveDebug = millis();
-    // }
     
     return active;
 }

@@ -117,8 +117,6 @@ void setup()
     ledPTR->setBrightness(configPTR->getLEDBrightness());
     Serial.printf("\r\n  - Brightness: %d%%", ledPTR->getBrightness());
     
-    // Optional: Run LED test
-    // ledPTR->testLEDs();
   }
   else
   {
@@ -177,8 +175,6 @@ void setup()
 
     // Print initial stats
     gnssPTR->printStats();
-    
-    // PGN callbacks handled automatically - no registration needed
   }
   else
   {
@@ -403,9 +399,7 @@ void loop()
 
   // Motor test mode interactive commands
   if (MOTOR_TEST_MODE && motorPTR) {
-    
     // Check for serial commands
-    
     if (Serial.available()) {
       char cmd = Serial.read();
       
@@ -477,8 +471,6 @@ void loop()
           break;
       }
     }
-    
-    
     // Don't return - let motor process() run below
   }
 
@@ -496,7 +488,6 @@ void loop()
     }
   }
   
-  // Normal operation (non-test mode)
   // Process IMU data
   if (imuPTR)
   {
@@ -546,12 +537,6 @@ void loop()
   {
     lastLEDUpdate = millis();
     
-    // Debug print once
-    if (!ledDebugPrinted) {
-      Serial.print("\r\n[LED] Update loop started");
-      ledDebugPrinted = true;
-    }
-    
     // Power/Ethernet LED
     // TODO: Add proper ethernet link detection when NetworkBase is updated
     bool ethernetUp = true;  // For now assume ethernet is up
@@ -562,15 +547,6 @@ void loop()
       ledPTR->setGPSState(gnssPTR->getData().fixQuality, gnssPTR->hasGPS());
     }
     
-    // Steer LED - commented out for minimal AutosteerProcessor
-    /*
-    if (adPTR && autosteerPTR) {
-      bool wasReady = adPTR->getWASRaw() > 0;  // Simple WAS presence check
-      ledPTR->setSteerState(wasReady, 
-                           autosteerPTR->isEnabled(), 
-                           autosteerPTR->getState() == SteerState::ACTIVE);
-    }
-    */
     
     // IMU/INS LED
     if (imuPTR && imuPTR->getIMUType() != IMUType::NONE) {
@@ -591,14 +567,6 @@ void loop()
         insValid = false;
       }
       
-      // Debug output once
-      static bool insDebugPrinted = false;
-      if (!insDebugPrinted) {
-        Serial.printf("\r\n[LED] INS: alignStatus=%d, detected=%d, init=%d, valid=%d",
-                     gpsData.insAlignmentStatus, insDetected, insInitialized, insValid);
-        insDebugPrinted = true;
-      }
-      
       ledPTR->setIMUState(insDetected, insInitialized, insValid);
     } else {
       // No IMU/INS detected
@@ -609,38 +577,6 @@ void loop()
     ledPTR->update();
   }
   
-  // Autosteer status - commented out for minimal AutosteerProcessor
-  /*
-  if (autosteerPTR && !MOTOR_TEST_MODE && millis() - lastAutosteerStatus > 2000)
-  {
-    lastAutosteerStatus = millis();
-    
-    const char* stateStr = "OFF";
-    switch(autosteerPTR->getState()) {
-      case SteerState::OFF: stateStr = "OFF"; break;
-      case SteerState::READY: stateStr = "READY"; break;
-      case SteerState::ACTIVE: stateStr = "ACTIVE"; break;
-    }
-    
-    // Show RPM info if using Keya motor
-    if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN) {
-        KeyaCANDriver* keya = static_cast<KeyaCANDriver*>(motorPTR);
-        Serial.printf("\r\n[Autosteer] State: %s | Target: %.1f° | Current: %.1f° | Motor: %.1f%% | RPM: Cmd=%.0f Act=%.0f",
-                      stateStr,
-                      autosteerPTR->getTargetAngle(),
-                      autosteerPTR->getCurrentAngle(),
-                      autosteerPTR->getMotorSpeed(),
-                      keya->getCommandedRPM(),
-                      keya->getActualRPM());
-    } else {
-        Serial.printf("\r\n[Autosteer] State: %s | Target: %.1f° | Current: %.1f° | Motor: %.1f%%",
-                      stateStr,
-                      autosteerPTR->getTargetAngle(),
-                      autosteerPTR->getCurrentAngle(),
-                      autosteerPTR->getMotorSpeed());
-    }
-  }
-  */
 
   // Quick status print every second
   if (millis() - lastPrint > 1000)
@@ -657,60 +593,8 @@ void loop()
   }
 
 
-  // NAV processor status every 30 seconds - commented out for quieter operation
-  // if (millis() - lastNAVStatus > 30000)
-  // {
-  //   lastNAVStatus = millis();
 
-  //   if (navPTR)
-  //   {
-  //     navPTR->printStatus();
-  //   }
-  // }
-
-  // CAN status every 30 seconds to monitor Keya motor - commented out for quieter operation
-  // if (millis() - lastCANStatus > 30000)
-  // {
-  //   lastCANStatus = millis();
-
-  //   if (canPTR && canPTR->isCAN3Active())
-  //   {
-  //     Serial.printf("\r\n[CAN Status] CAN3 msgs: %lu, Keya detected: %s",
-  //                   canPTR->getCAN3MessageCount(),
-  //                   canPTR->isKeyaDetected() ? "YES" : "NO");
-  //   }
-  // }
   
-  // A/D status every 30 seconds with switch change detection - commented out for quieter operation
-  // if (millis() - lastADStatus > 30000)
-  // {
-  //   lastADStatus = millis();
-    
-  //   if (adPTR)
-  //   {
-  //     Serial.printf("\r\n[A/D] WAS: %.1f° (%.2fV) Raw:%d | Work: %s | Steer: %s",
-  //                   adPTR->getWASAngle(), 
-  //                   adPTR->getWASVoltage(),
-  //                   adPTR->getWASRaw(),
-  //                   adPTR->isWorkSwitchOn() ? "ON" : "OFF",
-  //                   adPTR->isSteerSwitchOn() ? "ON" : "OFF");
-      
-  //     // Check for switch changes
-  //     if (adPTR->hasWorkSwitchChanged())
-  //     {
-  //       Serial.printf("\r\n[A/D] Work switch changed to: %s", 
-  //                     adPTR->isWorkSwitchOn() ? "ON" : "OFF");
-  //       adPTR->clearWorkSwitchChange();
-  //     }
-      
-  //     if (adPTR->hasSteerSwitchChanged())
-  //     {
-  //       Serial.printf("\r\n[A/D] Steer switch changed to: %s", 
-  //                     adPTR->isSteerSwitchOn() ? "ON" : "OFF");
-  //       adPTR->clearSteerSwitchChange();
-  //     }
-  //   }
-  // }
   
   // Update PWM speed pulse - TEST MODE with artificial speed
   static uint32_t lastSpeedUpdate = 0;
@@ -757,13 +641,6 @@ void loop()
           // Convert knots to km/h
           speedKmh = gpsData.speedKnots * 1.852f;
           
-          // Debug output every 30 seconds - commented out for quieter operation
-          // if (millis() - lastPWMTest > 30000)
-          // {
-          //   lastPWMTest = millis();
-          //   Serial.printf("\r\n[PWM] GPS Speed: %.1f km/h = %.1f Hz", 
-          //                 speedKmh, pwmPTR->getSpeedPulseHz());
-          // }
         }
       }
       
@@ -772,23 +649,6 @@ void loop()
     }
   }
 
-  // Very detailed status every 30 seconds - commented out for quieter operation
-  // if (millis() - lastDetailedStatus > 30000)
-  // {
-  //   lastDetailedStatus = millis();
-
-  //   Serial.print("\r\n\n=== Detailed System Status ===");
-  //   hardwarePTR->printHardwareStatus();
-  //   serialPTR->printSerialStatus();
-  //   gnssPTR->printStats();
-
-  //   if (imuPTR)
-  //   {
-  //     imuPTR->printStatus();
-  //   }
-
-  //   Serial.print("\r\n=== End Status ===\r\n");
-  // }
 
   // Process GPS1 data if available
   static uint32_t gps1ByteCount = 0;
@@ -802,18 +662,6 @@ void loop()
     gps1TotalBytes++;
     gnssPTR->processNMEAChar(c);
   }
-  
-  // Report GPS1 byte count every 5 seconds for debugging - commented out for quieter operation
-  // if (millis() - lastGPS1Report > 5000)
-  // {
-  //   lastGPS1Report = millis();
-  //   if (gps1ByteCount > 0) {
-  //     Serial.printf("\r\n[GPS1] Received %lu bytes in last 5s (total: %lu)", gps1ByteCount, gps1TotalBytes);
-  //   } else {
-  //     Serial.printf("\r\n[GPS1] No data received in last 5s");
-  //   }
-  //   gps1ByteCount = 0;
-  // }
   
   // Still update the counter
   if (millis() - lastGPS1Report > 5000) {
