@@ -64,42 +64,27 @@ void setup()
   configPTR = new ConfigManager();
   Serial.print("\r\n- ConfigManager initialized");
 
-  // Test HardwareManager
-  Serial.print("\r\n\n*** Testing HardwareManager ***");
+  // Initialize HardwareManager
   hardwarePTR = new HardwareManager();
   if (hardwarePTR->initializeHardware())
   {
-    Serial.print("\r\n✓ HardwareManager SUCCESS");
-
-    // Test some pin access methods
-    Serial.printf("\r\n  - WAS pin: A%i", hardwarePTR->getWASSensorPin() - A0);
-    Serial.printf("\r\n  - PWM1 pin: %i", hardwarePTR->getPWM1Pin());
-    Serial.printf("\r\n  - Buzzer pin: %i", hardwarePTR->getBuzzerPin());
-
-    // Test buzzer control
-    Serial.print("\r\n  - Testing buzzer: ON");
+    Serial.print("\r\n- HardwareManager initialized");
+    
+    // Quick buzzer beep to indicate hardware is ready
     hardwarePTR->enableBuzzer();
     delay(100);
-    Serial.print(" -> OFF");
     hardwarePTR->disableBuzzer();
-
-    // Print full status
-    hardwarePTR->printHardwareStatus();
   }
   else
   {
     Serial.print("\r\n✗ HardwareManager FAILED");
   }
 
-  // Test I2CManager
-  Serial.print("\r\n\n*** Testing I2CManager ***");
+  // Initialize I2CManager
   i2cPTR = new I2CManager();
   if (i2cPTR->initializeI2C())
   {
-    Serial.print("\r\n✓ I2CManager SUCCESS");
-    
-    // Print full status
-    i2cPTR->printI2CStatus();
+    Serial.print("\r\n- I2CManager initialized");
   }
   else
   {
@@ -107,278 +92,176 @@ void setup()
   }
 
   // Initialize LED Manager
-  Serial.print("\r\n\n*** Testing LEDManager ***");
   ledPTR = new LEDManager();
   if (ledPTR->init()) 
   {
-    Serial.print("\r\n✓ LEDManager SUCCESS");
-    
-    // Load saved brightness from config
+    Serial.print("\r\n- LEDManager initialized");
     ledPTR->setBrightness(configPTR->getLEDBrightness());
-    Serial.printf("\r\n  - Brightness: %d%%", ledPTR->getBrightness());
-    
   }
   else
   {
     Serial.print("\r\n✗ LEDManager FAILED");
   }
 
-  // Test CANManager with global instances
-  Serial.print("\r\n\n*** Testing CANManager ***");
+  // Initialize CANManager
   canPTR = new CANManager();
   if (canPTR->init())
   {
-    Serial.print("\r\n✓ CANManager SUCCESS");
-    
-    // Test some basic functionality
-    Serial.printf("\r\n  - CAN1 active: %s", canPTR->isCAN1Active() ? "YES" : "NO");
-    Serial.printf("\r\n  - CAN2 active: %s", canPTR->isCAN2Active() ? "YES" : "NO");
-    Serial.printf("\r\n  - CAN3 active: %s", canPTR->isCAN3Active() ? "YES" : "NO");
-    
-    // Simple status for new CANManager
-    Serial.printf("\r\n  - Keya detected: %s", canPTR->isKeyaDetected() ? "YES" : "NO");
+    Serial.print("\r\n- CANManager initialized");
   }
   else
   {
     Serial.print("\r\n✗ CANManager FAILED");
   }
 
-  // Test SerialManager
-  Serial.print("\r\n\n*** Testing SerialManager ***");
+  // Initialize SerialManager
   serialPTR = new SerialManager();
   if (serialPTR->initializeSerial())
   {
-    Serial.print("\r\n✓ SerialManager SUCCESS");
-
-    // Test baud rate access
-    Serial.printf("\r\n  - GPS baud: %i", serialPTR->getGPSBaudRate());
-    Serial.printf("\r\n  - RTK baud: %i", serialPTR->getRTKBaudRate());
-    Serial.printf("\r\n  - ESP32 baud: %i", serialPTR->getESP32BaudRate());
-
-    // Print full status
-    serialPTR->printSerialStatus();
+    Serial.print("\r\n- SerialManager initialized");
   }
   else
   {
     Serial.print("\r\n✗ SerialManager FAILED");
   }
 
-  // Test GNSSProcessor
-  Serial.print("\r\n\n*** Testing GNSSProcessor ***");
+  // Initialize GNSSProcessor
   gnssPTR = new GNSSProcessor();
   if (gnssPTR->setup(false, true)) // Disable debug, enable noise filter
   {
-    Serial.print("\r\n✓ GNSSProcessor SUCCESS");
-    Serial.print("\r\n  - Debug enabled: NO");
-    Serial.print("\r\n  - Noise filter: YES");
-    Serial.print("\r\n  - Ready for NMEA data");
-
-    // Print initial stats
-    gnssPTR->printStats();
+    Serial.print("\r\n- GNSSProcessor initialized");
   }
   else
   {
     Serial.print("\r\n✗ GNSSProcessor FAILED");
   }
 
-  // Test IMUProcessor
-  Serial.print("\r\n\n*** Testing IMUProcessor ***");
+  // Initialize IMUProcessor
   imuPTR = new IMUProcessor();
-
-  // Initialize the IMU
   if (imuPTR->initialize())
   {
-    Serial.print("\r\n✓ IMUProcessor SUCCESS");
-    Serial.printf("\r\n  - IMU Type: %s", imuPTR->getIMUTypeName());
-
-    if (imuPTR->getIMUType() == IMUType::TM171)
-    {
-      Serial.print("\r\n  - TM171 detected - waiting for angle data...");
-      Serial.print("\r\n  - Note: TM171 TX/RX silkscreen labels are reversed!");
-    }
-    
-    // Register PGN callbacks
+    Serial.print("\r\n- IMUProcessor initialized");
     imuPTR->registerPGNCallbacks();
   }
   else
   {
-    Serial.print("\r\n✗ IMUProcessor - No IMU detected");
-    Serial.print("\r\n  - Check wiring and power");
-    Serial.print("\r\n  - For TM171: TX on Teensy -> RX on TM171 (reversed labels!)");
-    // Don't register PGN callbacks when no IMU detected
+    Serial.print("\r\n✗ IMUProcessor FAILED");
   }
 
-  // Test ADProcessor
-  Serial.print("\r\n\n*** Testing ADProcessor ***");
+  // Initialize ADProcessor
   adPTR = ADProcessor::getInstance();
   if (adPTR->init())
   {
-    Serial.print("\r\n✓ ADProcessor SUCCESS");
-    
-    // Print initial status
-    adPTR->printStatus();
-    
-    // Test configuration
-    // With 10k/10k divider: 2.5V sensor -> 1.25V ADC
-    // 1.25V / 3.3V * 4095 = 1553
-    Serial.print("\r\n  - Setting WAS offset to 1553 (2.5V center)");
+    Serial.print("\r\n- ADProcessor initialized");
     adPTR->setWASOffset(1553);  // 2.5V center with 10k/10k voltage divider
-    Serial.print("\r\n  - Setting counts per degree to 30");
     adPTR->setWASCountsPerDegree(30.0f);
-    
-    // Take a reading
     adPTR->process();
-    Serial.printf("\r\n  - Current angle: %.2f°", adPTR->getWASAngle());
   }
   else
   {
     Serial.print("\r\n✗ ADProcessor FAILED");
   }
   
-  // Test PWMProcessor
-  Serial.print("\r\n\n*** Testing PWMProcessor ***");
+  // Initialize PWMProcessor
   pwmPTR = PWMProcessor::getInstance();
   if (pwmPTR->init())
   {
-    Serial.print("\r\n✓ PWMProcessor SUCCESS");
-    
-    // Test direct frequency control
-    Serial.print("\r\n\r\n- Testing direct frequency control:");
-    Serial.print("\r\n  Setting 10Hz at 50% duty");
+    Serial.print("\r\n- PWMProcessor initialized");
     pwmPTR->setSpeedPulseHz(10.0f);
     pwmPTR->setSpeedPulseDuty(0.5f);
     pwmPTR->enableSpeedPulse(true);
-    
-    // Test speed-based control
-    Serial.print("\r\n\r\n- Testing speed-based control:");
-    Serial.print("\r\n  Setting 130 pulses per meter (ISO 11786)");
     pwmPTR->setPulsesPerMeter(130.0f);  // ISO 11786 standard
-    Serial.print("\r\n  Setting speed to 10 km/h");
     pwmPTR->setSpeedKmh(10.0f);
-    Serial.printf("\r\n  Calculated frequency: %.1f Hz", pwmPTR->getSpeedPulseHz());
-    
-    // Print status
-    pwmPTR->printStatus();
   }
   else
   {
     Serial.print("\r\n✗ PWMProcessor FAILED");
   }
 
-  Serial.print("\r\n\n*** Class Testing Complete ***\r\n");
-
   // Initialize NAVProcessor
-  Serial.print("\r\n\n*** Initializing NAVProcessor ***");
   NAVProcessor::init();
   navPTR = navPTR->getInstance();
-  navPTR->printStatus();
-
-  // Print status of all managers
-  hardwarePTR->printHardwareStatus();
-  serialPTR->printSerialStatus();
-  if (imuPTR)
-  {
-    imuPTR->printStatus();
-  }
+  Serial.print("\r\n- NAVProcessor initialized");
 
   // Initialize Motor Driver
-  Serial.print("\r\n\n*** Initializing Motor Driver ***");
   MotorDriverType detectedType = MotorDriverFactory::detectMotorType(canPTR);
   motorPTR = MotorDriverFactory::createMotorDriver(detectedType, hardwarePTR, canPTR);
   
   if (motorPTR && motorPTR->init()) {
-    Serial.printf("\r\n✓ %s motor driver initialized", motorPTR->getTypeName());
+    Serial.print("\r\n- Motor driver initialized");
   } else {
-    Serial.print("\r\n✗ Motor driver init failed");
+    Serial.print("\r\n✗ Motor driver FAILED");
   }
 
   // Initialize AutosteerProcessor
-  Serial.print("\r\n\n*** Initializing AutosteerProcessor ***");
   autosteerPTR = AutosteerProcessor::getInstance();
   if (autosteerPTR->init()) {
-    Serial.print("\r\n✓ AutosteerProcessor initialized");
+    Serial.print("\r\n- AutosteerProcessor initialized");
   } else {
-    Serial.print("\r\n✗ AutosteerProcessor init failed");
+    Serial.print("\r\n✗ AutosteerProcessor FAILED");
   }
 
   // Initialize MachineProcessor
-  Serial.print("\r\n\n*** Initializing MachineProcessor ***");
   if (MachineProcessor::init()) {
-    Serial.print("\r\n✓ MachineProcessor initialized");
+    Serial.print("\r\n- MachineProcessor initialized");
   } else {
-    Serial.print("\r\n✗ MachineProcessor init failed");
+    Serial.print("\r\n✗ MachineProcessor FAILED");
   }
 
   // Initialize SubnetManager for PGN 201 handling
-  Serial.print("\r\n\n*** Initializing SubnetManager ***");
   if (SubnetManager::init()) {
-    Serial.print("\r\n✓ SubnetManager initialized");
+    Serial.print("\r\n- SubnetManager initialized");
   } else {
-    Serial.print("\r\n✗ SubnetManager init failed");
+    Serial.print("\r\n✗ SubnetManager FAILED");
   }
 
   // Motor Driver Testing
   if (MOTOR_TEST_MODE) {
-    Serial.print("\r\n\n*** Motor Driver Test Mode ***");
+    Serial.print("\r\n\n*** Motor Test Mode Active ***");
     
     // Auto-detect motor type
     MotorDriverType detectedType = MotorDriverFactory::detectMotorType(canPTR);
     
     // Create motor driver
-    Serial.print("\r\n- Creating motor driver...");
     motorPTR = MotorDriverFactory::createMotorDriver(detectedType, hardwarePTR, canPTR);
     
     if (motorPTR) {
       if (motorPTR->init()) {
-        Serial.printf("\r\n✓ %s motor driver initialized", motorPTR->getTypeName());
+        Serial.print("\r\n- Motor driver initialized (Test Mode)");
       
         // Skip automatic test for Keya
         if (motorPTR->getType() != MotorDriverType::KEYA_CAN) {
           // Run automatic test for PWM motors only
-          Serial.print("\r\n1. Enable motor");
           motorPTR->enable(true);
           delay(1000);
           
-          Serial.print("\r\n2. Test forward 25%");
           motorPTR->setSpeed(25.0f);
           delay(2000);
           
-          Serial.print("\r\n3. Test forward 50%");
           motorPTR->setSpeed(50.0f);
           delay(2000);
           
-          Serial.print("\r\n4. Test stop");
           motorPTR->stop();
           delay(1000);
           
-          Serial.print("\r\n5. Test reverse -25%");
           motorPTR->setSpeed(-25.0f);
           delay(2000);
           
-          Serial.print("\r\n6. Test reverse -50%");
           motorPTR->setSpeed(-50.0f);
           delay(2000);
           
-          Serial.print("\r\n7. Stop and disable");
           motorPTR->stop();
           motorPTR->enable(false);
         }
         
-        Serial.print("\r\n\r\nCommands: e/d (enable/disable), +/- (speed), s (stop), ? (status)");
+        Serial.print("\r\nCommands: e/d (enable/disable), +/- (speed), s (stop), ? (status)");
       } else {
-        if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN) {
-          Serial.print("\r\n✗ Keya motor not detected on CAN3");
-        } else {
-          Serial.print("\r\n✗ Motor driver init failed");
-        }
+        Serial.print("\r\n✗ Motor driver FAILED (Test Mode)");
       }
     }
   }
 
-  Serial.print("\r\n\n=== New Dawn Initialization Complete ===");
-  Serial.print("\r\nEntering main loop...\r\n");
-
-  Serial.print("\r\n=== System Ready ===\r\n");
+  Serial.print("\r\n\n=== System Ready ===\r\n");
   
 }
 
@@ -386,13 +269,7 @@ void loop()
 {
   mongoose_poll();
 
-  static uint32_t lastPrint = 0;
-  static uint32_t lastDetailedStatus = 0;
-  static uint32_t lastNAVStatus = 0;
-  static uint32_t lastCANStatus = 0;
-  static uint32_t lastADStatus = 0;
   static uint32_t lastPWMTest = 0;
-  static uint32_t lastAutosteerStatus = 0;
   
   // Motor test mode variables
   static float motorTestSpeed = 0.0f;
@@ -532,7 +409,6 @@ void loop()
   
   // Update LEDs
   static uint32_t lastLEDUpdate = 0;
-  static bool ledDebugPrinted = false;
   if (ledPTR && millis() - lastLEDUpdate > 100)  // Update every 100ms
   {
     lastLEDUpdate = millis();
@@ -578,19 +454,6 @@ void loop()
   }
   
 
-  // Quick status print every second
-  if (millis() - lastPrint > 1000)
-  {
-    lastPrint = millis();
-
-    // Check for IMU data
-    if (imuPTR && imuPTR->hasValidData())
-    {
-      IMUData data = imuPTR->getCurrentData();
-      Serial.printf("\r\n[%.1fs] IMU: R=%.1f° P=%.1f° H=%.1f°",
-                    millis() / 1000.0, data.roll, data.pitch, data.heading);
-    }
-  }
 
 
 
@@ -651,22 +514,10 @@ void loop()
 
 
   // Process GPS1 data if available
-  static uint32_t gps1ByteCount = 0;
-  static uint32_t lastGPS1Report = 0;
-  static uint32_t gps1TotalBytes = 0;
-  
   while (SerialGPS1.available())
   {
     char c = SerialGPS1.read();
-    gps1ByteCount++;
-    gps1TotalBytes++;
     gnssPTR->processNMEAChar(c);
-  }
-  
-  // Still update the counter
-  if (millis() - lastGPS1Report > 5000) {
-    lastGPS1Report = millis();
-    gps1ByteCount = 0;
   }
   
   // Process GPS2 data if available (for F9P dual RELPOSNED)

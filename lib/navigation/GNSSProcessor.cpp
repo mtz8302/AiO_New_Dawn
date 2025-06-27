@@ -19,7 +19,6 @@ GNSSProcessor::GNSSProcessor() : bufferIndex(0),
 
     // Initialize data structures
     memset(&gpsData, 0, sizeof(gpsData));
-    memset(&stats, 0, sizeof(stats));
     messagesSeen = 0;
 
     gpsData.hdop = 99.9f;
@@ -40,7 +39,6 @@ GNSSProcessor::~GNSSProcessor()
 
 bool GNSSProcessor::init()
 {
-    resetStats();
     resetParser();
     
     // Register with PGNProcessor to receive broadcast messages
@@ -149,7 +147,6 @@ bool GNSSProcessor::processNMEAChar(char c)
                         }
                         else
                         {
-                            stats.checksumErrors++;
                             resetParser();
                         }
                     }
@@ -172,7 +169,6 @@ bool GNSSProcessor::processNMEAChar(char c)
                     }
                     else
                     {
-                        stats.checksumErrors++;
                         resetParser();
                     }
                 }
@@ -252,7 +248,6 @@ bool GNSSProcessor::processMessage()
 
     if (fieldCount < 1)
     {
-        stats.parseErrors++;
         resetParser();
         return false;
     }
@@ -270,38 +265,26 @@ bool GNSSProcessor::processMessage()
     if (strstr(msgType, "GGA"))
     {
         processed = parseGGA();
-        if (processed)
-            stats.ggaCount++;
     }
     else if (strstr(msgType, "GNS"))
     {
         processed = parseGNS();
-        if (processed)
-            stats.gnsCount++;
     }
     else if (strstr(msgType, "VTG"))
     {
         processed = parseVTG();
-        if (processed)
-            stats.vtgCount++;
     }
     else if (strstr(msgType, "HPR"))
     {
         processed = parseHPR();
-        if (processed)
-            stats.hprCount++;
     }
     else if (strstr(msgType, "KSXT"))
     {
         processed = parseKSXT();
-        if (processed)
-            stats.ksxtCount++;
     }
     else if (strstr(msgType, "INSPVAA"))
     {
         processed = parseINSPVAA();
-        if (processed)
-            stats.inspvaaCount++;
     }
     else if (strstr(msgType, "INSPVAXA"))
     {
@@ -312,7 +295,6 @@ bool GNSSProcessor::processMessage()
         processed = parseINSPVAXA();
         if (processed)
         {
-            stats.inspvaxaCount++;
             if (enableDebug)
             {
                 Serial.print(" - PARSED SUCCESS");
@@ -326,13 +308,8 @@ bool GNSSProcessor::processMessage()
 
     if (processed)
     {
-        stats.messagesProcessed++;
         messagesSeen++;  // Track that we received valid GPS messages
         gpsData.lastUpdateTime = millis();
-    }
-    else
-    {
-        stats.parseErrors++;
     }
 
     resetParser();
@@ -671,16 +648,6 @@ bool GNSSProcessor::isDataFresh(uint32_t maxAgeMs) const
     return getDataAge() <= maxAgeMs;
 }
 
-float GNSSProcessor::getSuccessRate() const
-{
-    uint32_t total = stats.messagesProcessed + stats.parseErrors + stats.checksumErrors;
-    return total > 0 ? (float)stats.messagesProcessed / total * 100.0f : 0.0f;
-}
-
-void GNSSProcessor::resetStats()
-{
-    memset(&stats, 0, sizeof(stats));
-}
 
 void GNSSProcessor::printData() const
 {
@@ -704,19 +671,6 @@ void GNSSProcessor::printData() const
                   getDataAge());
 }
 
-void GNSSProcessor::printStats() const
-{
-    Serial.println("=== GNSS Statistics ===");
-    Serial.printf("Messages: Total=%lu Success=%.1f%%\r\n",
-                  stats.messagesProcessed, getSuccessRate());
-    Serial.printf("Errors: Parse=%lu Checksum=%lu\r\n",
-                  stats.parseErrors, stats.checksumErrors);
-    Serial.printf("Types: GGA=%lu GNS=%lu VTG=%lu HPR=%lu KSXT=%lu\r\n",
-                  stats.ggaCount, stats.gnsCount, stats.vtgCount,
-                  stats.hprCount, stats.ksxtCount);
-    Serial.printf("       INSPVAA=%lu INSPVAXA=%lu\r\n",
-                  stats.inspvaaCount, stats.inspvaxaCount);
-}
 
 bool GNSSProcessor::processUBXByte(uint8_t b)
 {

@@ -27,19 +27,16 @@ void CANManager::pollForDevices() {
     // Check CAN1
     while (can1->read(msg)) {
         can1Active = true;
-        can1MessageCount++;
     }
     
     // Check CAN2
     while (can2->read(msg)) {
         can2Active = true;
-        can2MessageCount++;
     }
     
     // Check CAN3 for Keya heartbeat
     while (can3->read(msg)) {
         can3Active = true;
-        can3MessageCount++;
         
         // Check for Keya heartbeat (0x07000001)
         if (msg.flags.extended && msg.id == 0x07000001) {

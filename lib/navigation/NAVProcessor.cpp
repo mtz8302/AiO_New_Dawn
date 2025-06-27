@@ -326,10 +326,6 @@ void NAVProcessor::process() {
     
     timeSinceLastMessage = 0;
     
-    // Debug output
-    static uint32_t debugCounter = 0;
-    debugCounter++;
-    
     // Select and format appropriate message type
     NavMessageType msgType = selectMessageType();
     bool success = false;

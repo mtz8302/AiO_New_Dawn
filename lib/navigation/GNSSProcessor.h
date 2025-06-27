@@ -82,20 +82,6 @@ public:
         uint8_t messageTypeMask;
     };
 
-    // Statistics
-    struct Statistics
-    {
-        uint32_t messagesProcessed;
-        uint32_t parseErrors;
-        uint32_t checksumErrors;
-        uint32_t ggaCount;
-        uint32_t gnsCount;
-        uint32_t vtgCount;
-        uint32_t hprCount;
-        uint32_t ksxtCount;
-        uint32_t inspvaaCount;
-        uint32_t inspvaxaCount;
-    };
 
 private:
     // NMEA parsing state machine
@@ -122,7 +108,6 @@ private:
 
     // Data storage
     GNSSData gpsData;
-    Statistics stats;
     uint32_t messagesSeen;  // Total valid NMEA messages received
 
     // Configuration
@@ -190,14 +175,9 @@ public:
     uint32_t getDataAge() const;
     bool isDataFresh(uint32_t maxAgeMs = 2000) const;
 
-    // Statistics
-    const Statistics &getStats() const { return stats; }
-    float getSuccessRate() const;
-    void resetStats();
 
     // Debug output
     void printData() const;
-    void printStats() const;
     
     // PGN support
     // registerPGNCallbacks removed - broadcast PGNs handled automatically

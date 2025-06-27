@@ -30,22 +30,12 @@ public:
     bool isCAN2Active() const { return can2Active; }
     bool isCAN3Active() const { return can3Active; }
     
-    // Basic diagnostics
-    uint32_t getCAN1MessageCount() const { return can1MessageCount; }
-    uint32_t getCAN2MessageCount() const { return can2MessageCount; }
-    uint32_t getCAN3MessageCount() const { return can3MessageCount; }
-    
 private:
     // Detection flags
     bool keyaDetected = false;
     bool can1Active = false;
     bool can2Active = false;
     bool can3Active = false;
-    
-    // Basic counters
-    uint32_t can1MessageCount = 0;
-    uint32_t can2MessageCount = 0;
-    uint32_t can3MessageCount = 0;
 };
 
 #endif // CAN_MANAGER_H
