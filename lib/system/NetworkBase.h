@@ -32,14 +32,27 @@ NetConfigStruct netConfig = defaultNet;
 
 struct mg_connection *sendAgio;
 
+// TX rate limiting for UDP sends
+static uint32_t lastUDPSendMicros = 0;
+static constexpr uint32_t MIN_UDP_SEND_INTERVAL_US = 1; // 500 microseconds between sends
+
 // void RTCMProcessor(void);
 // void PGNProcessor(void);
 
-// Send byte arrays to AgIO
+// Send byte arrays to AgIO with microsecond delay to prevent TX buffer overflow
 void sendUDPbytes(uint8_t *message, int msgLen)
 {
   if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
     return; // Check if IP stack is up.
+
+  // Add small delay if sending too fast to prevent Mongoose TX queue overflow
+  uint32_t now = micros();
+  uint32_t elapsed = now - lastUDPSendMicros;
+  if (elapsed < MIN_UDP_SEND_INTERVAL_US) {
+    // Wait the remaining time
+    delayMicroseconds(MIN_UDP_SEND_INTERVAL_US - elapsed);
+  }
+
   // Send data
   if (mg_send(sendAgio, message, msgLen) <= 0)
   {
@@ -48,6 +61,7 @@ void sendUDPbytes(uint8_t *message, int msgLen)
   else
   {
     mg_iobuf_del(&sendAgio->send, 0, sendAgio->send.len);
+    lastUDPSendMicros = micros();
   }
 }
 
@@ -56,7 +70,17 @@ void sendUDPchars(char *stuff)
 {
   if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
     return; // Check if IP stack is up.
+  
+  // Add small delay if sending too fast to prevent Mongoose TX queue overflow
+  uint32_t now = micros();
+  uint32_t elapsed = now - lastUDPSendMicros;
+  if (elapsed < MIN_UDP_SEND_INTERVAL_US) {
+    // Wait the remaining time
+    delayMicroseconds(MIN_UDP_SEND_INTERVAL_US - elapsed);
+  }
+  
   mg_printf(sendAgio, stuff);
+  lastUDPSendMicros = micros();
 }
 
 // // PGNProcessor stub Feel free to move me into your code but make a reference so NetworkBase can find me.
