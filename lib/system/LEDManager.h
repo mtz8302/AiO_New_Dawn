@@ -54,6 +54,10 @@ public:
     // Test mode - cycle through all colors on all LEDs
     void testLEDs();
     
+    // Update all LED states based on system status
+    // Call this periodically (e.g., every 100ms) from main loop
+    void updateAll();
+    
 private:
     // PCA9685 controller
     Adafruit_PWMServoDriver* pwm;

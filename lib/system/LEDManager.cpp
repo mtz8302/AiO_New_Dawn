@@ -2,6 +2,14 @@
 #include "LEDManager.h"
 #include <Wire.h>
 #include "EventLogger.h"
+#include "GNSSProcessor.h"
+#include "IMUProcessor.h"
+#include "NAVProcessor.h"
+
+// External pointers needed for status checks
+extern GNSSProcessor* gnssPTR;
+extern IMUProcessor* imuPTR;
+extern NAVProcessor* navPTR;
 
 // Global pointer
 LEDManager* ledPTR = nullptr;
@@ -284,4 +292,44 @@ void LEDManager::testLEDs() {
     }
     
     LOG_INFO(EventSource::SYSTEM, "LED test sequence complete");
+}
+
+void LEDManager::updateAll() {
+    // Power/Ethernet LED
+    // TODO: Add proper ethernet link detection when NetworkBase is updated
+    bool ethernetUp = true;  // For now assume ethernet is up
+    setPowerState(ethernetUp, navPTR && navPTR->hasAgIOConnection());
+    
+    // GPS LED
+    if (gnssPTR) {
+        setGPSState(gnssPTR->getData().fixQuality, gnssPTR->hasGPS());
+    }
+    
+    // IMU/INS LED
+    if (imuPTR && imuPTR->getIMUType() != IMUType::NONE) {
+        // Separate IMU detected (BNO08x or TM171)
+        setIMUState(true,
+                   imuPTR->isIMUInitialized(),
+                   imuPTR->hasValidData());
+    } else if (gnssPTR && gnssPTR->getData().hasINS) {
+        // UM981 INS system
+        const auto& gpsData = gnssPTR->getData();
+        bool insDetected = true;
+        bool insInitialized = gpsData.insAlignmentStatus != 0;
+        bool insValid = gpsData.insAlignmentStatus == 3; // Solution good
+        
+        // Special handling for aligning state - show as initialized but not valid
+        if (gpsData.insAlignmentStatus == 7) { // INS_ALIGNING
+            insInitialized = true;
+            insValid = false;
+        }
+        
+        setIMUState(insDetected, insInitialized, insValid);
+    } else {
+        // No IMU/INS detected
+        setIMUState(false, false, false);
+    }
+    
+    // Update LED hardware (handles blinking)
+    update();
 }

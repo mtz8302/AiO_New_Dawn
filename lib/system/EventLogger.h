@@ -82,6 +82,12 @@ private:
     
     // Startup mode tracking
     bool startupMode = true;  // Don't enforce levels during startup
+    
+    // Network stability tracking for system ready message
+    bool systemReadyShown = false;
+    bool networkWasReady = false;
+    uint32_t networkReadyTime = 0;
+    uint32_t lastNetworkDownTime = 0;
 
 public:
     ~EventLogger();

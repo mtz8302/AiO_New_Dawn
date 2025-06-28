@@ -269,18 +269,58 @@ void EventLogger::setMongooseLogLevel(int level) {
 }
 
 void EventLogger::checkNetworkReady() {
-    // Only check if we haven't already reduced logging
-    if (!mongooseLogReduced && g_mgr.ifp && g_mgr.ifp->state == MG_TCPIP_STATE_READY) {
-        mongooseLogReduced = true;
-        setMongooseLogLevel(2);  // Reduce to info level once network is ready
-        LOG_INFO(EventSource::NETWORK, "Network ready, reducing Mongoose log level to 2");
+    // Check if network interface exists
+    if (!g_mgr.ifp) return;
+    
+    // Check current network state
+    bool networkReady = (g_mgr.ifp->state == MG_TCPIP_STATE_READY);
+    
+    // Track network state changes for stability
+    if (!networkReady && networkWasReady) {
+        // Network went down - reset our tracking
+        networkWasReady = false;
+        lastNetworkDownTime = millis();
+    } else if (networkReady && !networkWasReady) {
+        // Network came up - but wait to ensure it's stable
+        if (millis() - lastNetworkDownTime > 1000) {  // Only if network was down for > 1 second
+            networkWasReady = true;
+            networkReadyTime = millis();
+            
+            // First time network is ready - reduce Mongoose logging
+            if (!mongooseLogReduced) {
+                mongooseLogReduced = true;
+                setMongooseLogLevel(2);  // Reduce to info level once network is ready
+                LOG_INFO(EventSource::NETWORK, "Network ready, reducing Mongoose log level to 2");
+                
+                // Log the assigned IP address
+                uint8_t* ip = netConfig.currentIP;
+                LOG_INFO(EventSource::NETWORK, "IP Address: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+            }
+        }
+    }
+    
+    // Show system ready message 3 seconds after network is stable
+    if (!systemReadyShown && networkWasReady && networkReady && (millis() - networkReadyTime > 3000)) {
+        systemReadyShown = true;
         
-        // Log the assigned IP address
-        uint8_t* ip = netConfig.currentIP;
-        LOG_INFO(EventSource::NETWORK, "IP Address: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+        // Temporarily increase Mongoose log level to reduce interference
+        int savedMongooseLevel = mongooseLogLevel;
+        setMongooseLogLevel(1);  // Reduce Mongoose logging temporarily
         
-        // Network is ready, but don't announce system ready yet - let main.cpp do that
-        // after ensuring network stability (handles speed negotiation)
+        // Display the complete boxed message as separate lines to avoid rate limiting
+        // Use Serial.print directly for the visual box to ensure it displays properly
+        Serial.println("\r\n**************************************************");
+        Serial.printf("*** System ready - UDP syslog active at %s level ***\r\n", 
+                      getLevelName(getEffectiveLogLevel()));
+        Serial.println("*** Press '?' for menu, 'L' for logging control ***");
+        Serial.println("**************************************************\r\n");
+        
+        // Send a syslog-friendly message with menu instructions
+        LOG_WARNING(EventSource::SYSTEM, "* System ready - Press '?' for menu, 'L' for logging control *");
+        
+        // Restore Mongoose log level after a brief delay
+        delay(50);
+        setMongooseLogLevel(savedMongooseLevel);
     }
 }
 

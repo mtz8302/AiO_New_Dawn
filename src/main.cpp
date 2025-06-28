@@ -237,56 +237,9 @@ void loop()
 {
   mongoose_poll();
   
-  // Show prominent system ready message after network is up and stable
-  static bool systemReadyShown = false;
-  static bool networkWasReady = false;
-  static uint32_t networkReadyTime = 0;
-  static uint32_t lastNetworkDownTime = 0;
-  
-  // Check if network is ready
-  bool networkReady = (g_mgr.ifp->state == MG_TCPIP_STATE_READY);
-  
-  // Track network state changes
-  if (!networkReady && networkWasReady) {
-    // Network went down - reset our tracking
-    networkWasReady = false;
-    lastNetworkDownTime = millis();
-  } else if (networkReady && !networkWasReady) {
-    // Network came up - but wait to ensure it's stable
-    if (millis() - lastNetworkDownTime > 1000) {  // Only if network was down for > 1 second
-      networkWasReady = true;
-      networkReadyTime = millis();
-    }
-  }
-  
-  // Show system ready message 3 seconds after network is stable (increased from 2)
-  if (!systemReadyShown && networkWasReady && networkReady && (millis() - networkReadyTime > 3000)) {
-    systemReadyShown = true;
-    
-    // Temporarily increase Mongoose log level to reduce interference
-    EventLogger* logger = EventLogger::getInstance();
-    int savedMongooseLevel = logger->getMongooseLogLevel();
-    logger->setMongooseLogLevel(1);  // Reduce Mongoose logging temporarily
-    
-    // Display the complete boxed message as separate lines to avoid rate limiting
-    // Use Serial.print directly for the visual box to ensure it displays properly
-    Serial.println("\r\n**************************************************");
-    Serial.printf("*** System ready - UDP syslog active at %s level ***\r\n", 
-                  logger->getLevelName(logger->getEffectiveLogLevel()));
-    Serial.println("*** Press '?' for menu, 'L' for logging control ***");
-    Serial.println("**************************************************\r\n");
-    
-    // Send a syslog-friendly message with menu instructions
-    LOG_WARNING(EventSource::SYSTEM, "* System ready - Press '?' for menu, 'L' for logging control *");
-    
-    // Restore Mongoose log level after a brief delay
-    delay(50);
-    logger->setMongooseLogLevel(savedMongooseLevel);
-  }
-  
-  // Check if network is ready to reduce Mongoose logging
+  // Check network status and display system ready message when appropriate
   static uint32_t lastNetworkCheck = 0;
-  if (millis() - lastNetworkCheck > 1000) {  // Check every second
+  if (millis() - lastNetworkCheck > 100) {  // Check every 100ms for responsiveness
     lastNetworkCheck = millis();
     EventLogger::getInstance()->checkNetworkReady();
   }
@@ -341,45 +294,7 @@ void loop()
   if (ledPTR && millis() - lastLEDUpdate > 100)  // Update every 100ms
   {
     lastLEDUpdate = millis();
-    
-    // Power/Ethernet LED
-    // TODO: Add proper ethernet link detection when NetworkBase is updated
-    bool ethernetUp = true;  // For now assume ethernet is up
-    ledPTR->setPowerState(ethernetUp, navPTR && navPTR->hasAgIOConnection());
-    
-    // GPS LED
-    if (gnssPTR) {
-      ledPTR->setGPSState(gnssPTR->getData().fixQuality, gnssPTR->hasGPS());
-    }
-    
-    
-    // IMU/INS LED
-    if (imuPTR && imuPTR->getIMUType() != IMUType::NONE) {
-      // Separate IMU detected (BNO08x or TM171)
-      ledPTR->setIMUState(true,
-                         imuPTR->isIMUInitialized(),
-                         imuPTR->hasValidData());
-    } else if (gnssPTR && gnssPTR->getData().hasINS) {
-      // UM981 INS system
-      const auto& gpsData = gnssPTR->getData();
-      bool insDetected = true;
-      bool insInitialized = gpsData.insAlignmentStatus != 0;
-      bool insValid = gpsData.insAlignmentStatus == 3; // Solution good
-      
-      // Special handling for aligning state - show as initialized but not valid
-      if (gpsData.insAlignmentStatus == 7) { // INS_ALIGNING
-        insInitialized = true;
-        insValid = false;
-      }
-      
-      ledPTR->setIMUState(insDetected, insInitialized, insValid);
-    } else {
-      // No IMU/INS detected
-      ledPTR->setIMUState(false, false, false);
-    }
-    
-    // Update LED hardware (handles blinking)
-    ledPTR->update();
+    ledPTR->updateAll();
   }
   
 
@@ -388,53 +303,23 @@ void loop()
 
   
   
-  // Update PWM speed pulse - TEST MODE with artificial speed
+  // Update PWM speed pulse from GPS
   static uint32_t lastSpeedUpdate = 0;
-  static bool useTestSpeed = false;  // Set to true for testing without GPS
   
   if (millis() - lastSpeedUpdate > 200)  // Update every 200ms like V6-NG
   {
     lastSpeedUpdate = millis();
     
-    if (pwmPTR && pwmPTR->isSpeedPulseEnabled())
+    if (pwmPTR && pwmPTR->isSpeedPulseEnabled() && gnssPTR)
     {
       float speedKmh = 0.0f;
       
-      if (useTestSpeed)
+      // Use actual GPS speed
+      const auto &gpsData = gnssPTR->getData();
+      if (gpsData.hasVelocity)
       {
-        // TEST MODE: Cycle through speeds automatically
-        static float testSpeed = 0.0f;
-        static uint32_t lastTestChange = 0;
-        
-        // Change speed every 5 seconds
-        if (millis() - lastTestChange > 5000)
-        {
-          lastTestChange = millis();
-          testSpeed += 5.0f;
-          if (testSpeed > 30.0f) testSpeed = 0.0f;
-        }
-        
-        speedKmh = testSpeed;
-        
-        // Debug output every 3 seconds
-        static uint32_t lastPWMTest = 0;
-        if (millis() - lastPWMTest > 3000)
-        {
-          lastPWMTest = millis();
-          LOG_DEBUG(EventSource::SYSTEM, "[PWM] TEST Speed: %.1f km/h = %.1f Hz (130 ppm)", 
-                        speedKmh, pwmPTR->getSpeedPulseHz());
-        }
-      }
-      else if (gnssPTR)
-      {
-        // GPS MODE: Use actual GPS speed
-        const auto &gpsData = gnssPTR->getData();
-        if (gpsData.hasVelocity)
-        {
-          // Convert knots to km/h
-          speedKmh = gpsData.speedKnots * 1.852f;
-          
-        }
+        // Convert knots to km/h
+        speedKmh = gpsData.speedKnots * 1.852f;
       }
       
       // Set the speed
