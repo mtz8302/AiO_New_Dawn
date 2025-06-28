@@ -5,6 +5,7 @@
 #include "KeyaCANDriver.h"
 #include "ConfigManager.h"
 #include "LEDManager.h"
+#include "EventLogger.h"
 
 // External network function
 extern void sendUDPbytes(uint8_t* data, int len);
@@ -46,7 +47,7 @@ AutosteerProcessor* AutosteerProcessor::getInstance() {
 }
 
 bool AutosteerProcessor::init() {
-    Serial.print("\r\n- Initializing AutosteerProcessor");
+    LOG_INFO(EventSource::AUTOSTEER, "Initializing AutosteerProcessor");
     
     // Make sure instance is set
     instance = this;
@@ -54,16 +55,16 @@ bool AutosteerProcessor::init() {
     
     // Initialize button pin
     pinMode(2, INPUT_PULLUP);
-    Serial.print("\r\n  Button pin 2 configured as INPUT_PULLUP");
+    LOG_DEBUG(EventSource::AUTOSTEER, "Button pin 2 configured as INPUT_PULLUP");
     
     // Initialize PID controller with default values
     pid.setKp(5.0f);  // Default proportional gain
     pid.setOutputLimit(100.0f);  // Motor speed limit (±100%)
-    Serial.print("\r\n  PID controller initialized");
+    LOG_DEBUG(EventSource::AUTOSTEER, "PID controller initialized");
     
     // Register PGN handlers with PGNProcessor
     if (PGNProcessor::instance) {
-        Serial.print("\r\n  Registering PGN callbacks...");
+        LOG_DEBUG(EventSource::AUTOSTEER, "Registering PGN callbacks...");
         
         // Register for a dummy PGN so we receive broadcast messages like PGN 200
         // Using PGN 255 as it's unused
@@ -78,13 +79,13 @@ bool AutosteerProcessor::init() {
         // Register for PGN 254 (Steer Data with button)
         bool reg254 = PGNProcessor::instance->registerCallback(254, handlePGNStatic, "AutosteerHandler");
             
-        Serial.printf("\r\n  PGN registrations: 255=%d, 251=%d, 252=%d, 254=%d", reg255, reg251, reg252, reg254);
+        LOG_DEBUG(EventSource::AUTOSTEER, "PGN registrations: 255=%d, 251=%d, 252=%d, 254=%d", reg255, reg251, reg252, reg254);
     } else {
-        Serial.print("\r\n  ERROR: PGNProcessor not initialized!");
+        LOG_ERROR(EventSource::AUTOSTEER, "PGNProcessor not initialized!");
         return false;
     }
     
-    Serial.print(" - SUCCESS");
+    LOG_INFO(EventSource::AUTOSTEER, "AutosteerProcessor initialized successfully");
     return true;
 }
 
@@ -109,7 +110,7 @@ void AutosteerProcessor::process() {
         if (guidanceActive) {
             // Guidance turned ON in AgOpenGPS
             steerState = 0;  // Activate steering
-            Serial.print("\r\n[Autosteer] Guidance activated from AgOpenGPS");
+            LOG_INFO(EventSource::AUTOSTEER, "Guidance activated from AgOpenGPS");
         }
         guidanceStatusChanged = false;  // Clear flag
     }
@@ -120,7 +121,7 @@ void AutosteerProcessor::process() {
         if (switchCounter++ > 30) {  // 30 * 10ms = 300ms delay
             steerState = 1;
             switchCounter = 0;
-            Serial.print("\r\n[Autosteer] Auto-deactivated (guidance off)");
+            LOG_INFO(EventSource::AUTOSTEER, "Auto-deactivated (guidance off)");
         }
     } else {
         switchCounter = 0;
@@ -130,7 +131,7 @@ void AutosteerProcessor::process() {
     if (buttonReading == LOW && lastButtonReading == HIGH) {
         // Button was just pressed
         steerState = !steerState;
-        Serial.printf("\r\n[Autosteer] Physical button pressed - steerState now: %d", steerState);
+        LOG_INFO(EventSource::AUTOSTEER, "Physical button pressed - steerState now: %d", steerState);
     }
     lastButtonReading = buttonReading;
     
@@ -140,7 +141,7 @@ void AutosteerProcessor::process() {
         steerState == 0 && guidanceActive) {
         KeyaCANDriver* keya = static_cast<KeyaCANDriver*>(motorPTR);
         if (keya->checkMotorSlip()) {
-            Serial.print("\r\n[Autosteer] KICKOUT: Keya motor slip detected");
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Keya motor slip detected");
             emergencyStop();
             return;  // Skip the rest of this cycle
         }
@@ -227,17 +228,20 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     // PGN 251 - Steer Config
     // Expected length is 14 bytes total, but we get data after header
     
-    Serial.printf("\r\n[Autosteer] PGN 251 (Steer Config) received, %d bytes", len);
+    LOG_DEBUG(EventSource::AUTOSTEER, "PGN 251 (Steer Config) received, %d bytes", len);
     
     // Debug: dump entire PGN 251 packet
-    Serial.print("\r\n  Raw PGN 251 data:");
-    for (int i = 0; i < len; i++) {
-        Serial.printf(" [%d]=0x%02X(%d)", i, data[i], data[i]);
+    char debugMsg[256];
+    snprintf(debugMsg, sizeof(debugMsg), "Raw PGN 251 data:");
+    for (int i = 0; i < len && strlen(debugMsg) < 200; i++) {
+        char buf[20];
+        snprintf(buf, sizeof(buf), " [%d]=0x%02X(%d)", i, data[i], data[i]);
+        strncat(debugMsg, buf, sizeof(debugMsg) - strlen(debugMsg) - 1);
     }
-    Serial.println();
+    LOG_DEBUG(EventSource::AUTOSTEER, "%s", debugMsg);
     
     if (len < 4) {  // Changed from 5 to 4 since we only need up to index 3
-        Serial.print(" - ERROR: Too short!");
+        LOG_ERROR(EventSource::AUTOSTEER, "PGN 251 too short!");
         return;
     }
     
@@ -268,23 +272,23 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     steerConfig.CurrentSensor = bitRead(sett1, 2);
     steerConfig.IsUseY_Axis = bitRead(sett1, 3);
     
-    Serial.print("\r\n  InvertWAS: "); Serial.print(steerConfig.InvertWAS);
-    Serial.print("\r\n  MotorDriveDirection: "); Serial.print(steerConfig.MotorDriveDirection);
-    Serial.print("\r\n  CytronDriver: "); Serial.print(steerConfig.CytronDriver);
-    Serial.print("\r\n  SteerSwitch: "); Serial.print(steerConfig.SteerSwitch);
-    Serial.print("\r\n  SteerButton: "); Serial.print(steerConfig.SteerButton);
-    Serial.print("\r\n  PulseCountMax: "); Serial.print(steerConfig.PulseCountMax);
-    Serial.print("\r\n  MinSpeed: "); Serial.print(steerConfig.MinSpeed);
+    LOG_DEBUG(EventSource::AUTOSTEER, "InvertWAS: %d", steerConfig.InvertWAS);
+    LOG_DEBUG(EventSource::AUTOSTEER, "MotorDriveDirection: %d", steerConfig.MotorDriveDirection);
+    LOG_DEBUG(EventSource::AUTOSTEER, "CytronDriver: %d", steerConfig.CytronDriver);
+    LOG_DEBUG(EventSource::AUTOSTEER, "SteerSwitch: %d", steerConfig.SteerSwitch);
+    LOG_DEBUG(EventSource::AUTOSTEER, "SteerButton: %d", steerConfig.SteerButton);
+    LOG_DEBUG(EventSource::AUTOSTEER, "PulseCountMax: %d", steerConfig.PulseCountMax);
+    LOG_DEBUG(EventSource::AUTOSTEER, "MinSpeed: %d", steerConfig.MinSpeed);
 }
 
 void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, size_t len) {
     // PGN 252 - Steer Settings
     // Expected length is 14 bytes total, but we get data after header
     
-    Serial.printf("\r\n[Autosteer] PGN 252 (Steer Settings) received, %d bytes", len);
+    LOG_DEBUG(EventSource::AUTOSTEER, "PGN 252 (Steer Settings) received, %d bytes", len);
     
     if (len < 8) {
-        Serial.print(" - ERROR: Too short!");
+        LOG_ERROR(EventSource::AUTOSTEER, "PGN 251 too short!");
         return;
     }
     
@@ -313,18 +317,18 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     
     steerSettings.AckermanFix = (float)data[7] * 0.01f;
     
-    Serial.print("\r\n  Kp: "); Serial.print(steerSettings.Kp);
-    Serial.print("\r\n  highPWM: "); Serial.print(steerSettings.highPWM);
-    Serial.print("\r\n  lowPWM: "); Serial.print(steerSettings.lowPWM);
-    Serial.print("\r\n  minPWM: "); Serial.print(steerSettings.minPWM);
-    Serial.print("\r\n  steerSensorCounts: "); Serial.print(steerSettings.steerSensorCounts);
-    Serial.print("\r\n  wasOffset: "); Serial.print(steerSettings.wasOffset);
-    Serial.print("\r\n  AckermanFix: "); Serial.print(steerSettings.AckermanFix);
+    LOG_DEBUG(EventSource::AUTOSTEER, "Kp: %d", steerSettings.Kp);
+    LOG_DEBUG(EventSource::AUTOSTEER, "highPWM: %d", steerSettings.highPWM);
+    LOG_DEBUG(EventSource::AUTOSTEER, "lowPWM: %d", steerSettings.lowPWM);
+    LOG_DEBUG(EventSource::AUTOSTEER, "minPWM: %d", steerSettings.minPWM);
+    LOG_DEBUG(EventSource::AUTOSTEER, "steerSensorCounts: %d", steerSettings.steerSensorCounts);
+    LOG_DEBUG(EventSource::AUTOSTEER, "wasOffset: %d", steerSettings.wasOffset);
+    LOG_DEBUG(EventSource::AUTOSTEER, "AckermanFix: %.2f", steerSettings.AckermanFix);
     
     // Update PID controller with new Kp
     float scaledKp = steerSettings.Kp / 10.0f;  // AgOpenGPS sends Kp * 10
     pid.setKp(scaledKp);
-    Serial.printf("\r\n  PID updated with Kp=%.1f", scaledKp);
+    LOG_DEBUG(EventSource::AUTOSTEER, "PID updated with Kp=%.1f", scaledKp);
 }
 
 void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -332,7 +336,7 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     // For now, we only care about the autosteer enable bit
     
     if (len < 3) {
-        Serial.print(" - Too short, ignoring");
+        LOG_DEBUG(EventSource::AUTOSTEER, "PGN 254 too short, ignoring");
         return;  // Too short, ignore
     }
     
@@ -377,7 +381,7 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     
     // Only print on state change to avoid spam
     if (newAutosteerState != autosteerEnabled) {
-        Serial.printf("\r\n[Autosteer] Button state changed: %s -> %s", 
+        LOG_INFO(EventSource::AUTOSTEER, "Button state changed: %s -> %s", 
                       autosteerEnabled ? "ON" : "OFF",
                       newAutosteerState ? "ON" : "OFF");
         autosteerEnabled = newAutosteerState;
@@ -389,7 +393,7 @@ void AutosteerProcessor::handlePGNStatic(uint8_t pgn, const uint8_t* data, size_
     if (instance) {
         // Don't print for PGN 254, 200, or 202 since they come frequently
         if (pgn != 254 && pgn != 200 && pgn != 202) {
-            Serial.printf("\r\n[Autosteer] Received PGN %d", pgn);
+            LOG_DEBUG(EventSource::AUTOSTEER, "Received PGN %d", pgn);
         }
         
         // Handle broadcast PGNs
@@ -407,7 +411,7 @@ void AutosteerProcessor::handlePGNStatic(uint8_t pgn, const uint8_t* data, size_
         }
         // We'll add other PGNs one at a time as needed
     } else {
-        Serial.print("\r\n[Autosteer] ERROR: No instance!");
+        LOG_ERROR(EventSource::AUTOSTEER, "No instance!");
     }
 }
 
@@ -506,7 +510,7 @@ void AutosteerProcessor::updateMotorControl() {
             // Apply minimum PWM threshold
             if (scaledPWM < minPWM) {
                 scaledPWM = 0.0f;
-                Serial.printf(" ZEROED(<%d)", (int)minPWM);
+                LOG_DEBUG(EventSource::AUTOSTEER, "PWM ZEROED (<%d)", (int)minPWM);
             }
             
             // Convert to percentage for motor driver
@@ -553,7 +557,7 @@ bool AutosteerProcessor::shouldSteerBeActive() const {
 }
 
 void AutosteerProcessor::emergencyStop() {
-    Serial.print("\r\n[Autosteer] EMERGENCY STOP");
+    LOG_WARNING(EventSource::AUTOSTEER, "EMERGENCY STOP");
     
     // Disable motor immediately
     motorSpeed = 0.0f;

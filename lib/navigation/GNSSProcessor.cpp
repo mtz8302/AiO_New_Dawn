@@ -2,6 +2,7 @@
 #include "UBXParser.h"
 #include "calc_crc32.h"
 #include "PGNUtils.h"
+#include "EventLogger.h"
 #include <string.h>
 #include <math.h>
 
@@ -19,7 +20,7 @@ GNSSProcessor::GNSSProcessor() : bufferIndex(0),
 
     // Initialize data structures
     memset(&gpsData, 0, sizeof(gpsData));
-    messagesSeen = 0;
+    // Initialize data
 
     gpsData.hdop = 99.9f;
     resetParser();
@@ -48,14 +49,14 @@ bool GNSSProcessor::init()
         bool success = PGNProcessor::instance->registerCallback(GPS_SOURCE_ID, handleBroadcastPGN, "GPS Handler");
         if (!success)
         {
-            Serial.print("\r\n[GNSSProcessor] ERROR: Failed to register PGN callback");
+            LOG_ERROR(EventSource::GNSS, "Failed to register PGN callback");
             return false;
         }
-        Serial.print("\r\n[GNSSProcessor] Successfully registered for broadcast PGNs");
+        LOG_DEBUG(EventSource::GNSS, "Successfully registered for broadcast PGNs");
     }
     else
     {
-        Serial.print("\r\n[GNSSProcessor] ERROR: PGNProcessor not initialized");
+        LOG_ERROR(EventSource::GNSS, "PGNProcessor not initialized");
         return false;
     }
     
@@ -73,14 +74,14 @@ bool GNSSProcessor::setup(bool enableDebug, bool enableNoiseFilter)
     {
         if (enableDebug)
         {
-            Serial.println("GNSS Processor init failed");
+            LOG_ERROR(EventSource::GNSS, "GNSS Processor init failed");
         }
         return false;
     }
 
     if (enableDebug)
     {
-        Serial.println("GNSS Processor initialized successfully");
+        LOG_INFO(EventSource::GNSS, "GNSS Processor initialized successfully");
     }
 
     return true;
@@ -221,15 +222,15 @@ bool GNSSProcessor::validateChecksum()
         // CRC debug enabled for testing
         if (enableDebug)
         {
-            Serial.printf("\r\n[GNSS] Unicore CRC: calc=%08lX recv=%08lX (len=%d)", 
-                         calculatedCRC, receivedChecksum32, bufferIndex - 1);
+            LOG_DEBUG(EventSource::GNSS, "Unicore CRC: calc=%08lX recv=%08lX (len=%d)", 
+                     calculatedCRC, receivedChecksum32, bufferIndex - 1);
             // Show what type of message this is
-            Serial.printf("\r\n[GNSS] Buffer[0-10]: ");
+            char msgPreview[11] = {0};
             for (int i = 0; i < 10 && i < bufferIndex; i++)
             {
-                Serial.printf("%c", parseBuffer[i]);
+                msgPreview[i] = parseBuffer[i];
             }
-            Serial.printf(", bufferIndex=%d", bufferIndex);
+            LOG_DEBUG(EventSource::GNSS, "Buffer[0-10]: %s, bufferIndex=%d", msgPreview, bufferIndex);
         }
         
         return calculatedCRC == receivedChecksum32;
@@ -259,7 +260,7 @@ bool GNSSProcessor::processMessage()
     // Debug enabled for testing
     if (enableDebug)
     {
-        Serial.printf("\r\n[GNSS] Message type: %s, fields: %d", msgType, fieldCount);
+        LOG_DEBUG(EventSource::GNSS, "Message type: %s, fields: %d", msgType, fieldCount);
     }
 
     if (strstr(msgType, "GGA"))
@@ -290,25 +291,25 @@ bool GNSSProcessor::processMessage()
     {
         if (enableDebug)
         {
-            Serial.printf("\r\n[GNSS] INSPVAXA detected, fieldCount=%d, bufferIndex=%d", fieldCount, bufferIndex);
+            LOG_DEBUG(EventSource::GNSS, "INSPVAXA detected, fieldCount=%d, bufferIndex=%d", fieldCount, bufferIndex);
         }
         processed = parseINSPVAXA();
         if (processed)
         {
             if (enableDebug)
             {
-                Serial.print(" - PARSED SUCCESS");
+                LOG_DEBUG(EventSource::GNSS, "INSPVAXA parsed successfully");
             }
         }
         else if (enableDebug)
         {
-            Serial.print(" - PARSE FAILED");
+            LOG_DEBUG(EventSource::GNSS, "INSPVAXA parse failed");
         }
     }
 
     if (processed)
     {
-        messagesSeen++;  // Track that we received valid GPS messages
+        // Valid GPS message received
         gpsData.lastUpdateTime = millis();
     }
 
@@ -634,7 +635,7 @@ void GNSSProcessor::logDebug(const char *msg)
 {
     if (enableDebug)
     {
-        Serial.printf("%lu GNSS: %s\r\n", millis(), msg);
+        LOG_DEBUG(EventSource::GNSS, "%s", msg);
     }
 }
 
@@ -651,24 +652,24 @@ bool GNSSProcessor::isDataFresh(uint32_t maxAgeMs) const
 
 void GNSSProcessor::printData() const
 {
-    Serial.println("=== GNSS Data ===");
-    Serial.printf("Position: %.6f, %.6f (Alt: %.1fm)\r\n",
-                  gpsData.latitude, gpsData.longitude, gpsData.altitude);
-    Serial.printf("Fix: Quality=%d Sats=%d HDOP=%.1f\r\n",
-                  gpsData.fixQuality, gpsData.numSatellites, gpsData.hdop);
-    Serial.printf("Speed: %.3f knots, Heading: %.1f°\r\n",
-                  gpsData.speedKnots, gpsData.headingTrue);
+    LOG_INFO(EventSource::GNSS, "=== GNSS Data ===");
+    LOG_INFO(EventSource::GNSS, "Position: %.6f, %.6f (Alt: %.1fm)",
+             gpsData.latitude, gpsData.longitude, gpsData.altitude);
+    LOG_INFO(EventSource::GNSS, "Fix: Quality=%d Sats=%d HDOP=%.1f",
+             gpsData.fixQuality, gpsData.numSatellites, gpsData.hdop);
+    LOG_INFO(EventSource::GNSS, "Speed: %.3f knots, Heading: %.1f°",
+             gpsData.speedKnots, gpsData.headingTrue);
 
     if (gpsData.hasDualHeading)
     {
-        Serial.printf("Dual: Heading=%.2f° Roll=%.2f° Quality=%d\r\n",
-                      gpsData.dualHeading, gpsData.dualRoll, gpsData.headingQuality);
+        LOG_INFO(EventSource::GNSS, "Dual: Heading=%.2f° Roll=%.2f° Quality=%d",
+                 gpsData.dualHeading, gpsData.dualRoll, gpsData.headingQuality);
     }
 
-    Serial.printf("Status: Valid=%s Fresh=%s Age=%lums\r\n",
-                  gpsData.isValid ? "Yes" : "No",
-                  isDataFresh() ? "Yes" : "No",
-                  getDataAge());
+    LOG_INFO(EventSource::GNSS, "Status: Valid=%s Fresh=%s Age=%lums",
+             gpsData.isValid ? "Yes" : "No",
+             isDataFresh() ? "Yes" : "No",
+             getDataAge());
 }
 
 
@@ -694,8 +695,8 @@ bool GNSSProcessor::processUBXByte(uint8_t b)
         
         if (enableDebug)
         {
-            Serial.printf("\r\nRELPOSNED: Heading=%.2f Roll=%.2f Quality=%d\r\n",
-                         gpsData.dualHeading, gpsData.dualRoll, gpsData.headingQuality);
+            LOG_DEBUG(EventSource::GNSS, "RELPOSNED: Heading=%.2f Roll=%.2f Quality=%d",
+                     gpsData.dualHeading, gpsData.dualRoll, gpsData.headingQuality);
         }
         
         return true;
@@ -714,10 +715,12 @@ bool GNSSProcessor::parseINSPVAA()
         return false;
     
     // Debug field output - show all fields to debug INS status
-    Serial.printf("\r\n[GNSS] INSPVAA Fields (total=%d):", fieldCount);
-    for (int i = 0; i < min(fieldCount, 25); i++)
-    {
-        Serial.printf("\r\n  [%d]: %s", i, fields[i]);
+    if (enableDebug) {
+        LOG_DEBUG(EventSource::GNSS, "INSPVAA Fields (total=%d):", fieldCount);
+        for (int i = 0; i < min(fieldCount, 25); i++)
+        {
+            LOG_DEBUG(EventSource::GNSS, "  [%d]: %s", i, fields[i]);
+        }
     }
     
     // Field 12: Latitude (degrees)
@@ -767,7 +770,9 @@ bool GNSSProcessor::parseINSPVAA()
     }
     
     // Debug field count
-    Serial.printf("\r\n[GNSS] INSPVAA fieldCount=%d", fieldCount);
+    if (enableDebug) {
+        LOG_DEBUG(EventSource::GNSS, "INSPVAA fieldCount=%d", fieldCount);
+    }
     
     // Field 21: INS status (e.g., "INS_ALIGNING", "INS_SOLUTION_GOOD", etc.)
     if (fieldCount > 21 && strlen(fields[21]) > 0)
@@ -795,8 +800,8 @@ bool GNSSProcessor::parseINSPVAA()
         }
         
         // Debug output - always show INS status for now
-        Serial.printf("\r\n[GNSS] INS Status: '%s' (alignment=%d, fixQuality=%d)", 
-                     fields[21], gpsData.insAlignmentStatus, gpsData.fixQuality);
+        LOG_INFO(EventSource::GNSS, "INS Status: '%s' (alignment=%d, fixQuality=%d)", 
+                 fields[21], gpsData.insAlignmentStatus, gpsData.fixQuality);
     }
     else
     {
@@ -829,6 +834,7 @@ bool GNSSProcessor::parseINSPVAA()
     
     gpsData.hasINS = true;
     gpsData.isValid = true;
+    gpsData.messageTypeMask |= (1 << 7);  // Set INSPVA bit
     
     // Update the last update time - this is critical!
     gpsData.lastUpdateTime = millis();
@@ -851,7 +857,7 @@ bool GNSSProcessor::parseINSPVAXA()
     {
         if (enableDebug)
         {
-            Serial.printf("\r\n[GNSS] INSPVAXA: Not enough fields! Expected 32+, got %d", fieldCount);
+            LOG_WARNING(EventSource::GNSS, "INSPVAXA: Not enough fields! Expected 32+, got %d", fieldCount);
         }
         return false;
     }
@@ -863,7 +869,7 @@ bool GNSSProcessor::parseINSPVAXA()
         insAligning = true;
         if (enableDebug)
         {
-            Serial.print("\r\n[GNSS] UM981 INS is still aligning - waiting for movement");
+            LOG_INFO(EventSource::GNSS, "UM981 INS is still aligning - waiting for movement");
         }
     }
     
@@ -997,11 +1003,11 @@ bool GNSSProcessor::parseINSPVAXA()
     // Debug output
     if (enableDebug)
     {
-        Serial.printf("\r\n[GNSS] INSPVAXA: Lat=%.8f±%.3fm Lon=%.8f±%.3fm Alt=%.1f±%.3fm",
-                      gpsData.latitude, gpsData.posStdDevLat, 
-                      gpsData.longitude, gpsData.posStdDevLon, 
-                      gpsData.altitude, gpsData.posStdDevAlt);
-        Serial.printf("\r\n[GNSS] INSPVAXA: Hdg=%.1f Roll=%.1f Pitch=%.1f VelN=%.2f±%.3f VelE=%.2f±%.3f",
+        LOG_DEBUG(EventSource::GNSS, "INSPVAXA: Lat=%.8f±%.3fm Lon=%.8f±%.3fm Alt=%.1f±%.3fm",
+                  gpsData.latitude, gpsData.posStdDevLat, 
+                  gpsData.longitude, gpsData.posStdDevLon, 
+                  gpsData.altitude, gpsData.posStdDevAlt);
+        LOG_DEBUG(EventSource::GNSS, "INSPVAXA: Hdg=%.1f Roll=%.1f Pitch=%.1f VelN=%.2f±%.3f VelE=%.2f±%.3f",
                       gpsData.insHeading, gpsData.insRoll, gpsData.insPitch,
                       gpsData.northVelocity, gpsData.velStdDevNorth,
                       gpsData.eastVelocity, gpsData.velStdDevEast);

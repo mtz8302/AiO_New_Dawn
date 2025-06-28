@@ -1,10 +1,10 @@
 #include "TM171AiOParser.h"
+#include "EventLogger.h"
 
 TM171AiOParser::TM171AiOParser()
     : state(WAIT_HEADER1), bufferIndex(0), expectedSize(0), payloadInfoBytes(0),
       roll(0), pitch(0), yaw(0), timestamp(0), dataValid(false), lastValidTime(0),
-      negateRoll(true), // Default to negating roll based on previous issue
-      totalPackets(0), rpyPackets(0), crcErrors(0), otherPackets(0)
+      negateRoll(true) // Default to negating roll based on previous issue
 {
 }
 
@@ -77,12 +77,12 @@ void TM171AiOParser::processByte(uint8_t byte)
         }
 
     case PROCESS_PACKET:
-        totalPackets++;
+        // Packet received
 
         // Validate CRC first
         if (!validateCRC())
         {
-            crcErrors++;
+            LOG_WARNING(EventSource::IMU, "TM171 CRC error");
             resetParser();
             break;
         }
@@ -94,12 +94,12 @@ void TM171AiOParser::processByte(uint8_t byte)
         {
             // This is an RPY packet, parse it
             parseRPYPacket();
-            rpyPackets++;
+            // RPY packet processed
         }
         else
         {
             // Some other packet type
-            otherPackets++;
+            // Non-RPY packet ignored
         }
 
         resetParser();
@@ -199,45 +199,32 @@ void TM171AiOParser::resetParser()
 
 void TM171AiOParser::printStats()
 {
-    Serial.print(F("\n--- TM171 Parser Statistics ---"));
-    Serial.printf("\nTotal Packets: %lu", totalPackets);
-    Serial.printf("\nRPY Packets: %lu", rpyPackets);
-    Serial.printf("\nCRC Errors: %lu", crcErrors);
-    Serial.printf("\nOther Packets: %lu", otherPackets);
-
-    if (totalPackets > 0)
-    {
-        float successRate = (rpyPackets * 100.0f) / totalPackets;
-        float errorRate = (crcErrors * 100.0f) / (totalPackets + crcErrors);
-        Serial.printf("\nRPY Rate: %.1f%%", successRate);
-        Serial.printf("\nError Rate: %.1f%%", errorRate);
-    }
-
-    Serial.println();
+    // No statistics - event-based logging only
+    LOG_INFO(EventSource::IMU, "TM171 Parser - No statistics available (event-based logging)");
 }
 
 void TM171AiOParser::printDebug()
 {
-    Serial.print(F("\n=== TM171 Parser Debug ==="));
-    Serial.printf("\nState: %d", state);
-    Serial.printf("\nBuffer Index: %d", bufferIndex);
-    Serial.printf("\nExpected Size: %d", expectedSize);
+    LOG_DEBUG(EventSource::IMU, "=== TM171 Parser Debug ===");
+    LOG_DEBUG(EventSource::IMU, "State: %d", state);
+    LOG_DEBUG(EventSource::IMU, "Buffer Index: %d", bufferIndex);
+    LOG_DEBUG(EventSource::IMU, "Expected Size: %d", expectedSize);
 
-    printStats();
+    // No statistics to print
 
     if (dataValid)
     {
-        Serial.printf("\n\nLast Valid Data:");
-        Serial.printf("\n  Timestamp: %lu µs", timestamp);
-        Serial.printf("\n  Roll: %.2f°%s", getRoll(), negateRoll ? " (negated)" : "");
-        Serial.printf("\n  Pitch: %.2f°", pitch);
-        Serial.printf("\n  Yaw: %.2f°", yaw);
-        Serial.printf("\n  Age: %lu ms", getTimeSinceLastValid());
+        LOG_DEBUG(EventSource::IMU, "Last Valid Data:");
+        LOG_DEBUG(EventSource::IMU, "  Timestamp: %lu µs", timestamp);
+        LOG_DEBUG(EventSource::IMU, "  Roll: %.2f°%s", getRoll(), negateRoll ? " (negated)" : "");
+        LOG_DEBUG(EventSource::IMU, "  Pitch: %.2f°", pitch);
+        LOG_DEBUG(EventSource::IMU, "  Yaw: %.2f°", yaw);
+        LOG_DEBUG(EventSource::IMU, "  Age: %lu ms", getTimeSinceLastValid());
     }
     else
     {
-        Serial.print(F("\n\nNo valid data"));
+        LOG_DEBUG(EventSource::IMU, "No valid data");
     }
 
-    Serial.print(F("\n========================\n"));
+    LOG_DEBUG(EventSource::IMU, "========================");
 }

@@ -108,7 +108,6 @@ private:
 
     // Data storage
     GNSSData gpsData;
-    uint32_t messagesSeen;  // Total valid NMEA messages received
 
     // Configuration
     bool enableNoiseFilter;
@@ -164,7 +163,7 @@ public:
     // Data access
     const GNSSData &getData() const { return gpsData; }
     bool isValid() const { return gpsData.isValid; }  // Deprecated - use hasFix()
-    bool hasGPS() const { return messagesSeen > 0 && (millis() - gpsData.lastUpdateTime < 5000); }
+    bool hasGPS() const { return gpsData.messageTypeMask > 0 && (millis() - gpsData.lastUpdateTime < 5000); }
     bool hasFix() const { return gpsData.hasPosition && gpsData.fixQuality > 0; }
     bool hasPosition() const { return gpsData.hasPosition; }
     bool hasVelocity() const { return gpsData.hasVelocity; }

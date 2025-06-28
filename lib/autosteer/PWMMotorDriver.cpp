@@ -1,6 +1,7 @@
 // PWMMotorDriver.cpp - PWM motor driver implementation for DRV8701
 #include "PWMMotorDriver.h"
 #include <Arduino.h>
+#include "EventLogger.h"
 
 PWMMotorDriver::PWMMotorDriver(MotorDriverType type, uint8_t pwm, uint8_t dir, 
                                uint8_t enable, uint8_t current) 
@@ -26,7 +27,7 @@ PWMMotorDriver::PWMMotorDriver(MotorDriverType type, uint8_t pwm, uint8_t dir,
 }
 
 bool PWMMotorDriver::init() {
-    Serial.print("\r\n[PWMMotor] Initializing DRV8701 motor driver...");
+    LOG_INFO(EventSource::AUTOSTEER, "Initializing DRV8701 motor driver...");
     
     // Configure pins
     pinMode(pwmPin, OUTPUT);
@@ -39,8 +40,7 @@ bool PWMMotorDriver::init() {
     
     if (hasCurrentSense) {
         pinMode(currentPin, INPUT);
-        Serial.print("\r\n  - Current sensing enabled on pin A");
-        Serial.print(currentPin - A0);
+        LOG_DEBUG(EventSource::AUTOSTEER, "Current sensing enabled on pin A%d", currentPin - A0);
     }
     
     // Set initial state
@@ -51,16 +51,13 @@ bool PWMMotorDriver::init() {
     // Teensy 4.1 default is fine for DRV8701
     analogWriteFrequency(pwmPin, PWM_FREQUENCY);
     
-    Serial.print("\r\n  - PWM on pin ");
-    Serial.print(pwmPin);
-    Serial.print(", DIR on pin ");
-    Serial.print(dirPin);
     if (enablePin != 255) {
-        Serial.print(", EN on pin ");
-        Serial.print(enablePin);
+        LOG_DEBUG(EventSource::AUTOSTEER, "PWM on pin %d, DIR on pin %d, EN on pin %d", pwmPin, dirPin, enablePin);
+    } else {
+        LOG_DEBUG(EventSource::AUTOSTEER, "PWM on pin %d, DIR on pin %d", pwmPin, dirPin);
     }
     
-    Serial.print(" SUCCESS");
+    LOG_INFO(EventSource::AUTOSTEER, "PWM motor driver initialized successfully");
     return true;
 }
 
@@ -108,12 +105,15 @@ void PWMMotorDriver::setSpeed(float speedPercent) {
     static uint32_t lastDebug = 0;
     if (millis() - lastDebug > 1000) {
         lastDebug = millis();
-        Serial.printf("\r\n[PWMMotor] Speed: %.1f%% -> PWM: %d, DIR: %s", 
+        if (hasCurrentSense) {
+            LOG_DEBUG(EventSource::AUTOSTEER, "Speed: %.1f%% -> PWM: %d, DIR: %s, Current: %.2fA", 
+                     speedPercent, pwmValue, 
+                     digitalRead(dirPin) ? "FWD" : "REV",
+                     getCurrent());
+        } else {
+            LOG_DEBUG(EventSource::AUTOSTEER, "Speed: %.1f%% -> PWM: %d, DIR: %s", 
                      speedPercent, pwmValue, 
                      digitalRead(dirPin) ? "FWD" : "REV");
-        
-        if (hasCurrentSense) {
-            Serial.printf(", Current: %.2fA", getCurrent());
         }
     }
 }
@@ -160,10 +160,10 @@ const char* PWMMotorDriver::getTypeName() const {
 void PWMMotorDriver::setCurrentScaling(float scale, float offset) {
     currentScale = scale;
     currentOffset = offset;
-    Serial.printf("\r\n[PWMMotor] Current scaling set: scale=%.3f, offset=%.3f", scale, offset);
+    LOG_INFO(EventSource::AUTOSTEER, "Current scaling set: scale=%.3f, offset=%.3f", scale, offset);
 }
 
 void PWMMotorDriver::setPWMFrequency(uint32_t freq) {
     analogWriteFrequency(pwmPin, freq);
-    Serial.printf("\r\n[PWMMotor] PWM frequency set to %lu Hz", freq);
+    LOG_INFO(EventSource::AUTOSTEER, "PWM frequency set to %lu Hz", freq);
 }

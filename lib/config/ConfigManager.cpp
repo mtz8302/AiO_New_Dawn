@@ -1,4 +1,5 @@
 #include "ConfigManager.h"
+#include "EventLogger.h"
 
 // Use shared EEPROM version from EEPROMLayout.h
 #define CURRENT_EE_VERSION EEPROM_VERSION
@@ -12,14 +13,14 @@ ConfigManager::ConfigManager()
     resetToDefaults();
     if (checkVersion())
     {
-        Serial.print("\r\n[ConfigManager] Version match - loading saved configs");
+        LOG_INFO(EventSource::CONFIG, "Version match - loading saved configs");
         loadAllConfigs();
-        Serial.printf("\r\n[ConfigManager] Loaded steerButton = %d, steerSwitch = %d", 
+        LOG_DEBUG(EventSource::CONFIG, "Loaded steerButton = %d, steerSwitch = %d", 
                       steerButton, steerSwitch);
     }
     else
     {
-        Serial.print("\r\n[ConfigManager] Version mismatch - using defaults");
+        LOG_WARNING(EventSource::CONFIG, "Version mismatch - using defaults");
         saveAllConfigs();
         updateVersion();
     }
@@ -76,7 +77,7 @@ void ConfigManager::saveSteerConfig()
     if (isUseYAxis)
         configByte2 |= 0x08;
 
-    Serial.printf("\r\n[ConfigManager] Saving steer config: button=%d, switch=%d, byte1=0x%02X", 
+    LOG_DEBUG(EventSource::CONFIG, "Saving steer config: button=%d, switch=%d, byte1=0x%02X", 
                   steerButton, steerSwitch, configByte1);
 
     int addr = STEER_CONFIG_ADDR;
@@ -91,7 +92,7 @@ void ConfigManager::saveSteerConfig()
     // Verify the write
     uint8_t verifyByte1;
     EEPROM.get(STEER_CONFIG_ADDR, verifyByte1);
-    Serial.printf("\r\n[ConfigManager] Steer config verification: wrote=0x%02X, read=0x%02X", 
+    LOG_DEBUG(EventSource::CONFIG, "Steer config verification: wrote=0x%02X, read=0x%02X", 
                   configByte1, verifyByte1);
 }
 
@@ -126,7 +127,7 @@ void ConfigManager::loadSteerConfig()
 
 void ConfigManager::saveSteerSettings()
 {
-    Serial.printf("\r\n[ConfigManager] Saving steer settings: Kp=%.1f, High=%d, Low=%.1f, Min=%d",
+    LOG_DEBUG(EventSource::CONFIG, "Saving steer settings: Kp=%.1f, High=%d, Low=%.1f, Min=%d",
                   kp, highPWM, lowPWM, minPWM);
     
     int addr = STEER_SETTINGS_ADDR;
@@ -147,7 +148,7 @@ void ConfigManager::saveSteerSettings()
     // Verify the save
     uint8_t verifyHighPWM;
     EEPROM.get(STEER_SETTINGS_ADDR + sizeof(kp), verifyHighPWM);
-    Serial.printf("\r\n[ConfigManager] Steer settings verification: saved highPWM=%d, read back=%d",
+    LOG_DEBUG(EventSource::CONFIG, "Steer settings verification: saved highPWM=%d, read back=%d",
                   highPWM, verifyHighPWM);
 }
 
@@ -168,7 +169,7 @@ void ConfigManager::loadSteerSettings()
     addr += sizeof(wasOffset);
     EEPROM.get(addr, ackermanFix);
     
-    Serial.printf("\r\n[ConfigManager] Loaded steer settings: Kp=%.1f, High=%d, Low=%.1f, Min=%d",
+    LOG_DEBUG(EventSource::CONFIG, "Loaded steer settings: Kp=%.1f, High=%d, Low=%.1f, Min=%d",
                   kp, highPWM, lowPWM, minPWM);
 }
 
@@ -431,12 +432,12 @@ bool ConfigManager::checkVersion()
 {
     uint16_t storedVersion;
     EEPROM.get(EE_VERSION_ADDR, storedVersion);
-    Serial.printf("\r\n[ConfigManager] EEPROM version check: stored=%d, current=%d", 
+    LOG_DEBUG(EventSource::CONFIG, "EEPROM version check: stored=%d, current=%d", 
                   storedVersion, CURRENT_EE_VERSION);
     
     // If EEPROM is uninitialized (0 or 0xFFFF), initialize it
     if (storedVersion == 0 || storedVersion == 0xFFFF) {
-        Serial.print("\r\n[ConfigManager] EEPROM appears uninitialized, performing first-time setup");
+        LOG_INFO(EventSource::CONFIG, "EEPROM appears uninitialized, performing first-time setup");
         return false;  // This will trigger saveAllConfigs() and updateVersion()
     }
     
@@ -445,13 +446,13 @@ bool ConfigManager::checkVersion()
 
 void ConfigManager::updateVersion()
 {
-    Serial.printf("\r\n[ConfigManager] Writing version %d to EEPROM address %d", 
+    LOG_DEBUG(EventSource::CONFIG, "Writing version %d to EEPROM address %d", 
                   CURRENT_EE_VERSION, EE_VERSION_ADDR);
     EEPROM.put(EE_VERSION_ADDR, (uint16_t)CURRENT_EE_VERSION);
     
     // Verify the write
     uint16_t verifyVersion;
     EEPROM.get(EE_VERSION_ADDR, verifyVersion);
-    Serial.printf("\r\n[ConfigManager] Version write verification: wrote=%d, read back=%d", 
+    LOG_DEBUG(EventSource::CONFIG, "Version write verification: wrote=%d, read back=%d", 
                   CURRENT_EE_VERSION, verifyVersion);
 }

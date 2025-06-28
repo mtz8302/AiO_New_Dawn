@@ -4,6 +4,7 @@
 
 #include "MotorDriverInterface.h"
 #include "CANGlobals.h"
+#include "EventLogger.h"
 
 class KeyaCANDriver : public MotorDriverInterface {
 private:
@@ -39,14 +40,14 @@ public:
     
     bool init() override {
         // CAN3 already initialized by global init
-        Serial.print("\r\n[KeyaCANDriver] Initialized");
+        LOG_INFO(EventSource::AUTOSTEER, "KeyaCANDriver initialized");
         return true;
     }
     
     void enable(bool en) override {
         if (!enabled && en) {
             // Motor is being enabled
-            Serial.printf("\r\n[Keya] Motor enabled");
+            LOG_INFO(EventSource::AUTOSTEER, "Keya motor enabled");
         }
         enabled = en;
     }
@@ -183,7 +184,7 @@ public:
             
             // Only trigger kickout on actual errors, not just disabled state
             if (errorLow > 1 || errorHigh > 0) {
-                Serial.printf("\r\n[Keya] Motor error code: 0x%04X", motorErrorCode);
+                LOG_WARNING(EventSource::AUTOSTEER, "Keya motor error code: 0x%04X", motorErrorCode);
                 return true;  // Immediate kickout on error
             }
         }

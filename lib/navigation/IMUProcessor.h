@@ -45,9 +45,7 @@ private:
     // Latest IMU data
     IMUData currentData;
 
-    // Statistics
-    uint32_t packetsReceived;
-    uint32_t packetsErrors;
+    // Timing
     elapsedMillis timeSinceLastPacket;
 
     // Private methods
@@ -77,8 +75,7 @@ public:
     // Info and stats
     IMUType getIMUType() const { return detectedType; }
     const char *getIMUTypeName() const;
-    uint32_t getPacketCount() const { return packetsReceived; }
-    uint32_t getErrorCount() const { return packetsErrors; }
+    uint32_t getTimeSinceLastPacket() const { return timeSinceLastPacket; }
 
     // Debug
     void printStatus();

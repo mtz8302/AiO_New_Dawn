@@ -7,6 +7,7 @@
 #include "KeyaCANDriver.h"
 #include "HardwareManager.h"
 #include "CANManager.h"
+#include "EventLogger.h"
 
 class MotorDriverFactory {
 public:
@@ -29,7 +30,7 @@ public:
                 return new KeyaCANDriver();
                 
             default:
-                Serial.print("\r\n[MotorFactory] WARNING: Unknown motor type");
+                LOG_WARNING(EventSource::AUTOSTEER, "Unknown motor type");
                 return nullptr;
         }
     }
@@ -38,12 +39,12 @@ public:
     static MotorDriverType detectMotorType(CANManager* canMgr) {
         // Check for Keya motor on CAN with new CANManager
         if (canMgr && canMgr->isKeyaDetected()) {
-            Serial.print("\r\n[MotorFactory] Keya motor detected on CAN3");
+            LOG_INFO(EventSource::AUTOSTEER, "Keya motor detected on CAN3");
             return MotorDriverType::KEYA_CAN;
         }
         
         // Default to DRV8701 if no CAN motor detected
-        Serial.print("\r\n[MotorFactory] No CAN motor detected, defaulting to DRV8701");
+        LOG_INFO(EventSource::AUTOSTEER, "No CAN motor detected, defaulting to DRV8701");
         return MotorDriverType::DRV8701;
     }
 };

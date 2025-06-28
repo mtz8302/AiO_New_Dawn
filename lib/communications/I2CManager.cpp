@@ -1,5 +1,6 @@
 // I2CManager.cpp - Implementation of I2C bus management
 #include "I2CManager.h"
+#include "EventLogger.h"
 
 I2CManager::I2CManager() {
     // Initialize bus info structures
@@ -9,46 +10,49 @@ I2CManager::I2CManager() {
 }
 
 bool I2CManager::initializeI2C() {
-    Serial.print("\r\n\n=== I2C Manager Initialization ===");
+    LOG_INFO(EventSource::SYSTEM, "I2C Manager Initialization starting");
     
     bool success = true;
     
     // Initialize Wire (I2C0) - Primary I2C bus on pins 18/19
-    Serial.print("\r\n- Initializing Wire (I2C0)...");
+    LOG_DEBUG(EventSource::SYSTEM, "Initializing Wire (I2C0)...");
     if (initializeBus(Wire, I2C_SPEED_FAST)) {
-        Serial.print(" SUCCESS");
+        LOG_DEBUG(EventSource::SYSTEM, "Wire (I2C0) initialized successfully");
         wire0Info.initialized = true;
         wire0Info.speed = I2C_SPEED_FAST;
     } else {
-        Serial.print(" FAILED");
+        LOG_ERROR(EventSource::SYSTEM, "Wire (I2C0) initialization FAILED");
         success = false;
     }
     
     // Initialize Wire1 (I2C1) - Secondary I2C bus on pins 16/17
-    Serial.print("\r\n- Initializing Wire1 (I2C1)...");
+    LOG_DEBUG(EventSource::SYSTEM, "Initializing Wire1 (I2C1)...");
     if (initializeBus(Wire1, I2C_SPEED_FAST)) {
-        Serial.print(" SUCCESS");
+        LOG_DEBUG(EventSource::SYSTEM, "Wire1 (I2C1) initialized successfully");
         wire1Info.initialized = true;
         wire1Info.speed = I2C_SPEED_FAST;
     } else {
-        Serial.print(" FAILED");
+        LOG_ERROR(EventSource::SYSTEM, "Wire1 (I2C1) initialization FAILED");
         success = false;
     }
     
     // Initialize Wire2 (I2C2) - Third I2C bus on pins 24/25
-    Serial.print("\r\n- Initializing Wire2 (I2C2)...");
+    LOG_DEBUG(EventSource::SYSTEM, "Initializing Wire2 (I2C2)...");
     if (initializeBus(Wire2, I2C_SPEED_FAST)) {
-        Serial.print(" SUCCESS");
+        LOG_DEBUG(EventSource::SYSTEM, "Wire2 (I2C2) initialized successfully");
         wire2Info.initialized = true;
         wire2Info.speed = I2C_SPEED_FAST;
     } else {
-        Serial.print(" FAILED");
+        LOG_ERROR(EventSource::SYSTEM, "Wire2 (I2C2) initialization FAILED");
         success = false;
     }
     
     // Detect devices on all initialized buses
     if (success) {
-        Serial.print("\r\n\n--- I2C Device Detection ---");
+        LOG_INFO(EventSource::SYSTEM, "Starting I2C device detection on %d buses", 
+                 (wire0Info.initialized ? 1 : 0) + 
+                 (wire1Info.initialized ? 1 : 0) + 
+                 (wire2Info.initialized ? 1 : 0));
         detectDevices();
     }
     
@@ -78,21 +82,21 @@ bool I2CManager::detectDevices() {
     bool foundAny = false;
     
     if (wire0Info.initialized) {
-        Serial.print("\r\n\nScanning Wire (I2C0)...");
+        LOG_DEBUG(EventSource::SYSTEM, "Scanning Wire (I2C0)...");
         if (scanBus(Wire, wire0Info)) {
             foundAny = true;
         }
     }
     
     if (wire1Info.initialized) {
-        Serial.print("\r\n\nScanning Wire1 (I2C1)...");
+        LOG_DEBUG(EventSource::SYSTEM, "Scanning Wire1 (I2C1)...");
         if (scanBus(Wire1, wire1Info)) {
             foundAny = true;
         }
     }
     
     if (wire2Info.initialized) {
-        Serial.print("\r\n\nScanning Wire2 (I2C2)...");
+        LOG_DEBUG(EventSource::SYSTEM, "Scanning Wire2 (I2C2)...");
         if (scanBus(Wire2, wire2Info)) {
             foundAny = true;
         }
@@ -121,7 +125,7 @@ bool I2CManager::scanBus(TwoWire& wire, I2CBusInfo& busInfo) {
             // Identify the device
             I2CDeviceType deviceType = identifyDevice(wire, address);
             
-            Serial.printf("\r\n  Found device at 0x%02X: %s", 
+            LOG_INFO(EventSource::SYSTEM, "  Found device at 0x%02X: %s", 
                          address, getDeviceTypeName(deviceType));
         }
         
@@ -129,9 +133,9 @@ bool I2CManager::scanBus(TwoWire& wire, I2CBusInfo& busInfo) {
     }
     
     if (!foundAny) {
-        Serial.print("\r\n  No devices found");
+        LOG_DEBUG(EventSource::SYSTEM, "  No devices found");
     } else {
-        Serial.printf("\r\n  Total devices: %d", busInfo.deviceCount);
+        LOG_DEBUG(EventSource::SYSTEM, "  Total devices: %d", busInfo.deviceCount);
     }
     
     return foundAny;
@@ -250,24 +254,24 @@ uint8_t I2CManager::getDeviceCount(TwoWire& wire) {
 }
 
 void I2CManager::printI2CStatus() {
-    Serial.print("\r\n\n=== I2C Manager Status ===");
+    LOG_INFO(EventSource::SYSTEM, "\n=== I2C Manager Status ===");
     
-    Serial.print("\r\nInitialized buses:");
+    LOG_INFO(EventSource::SYSTEM, "Initialized buses:");
     int busCount = 0;
     if (wire0Info.initialized) {
-        Serial.print(" Wire");
+        LOG_INFO(EventSource::SYSTEM, " Wire");
         busCount++;
     }
     if (wire1Info.initialized) {
-        Serial.print(" Wire1");
+        LOG_INFO(EventSource::SYSTEM, " Wire1");
         busCount++;
     }
     if (wire2Info.initialized) {
-        Serial.print(" Wire2");
+        LOG_INFO(EventSource::SYSTEM, " Wire2");
         busCount++;
     }
     if (busCount == 0) {
-        Serial.print(" NONE");
+        LOG_INFO(EventSource::SYSTEM, " NONE");
     }
     
     // Print status for each initialized bus
@@ -281,7 +285,7 @@ void I2CManager::printI2CStatus() {
         printBusStatus(Wire2, "Wire2 (I2C2)");
     }
     
-    Serial.print("\r\n=============================\r\n");
+    LOG_INFO(EventSource::SYSTEM, "=============================\n");
 }
 
 void I2CManager::printBusStatus(TwoWire& wire, const char* busName) {
@@ -299,16 +303,16 @@ void I2CManager::printBusStatus(TwoWire& wire, const char* busName) {
         return;
     }
     
-    Serial.printf("\r\n\n--- %s ---", busName);
-    Serial.printf("\r\nSpeed: %d Hz", info->speed);
-    Serial.printf("\r\nDevices: %d", info->deviceCount);
+    LOG_INFO(EventSource::SYSTEM, "\n--- %s ---", busName);
+    LOG_INFO(EventSource::SYSTEM, "Speed: %d Hz", info->speed);
+    LOG_INFO(EventSource::SYSTEM, "Devices: %d", info->deviceCount);
     
     if (info->deviceCount > 0) {
-        Serial.print("\r\nAddresses:");
+        LOG_INFO(EventSource::SYSTEM, "Addresses:");
         for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
             if (info->deviceAddresses[addr]) {
                 I2CDeviceType type = identifyDevice(wire, addr);
-                Serial.printf("\r\n  0x%02X - %s", addr, getDeviceTypeName(type));
+                LOG_INFO(EventSource::SYSTEM, "  0x%02X - %s", addr, getDeviceTypeName(type));
             }
         }
     }

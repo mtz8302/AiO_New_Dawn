@@ -1,6 +1,7 @@
 #include "IMUProcessor.h"
 #include "TM171AiOParser.h"
 #include "PGNUtils.h"
+#include "EventLogger.h"
 
 
 // Static instance pointer
@@ -9,7 +10,7 @@ IMUProcessor *IMUProcessor::instance = nullptr;
 IMUProcessor::IMUProcessor()
     : serialMgr(nullptr), detectedType(IMUType::NONE), isInitialized(false),
       bno(nullptr), imuSerial(&Serial4), tm171Parser(nullptr),
-      packetsReceived(0), packetsErrors(0)
+      timeSinceLastPacket(0)
 {
     instance = this;
 
@@ -47,24 +48,24 @@ void IMUProcessor::init()
 
 bool IMUProcessor::initialize()
 {
-    Serial.print("\r\n=== IMU Processor Initialization ===");
+    LOG_INFO(EventSource::IMU, "IMU Processor Initialization starting");
 
     // Get SerialManager instance
     serialMgr = SerialManager::getInstance();
     if (!serialMgr)
     {
-        Serial.print("\r\n** SerialManager not available **");
+        LOG_ERROR(EventSource::IMU, "SerialManager not available");
         return false;
     }
 
     // Try to detect IMU type by attempting initialization
-    Serial.print("\r\n- Detecting IMU type...");
+    LOG_INFO(EventSource::IMU, "Detecting IMU type...");
     
     // Try BNO085 first
     if (initBNO085()) {
         detectedType = IMUType::BNO085;
         isInitialized = true;
-        Serial.print(" BNO085 detected");
+        LOG_INFO(EventSource::IMU, "BNO085 detected");
         return true;
     }
     
@@ -72,27 +73,27 @@ bool IMUProcessor::initialize()
     if (initTM171()) {
         detectedType = IMUType::TM171;
         isInitialized = true;
-        Serial.print(" TM171 detected");
+        LOG_INFO(EventSource::IMU, "TM171 detected");
         return true;
     }
     
     // No IMU detected
     detectedType = IMUType::NONE;
     isInitialized = false;
-    Serial.print(" No IMU detected");
+    LOG_WARNING(EventSource::IMU, "No IMU detected");
     return false;
 }
 
 bool IMUProcessor::initBNO085()
 {
-    Serial.print("\r\n- Initializing BNO085 RVC mode");
+    LOG_DEBUG(EventSource::IMU, "Initializing BNO085 RVC mode");
 
     bno = new BNO_RVC();
     if (bno->begin(imuSerial))
     {
-        Serial.print("\r\n  - BNO085 communication established");
-        Serial.printf("\r\n  - Initial data: Yaw=%d, Pitch=%d, Roll=%d",
-                      bno->rvcData.yawX10, bno->rvcData.pitchX10, bno->rvcData.rollX10);
+        LOG_INFO(EventSource::IMU, "BNO085 communication established");
+        LOG_DEBUG(EventSource::IMU, "Initial data: Yaw=%d, Pitch=%d, Roll=%d",
+                  bno->rvcData.yawX10, bno->rvcData.pitchX10, bno->rvcData.rollX10);
         return true;
     }
 
@@ -103,16 +104,16 @@ bool IMUProcessor::initBNO085()
 
 bool IMUProcessor::initTM171()
 {
-    Serial.print("\r\n- Initializing TM171");
+    LOG_DEBUG(EventSource::IMU, "Initializing TM171");
 
     // Create TM171 parser
     tm171Parser = new TM171AiOParser();
-    Serial.print("\r\n  - TM171 AiO parser created");
+    LOG_DEBUG(EventSource::IMU, "TM171 AiO parser created");
 
     // Make sure serial port is properly initialized
     if (!imuSerial)
     {
-        Serial.print("\r\n  - ERROR: IMU serial port is NULL!");
+        LOG_ERROR(EventSource::IMU, "IMU serial port is NULL!");
         delete tm171Parser;
         tm171Parser = nullptr;
         return false;
@@ -125,7 +126,7 @@ bool IMUProcessor::initTM171()
     }
 
     // Wait a bit for TM171 to send data
-    Serial.print("\r\n  - Waiting for TM171 data...");
+    LOG_DEBUG(EventSource::IMU, "Waiting for TM171 data...");
     uint32_t startTime = millis();
     bool dataReceived = false;
     
@@ -138,13 +139,13 @@ bool IMUProcessor::initTM171()
     }
     
     if (!dataReceived) {
-        Serial.print(" No data received");
+        LOG_DEBUG(EventSource::IMU, "No data received from TM171");
         delete tm171Parser;
         tm171Parser = nullptr;
         return false;
     }
     
-    Serial.print(" Data detected!");
+    LOG_INFO(EventSource::IMU, "TM171 data detected!");
     return true;
 }
 
@@ -186,7 +187,7 @@ void IMUProcessor::processBNO085Data()
         currentData.isValid = true;
 
         // Update statistics
-        packetsReceived++;
+        // Valid packet received
         timeSinceLastPacket = 0;
     }
 }
@@ -214,8 +215,7 @@ void IMUProcessor::processTM171Data()
             currentData.isValid = true;
 
             // Update statistics from parser
-            packetsReceived = tm171Parser->totalPackets;
-            packetsErrors = tm171Parser->crcErrors;
+            // TM171 packet received
             timeSinceLastPacket = 0;
         }
     }
@@ -248,46 +248,41 @@ const char *IMUProcessor::getIMUTypeName() const
 
 void IMUProcessor::printStatus()
 {
-    Serial.print("\r\n\n=== IMU Processor Status ===");
-    Serial.printf("\r\nIMU Type: %s", getIMUTypeName());
-    Serial.printf("\r\nInitialized: %s", isInitialized ? "YES" : "NO");
-    Serial.printf("\r\nActive: %s", isActive() ? "YES" : "NO");
-    Serial.printf("\r\nPackets received: %lu", packetsReceived);
-    Serial.printf("\r\nPacket errors: %lu", packetsErrors);
-    Serial.printf("\r\nTime since last packet: %lu ms", (uint32_t)timeSinceLastPacket);
+    LOG_INFO(EventSource::IMU, "=== IMU Processor Status ===");
+    LOG_INFO(EventSource::IMU, "IMU Type: %s", getIMUTypeName());
+    LOG_INFO(EventSource::IMU, "Initialized: %s", isInitialized ? "YES" : "NO");
+    LOG_INFO(EventSource::IMU, "Active: %s", isActive() ? "YES" : "NO");
+    LOG_INFO(EventSource::IMU, "Time since last packet: %lu ms", (uint32_t)timeSinceLastPacket);
+    LOG_INFO(EventSource::IMU, "Time since last packet: %lu ms", (uint32_t)timeSinceLastPacket);
 
     if (currentData.isValid)
     {
-        Serial.printf("\r\n\nCurrent Data:");
-        Serial.printf("\r\n  Heading: %.1f°", currentData.heading);
-        Serial.printf("\r\n  Roll: %.1f°", currentData.roll);
-        Serial.printf("\r\n  Pitch: %.1f°", currentData.pitch);
-        Serial.printf("\r\n  Yaw Rate: %.1f°/s", currentData.yawRate);
-        Serial.printf("\r\n  Quality: %u", currentData.quality);
+        LOG_INFO(EventSource::IMU, "Current Data:");
+        LOG_INFO(EventSource::IMU, "  Heading: %.1f°", currentData.heading);
+        LOG_INFO(EventSource::IMU, "  Roll: %.1f°", currentData.roll);
+        LOG_INFO(EventSource::IMU, "  Pitch: %.1f°", currentData.pitch);
+        LOG_INFO(EventSource::IMU, "  Yaw Rate: %.1f°/s", currentData.yawRate);
+        LOG_INFO(EventSource::IMU, "  Quality: %u", currentData.quality);
     }
     else
     {
-        Serial.print("\r\n\nNo valid data");
+        LOG_INFO(EventSource::IMU, "No valid data");
     }
-
-    Serial.print("\r\n=============================");
 
     // If TM171, print parser debug info
     if (detectedType == IMUType::TM171 && tm171Parser)
     {
         tm171Parser->printStats();
     }
-
-    Serial.println();
 }
 
 void IMUProcessor::printCurrentData()
 {
     if (currentData.isValid)
     {
-        Serial.printf("\r\n%lu IMU: H=%.1f° R=%.1f° P=%.1f° YR=%.1f°/s Q=%u",
-                      currentData.timestamp, currentData.heading, currentData.roll,
-                      currentData.pitch, currentData.yawRate, currentData.quality);
+        LOG_INFO(EventSource::IMU, "%lu IMU: H=%.1f° R=%.1f° P=%.1f° YR=%.1f°/s Q=%u",
+                 currentData.timestamp, currentData.heading, currentData.roll,
+                 currentData.pitch, currentData.yawRate, currentData.quality);
     }
 }
 
@@ -307,11 +302,11 @@ void IMUProcessor::registerPGNCallbacks()
 {
     // Only register PGN callbacks if we actually have an IMU detected
     if (detectedType == IMUType::NONE) {
-        Serial.print("\r\n[IMUProcessor] No IMU detected - skipping PGN registration");
+        LOG_DEBUG(EventSource::IMU, "No IMU detected - skipping PGN registration");
         return;
     }
     
-    Serial.print("\r\n[IMUProcessor] Attempting to register PGN callbacks...");
+    LOG_DEBUG(EventSource::IMU, "Attempting to register PGN callbacks...");
     
     // Get PGNProcessor instance and register for IMU messages
     PGNProcessor* pgnProcessor = PGNProcessor::instance;
@@ -320,11 +315,11 @@ void IMUProcessor::registerPGNCallbacks()
         // Register for IMU PGN (121/0x79) - this also makes us receive broadcasts
         // Even though we register for 121, we'll still receive broadcast PGNs like Hello (200)
         bool success = pgnProcessor->registerCallback(IMU_SOURCE_ID, handleBroadcastPGN, "IMU Handler");
-        Serial.printf("\r\n[IMUProcessor] Registration %s for PGN %d", success ? "SUCCESS" : "FAILED", IMU_SOURCE_ID);
+        LOG_DEBUG(EventSource::IMU, "Registration %s for PGN %d", success ? "SUCCESS" : "FAILED", IMU_SOURCE_ID);
     }
     else
     {
-        Serial.print("\r\n[IMUProcessor] ERROR: PGNProcessor instance is NULL!");
+        LOG_ERROR(EventSource::IMU, "PGNProcessor instance is NULL!");
     }
 }
 
@@ -373,9 +368,9 @@ void IMUProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t l
         
         // Send the reply
         sendUDPbytes(subnetReply, sizeof(subnetReply));
-        Serial.printf("\r\n[IMUProcessor] Scan reply sent: %d.%d.%d.%d / Subnet: %d.%d.%d", 
-                      netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2], netConfig.currentIP[3],
-                      netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
+        LOG_DEBUG(EventSource::IMU, "Scan reply sent: %d.%d.%d.%d / Subnet: %d.%d.%d", 
+                  netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2], netConfig.currentIP[3],
+                  netConfig.currentIP[0], netConfig.currentIP[1], netConfig.currentIP[2]);
     }
 }
 

@@ -53,11 +53,7 @@ private:
 public:
     TM171AiOParser();
 
-    // Statistics
-    uint32_t totalPackets;
-    uint32_t rpyPackets;
-    uint32_t crcErrors;
-    uint32_t otherPackets;
+    // No statistics - event-based logging only
 
     // Main interface
     void processByte(uint8_t byte);

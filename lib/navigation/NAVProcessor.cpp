@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include "EventLogger.h"
 
 // External pointers from main.cpp
 extern GNSSProcessor* gnssPTR;
@@ -16,16 +17,39 @@ NAVProcessor* NAVProcessor::instance = nullptr;
 NAVProcessor::NAVProcessor() {
     instance = this;
     
-    // Initialize statistics
-    stats = {0, 0, 0, 0};
+    // Initialize timing
+    lastMessageTime = 0;
     
     // Clear message buffer
     memset(messageBuffer, 0, BUFFER_SIZE);
     
-    // Initialize startup check
-    startupCheckComplete = false;
+    LOG_INFO(EventSource::GNSS, "NAVProcessor initialized");
     
-    Serial.print("\r\n- NAVProcessor initialized");
+    // Report what we see from GNSSProcessor during startup
+    if (gnssPTR) {
+        const auto& gnssData = gnssPTR->getData();
+        
+        if (gnssData.messageTypeMask == 0) {
+            LOG_DEBUG(EventSource::GNSS, "  No NMEA data available yet");
+        } else {
+            LOG_DEBUG(EventSource::GNSS, "  NMEA messages detected (mask=0x%02X)", gnssData.messageTypeMask);
+            
+            if (!gnssData.hasPosition) {
+                LOG_DEBUG(EventSource::GNSS, "  No position fix (quality=%d, sats=%d)", 
+                         gnssData.fixQuality, gnssData.numSatellites);
+            } else {
+                if (gnssData.hasDualHeading) {
+                    LOG_DEBUG(EventSource::GNSS, "  Dual antenna mode (heading=%.1f°)", gnssData.dualHeading);
+                } else if (gnssData.hasINS) {
+                    LOG_DEBUG(EventSource::GNSS, "  INS mode (align status=%d)", gnssData.insAlignmentStatus);
+                } else {
+                    LOG_DEBUG(EventSource::GNSS, "  Single antenna mode");
+                }
+            }
+        }
+    } else {
+        LOG_DEBUG(EventSource::GNSS, "  GNSSProcessor not available");
+    }
 }
 
 NAVProcessor::~NAVProcessor() {
@@ -257,66 +281,18 @@ void NAVProcessor::sendMessage(const char* message) {
 }
 
 void NAVProcessor::process() {
-    // Simple startup detection and status reporting
-    static bool startupCheckComplete = false;
-    static uint32_t lastStatusPrint = 0;
-    
-    if (!startupCheckComplete && millis() > 3000) {  // Wait 3 seconds for systems to initialize
-        // Check GPS status
-        if (!gnssPTR || !gnssPTR->hasGPS()) {
-            Serial.print("\r\n[NAV] No GPS");
-        } else if (!gnssPTR->hasFix()) {
-            Serial.print("\r\n[NAV] GPS detected, waiting for fix...");
-        } else {
-            const auto& gnssData = gnssPTR->getData();
-            if (gnssData.hasDualHeading) {
-                Serial.print("\r\n[NAV] GPS Mode: Dual antenna with fix");
-            } else {
-                Serial.print("\r\n[NAV] GPS Mode: Single antenna with fix");
-            }
-        }
-        
-        // Check IMU status
-        if (!imuPTR || !imuPTR->hasValidData()) {
-            Serial.print("\r\n[NAV] No IMU");
-        } else {
-            Serial.printf("\r\n[NAV] IMU: %s detected", imuPTR->getIMUTypeName());
-        }
-        
-        startupCheckComplete = true;
-    }
-    
-    // Don't process if no GPS connection
-    if (!gnssPTR || !gnssPTR->hasGPS()) {
-        // Print status occasionally
-        if (millis() - lastStatusPrint > 5000) {
-            Serial.print("\r\n[NAV] No GPS detected");
-            lastStatusPrint = millis();
-        }
+    // Check if GNSSProcessor exists
+    if (!gnssPTR) {
         return;
     }
     
-    // Special handling for dual antenna/INS systems that need to send PAOGI even without fix
+    // For single antenna systems, we need at least position data
+    // For dual/INS systems, we can send messages even without full fix (for alignment)
     const auto& gnssData = gnssPTR->getData();
     bool isDualSystem = gnssData.hasDualHeading || gnssData.hasINS;
     
-    // Don't send messages if no fix (except for dual/INS systems)
-    if (!gnssPTR->hasFix() && !isDualSystem) {
-        // Print status occasionally
-        if (millis() - lastStatusPrint > 5000) {
-            Serial.print("\r\n[NAV] GPS detected, waiting for fix...");
-            lastStatusPrint = millis();
-        }
-        return;
-    }
-    
-    // For dual/INS systems without fix, print special status
-    if (!gnssPTR->hasFix() && isDualSystem) {
-        if (millis() - lastStatusPrint > 5000) {
-            Serial.print("\r\n[NAV] UM981 INS aligning - needs movement");
-            lastStatusPrint = millis();
-        }
-        // Continue to send PAOGI messages with timestamp updates
+    if (!isDualSystem && !gnssData.hasPosition) {
+        return;  // Don't send messages yet
     }
     
     // Check if it's time to send a message
@@ -330,13 +306,26 @@ void NAVProcessor::process() {
     NavMessageType msgType = selectMessageType();
     bool success = false;
     
+    // Track message type changes
+    static NavMessageType lastMsgType = NavMessageType::NONE;
+    static uint32_t messageTypeStartTime = 0;
+    
+    if (msgType != lastMsgType) {
+        if (msgType != NavMessageType::NONE) {
+            LOG_INFO(EventSource::GNSS, "Switching to %s messages", 
+                     msgType == NavMessageType::PANDA ? "PANDA" : "PAOGI");
+        }
+        lastMsgType = msgType;
+        messageTypeStartTime = millis();
+    }
     
     switch (msgType) {
         case NavMessageType::PANDA:
             success = formatPANDAMessage();
             if (success) {
                 sendMessage(messageBuffer);
-                stats.pandaMessagesSent++;
+                // Message sent successfully
+                
             }
             break;
             
@@ -344,7 +333,8 @@ void NAVProcessor::process() {
             success = formatPAOGIMessage();
             if (success) {
                 sendMessage(messageBuffer);
-                stats.paogiMessagesSent++;
+                // Message sent successfully
+                
             }
             break;
             
@@ -355,10 +345,12 @@ void NAVProcessor::process() {
     }
     
     if (!success && msgType != NavMessageType::NONE) {
-        stats.messageErrors++;
+        // Message format error occurred
+        LOG_ERROR(EventSource::GNSS, "Failed to format %s message", 
+                  msgType == NavMessageType::PANDA ? "PANDA" : "PAOGI");
     }
     
-    stats.lastMessageTime = millis();
+    lastMessageTime = millis();
 }
 
 void NAVProcessor::setMessageRate(uint32_t intervalMs) {
@@ -375,44 +367,37 @@ NavMessageType NAVProcessor::getCurrentMessageType() {
 // Removed complex detection methods - simplified checking in process()
 
 void NAVProcessor::printStatus() {
-    Serial.print("\r\n\n=== NAVProcessor Status ===");
+    LOG_INFO(EventSource::GNSS, "=== NAVProcessor Status ===");
     
     NavMessageType currentType = getCurrentMessageType();
-    Serial.printf("\r\nCurrent mode: %s", 
+    LOG_INFO(EventSource::GNSS, "Current mode: %s", 
         currentType == NavMessageType::PANDA ? "PANDA (Single GPS)" :
         currentType == NavMessageType::PAOGI ? "PAOGI (Dual GPS)" : "NONE");
     
-    Serial.printf("\r\nMessage rate: %d Hz", 1000 / MESSAGE_INTERVAL_MS);
+    LOG_INFO(EventSource::GNSS, "Message rate: %d Hz", 1000 / MESSAGE_INTERVAL_MS);
     
-    Serial.print("\r\n\nStatistics:");
-    Serial.printf("\r\n  PANDA messages sent: %lu", stats.pandaMessagesSent);
-    Serial.printf("\r\n  PAOGI messages sent: %lu", stats.paogiMessagesSent);
-    Serial.printf("\r\n  Message errors: %lu", stats.messageErrors);
-    
-    if (stats.lastMessageTime > 0) {
-        Serial.printf("\r\n  Time since last message: %lu ms", 
-            millis() - stats.lastMessageTime);
+    if (lastMessageTime > 0) {
+        LOG_INFO(EventSource::GNSS, "Time since last message: %lu ms", 
+            millis() - lastMessageTime);
     }
     
     // Show data sources
-    Serial.print("\r\n\nData sources:");
+    LOG_INFO(EventSource::GNSS, "Data sources:");
     if (gnssPTR && gnssPTR->isValid()) {
         const auto& gnssData = gnssPTR->getData();
-        Serial.printf("\r\n  GPS: Valid (Fix=%d, Sats=%d)", 
+        LOG_INFO(EventSource::GNSS, "  GPS: Valid (Fix=%d, Sats=%d)", 
             gnssData.fixQuality, gnssData.numSatellites);
         if (gnssData.hasDualHeading) {
-            Serial.printf("\r\n  Dual GPS: Active (Quality=%d)", 
+            LOG_INFO(EventSource::GNSS, "  Dual GPS: Active (Quality=%d)", 
                 gnssData.headingQuality);
         }
     } else {
-        Serial.print("\r\n  GPS: No valid fix");
+        LOG_INFO(EventSource::GNSS, "  GPS: No valid fix");
     }
     
     if (imuPTR && imuPTR->hasValidData()) {
-        Serial.printf("\r\n  IMU: %s connected", imuPTR->getIMUTypeName());
+        LOG_INFO(EventSource::GNSS, "  IMU: %s connected", imuPTR->getIMUTypeName());
     } else {
-        Serial.print("\r\n  IMU: Not detected");
+        LOG_INFO(EventSource::GNSS, "  IMU: Not detected");
     }
-    
-    Serial.print("\r\n========================\r\n");
 }

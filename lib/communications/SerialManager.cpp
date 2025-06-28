@@ -1,5 +1,5 @@
 #include "SerialManager.h"
-
+#include "EventLogger.h"
 
 // Static instance pointer
 SerialManager *SerialManager::instance = nullptr;
@@ -30,24 +30,24 @@ void SerialManager::init()
 
 bool SerialManager::initializeSerial()
 {
-    Serial.print("\r\n=== Serial Manager Initialization ===");
+    LOG_INFO(EventSource::SYSTEM, "Serial Manager Initialization starting");
 
     if (!initializeSerialPorts())
     {
-        Serial.print("\r\n** Serial port initialization FAILED **");
+        LOG_ERROR(EventSource::SYSTEM, "Serial port initialization FAILED");
         return false;
     }
 
     // No device detection needed - all detection moved to NAVProcessor
 
     isInitialized = true;
-    Serial.print("\r\n- Serial initialization SUCCESS");
+    LOG_INFO(EventSource::SYSTEM, "Serial initialization SUCCESS");
     return true;
 }
 
 bool SerialManager::initializeSerialPorts()
 {
-    Serial.print("\r\n- Initializing serial ports");
+    LOG_DEBUG(EventSource::SYSTEM, "Initializing serial ports");
 
     // GPS1 Serial - use class member buffers
     SerialGPS1.begin(BAUD_GPS);
@@ -75,11 +75,11 @@ bool SerialManager::initializeSerialPorts()
     // IMU Serial
     serialIMU->begin(BAUD_IMU);
 
-    Serial.printf("\r\n  - SerialGPS1/GPS2: %i baud", BAUD_GPS);
-    Serial.printf("\r\n  - SerialRTK: %i baud", BAUD_RTK);
-    Serial.printf("\r\n  - SerialRS232: %i baud", BAUD_RS232);
-    Serial.printf("\r\n  - SerialESP32: %i baud", BAUD_ESP32);
-    Serial.printf("\r\n  - SerialIMU: %i baud", BAUD_IMU);
+    LOG_DEBUG(EventSource::SYSTEM, "SerialGPS1/GPS2: %i baud", BAUD_GPS);
+    LOG_DEBUG(EventSource::SYSTEM, "SerialRTK: %i baud", BAUD_RTK);
+    LOG_DEBUG(EventSource::SYSTEM, "SerialRS232: %i baud", BAUD_RS232);
+    LOG_DEBUG(EventSource::SYSTEM, "SerialESP32: %i baud", BAUD_ESP32);
+    LOG_DEBUG(EventSource::SYSTEM, "SerialIMU: %i baud", BAUD_IMU);
 
     return true;
 }
@@ -272,8 +272,7 @@ void SerialManager::processESP32PGN(uint8_t *data, uint8_t length)
 {
     // ESP32 PGN processing - placeholder for network forwarding
     // This will send PGN data to AgIO via UDP when network is available
-    Serial.print("\r\nESP32 PGN received, length: ");
-    Serial.print(length);
+    LOG_DEBUG(EventSource::NETWORK, "ESP32 PGN received, length: %d", length);
 }
 
 bool SerialManager::validatePGNHeader(uint8_t *data, uint8_t length)

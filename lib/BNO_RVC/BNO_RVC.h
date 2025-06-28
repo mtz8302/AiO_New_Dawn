@@ -18,6 +18,7 @@ constexpr auto DEGREE_SCALE = 0.1;        ///< To convert the degree values
 #include "Arduino.h"
 #include <Wire.h>
 #include "elapsedMillis.h"
+#include "EventLogger.h"
 
 struct BNO_RVC_DATA {
     int16_t yawX10;       // Yaw in Degrees x 10
@@ -52,13 +53,13 @@ public:
     {
       if (timeout > 25)   // data should arrive every 10ms
       {
-        Serial.print("\r\n-* No BNO-085 in RVC mode detected *");
+        LOG_WARNING(EventSource::IMU, "No BNO-085 in RVC mode detected");
         return false;
       }
     }
     
-    Serial.print("\r\n\nBNO-085 RVC detected");
-    Serial.printf("\r\n- yaw:%i , pitch:%i , roll:%i\r\n\r\n", rvcData.yawX10, rvcData.pitchX10, rvcData.rollX10);
+    LOG_INFO(EventSource::IMU, "BNO-085 RVC detected");
+    LOG_DEBUG(EventSource::IMU, "Initial values - yaw:%i , pitch:%i , roll:%i", rvcData.yawX10, rvcData.pitchX10, rvcData.rollX10);
     return true;
   }
 
@@ -67,7 +68,7 @@ public:
   {
     if (timeoutTimer > timeoutPeriod && isActive) {
       isActive = false;
-      if (!_clear) Serial.print("\r\n*** BNO missed update ***");
+      if (!_clear) LOG_WARNING(EventSource::IMU, "BNO missed update");
       /*rvcData.pitchX10 = 0;
       rvcData.rollX10 = 0;
       rvcData.yawX10 = 65535;
@@ -104,7 +105,7 @@ public:
     // - rather then keep the old data and disgard the newest, 
     //   - instead dump everything up to the next 0xAA start byte?
     uint16_t extra = serial_dev->available();
-    if (extra > 0 && !_clear) { Serial.print((String)"\r\n" + millis() + " *** BNO serial input buffer had " + extra + " bytes leftover! ***"); }
+    if (extra > 0 && !_clear) { LOG_WARNING(EventSource::IMU, "BNO serial input buffer had %d bytes leftover at %lu ms", extra, millis()); }
     while (serial_dev->available() > 0) serial_dev->read();
 
     // it appears some BNOs run at 99.8hz compared to Teensy's clock

@@ -21,9 +21,8 @@
 #include "LEDManager.h"
 #include "MachineProcessor.h"
 #include "SubnetManager.h"
-
-// Test mode flag - set to true to run motor tests
-static bool MOTOR_TEST_MODE = false;  // Disable for autosteer mode
+#include "EventLogger.h"
+#include "CommandHandler.h"
 
 // ConfigManager pointer definition (same pattern as machinePTR)
 // This is the ONLY definition - all other files use extern declaration
@@ -64,11 +63,16 @@ void setup()
   configPTR = new ConfigManager();
   Serial.print("\r\n- ConfigManager initialized");
 
+  // Initialize EventLogger early so other modules can use it
+  EventLogger::init();
+  Serial.print("\r\n- EventLogger initialized (startup mode)");
+  delay(10);  // Small delay to ensure EventLogger is fully initialized
+
   // Initialize HardwareManager
   hardwarePTR = new HardwareManager();
   if (hardwarePTR->initializeHardware())
   {
-    Serial.print("\r\n- HardwareManager initialized");
+    LOG_INFO(EventSource::SYSTEM, "HardwareManager initialized");
     
     // Quick buzzer beep to indicate hardware is ready
     hardwarePTR->enableBuzzer();
@@ -77,96 +81,96 @@ void setup()
   }
   else
   {
-    Serial.print("\r\n✗ HardwareManager FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "HardwareManager FAILED");
   }
 
   // Initialize I2CManager
   i2cPTR = new I2CManager();
   if (i2cPTR->initializeI2C())
   {
-    Serial.print("\r\n- I2CManager initialized");
+    LOG_INFO(EventSource::SYSTEM, "I2CManager initialized");
   }
   else
   {
-    Serial.print("\r\n✗ I2CManager FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "I2CManager FAILED");
   }
 
   // Initialize LED Manager
   ledPTR = new LEDManager();
   if (ledPTR->init()) 
   {
-    Serial.print("\r\n- LEDManager initialized");
+    LOG_INFO(EventSource::SYSTEM, "LEDManager initialized");
     ledPTR->setBrightness(configPTR->getLEDBrightness());
   }
   else
   {
-    Serial.print("\r\n✗ LEDManager FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "LEDManager FAILED");
   }
 
   // Initialize CANManager
   canPTR = new CANManager();
   if (canPTR->init())
   {
-    Serial.print("\r\n- CANManager initialized");
+    LOG_INFO(EventSource::SYSTEM, "CANManager initialized");
   }
   else
   {
-    Serial.print("\r\n✗ CANManager FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "CANManager FAILED");
   }
 
   // Initialize SerialManager
   serialPTR = new SerialManager();
   if (serialPTR->initializeSerial())
   {
-    Serial.print("\r\n- SerialManager initialized");
+    LOG_INFO(EventSource::SYSTEM, "SerialManager initialized");
   }
   else
   {
-    Serial.print("\r\n✗ SerialManager FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "SerialManager FAILED");
   }
 
   // Initialize GNSSProcessor
   gnssPTR = new GNSSProcessor();
   if (gnssPTR->setup(false, true)) // Disable debug, enable noise filter
   {
-    Serial.print("\r\n- GNSSProcessor initialized");
+    LOG_INFO(EventSource::SYSTEM, "GNSSProcessor initialized");
   }
   else
   {
-    Serial.print("\r\n✗ GNSSProcessor FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "GNSSProcessor FAILED");
   }
 
   // Initialize IMUProcessor
   imuPTR = new IMUProcessor();
   if (imuPTR->initialize())
   {
-    Serial.print("\r\n- IMUProcessor initialized");
+    LOG_INFO(EventSource::SYSTEM, "IMUProcessor initialized");
     imuPTR->registerPGNCallbacks();
   }
   else
   {
-    Serial.print("\r\n✗ IMUProcessor FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "IMUProcessor FAILED");
   }
 
   // Initialize ADProcessor
   adPTR = ADProcessor::getInstance();
   if (adPTR->init())
   {
-    Serial.print("\r\n- ADProcessor initialized");
+    LOG_INFO(EventSource::SYSTEM, "ADProcessor initialized");
     adPTR->setWASOffset(1553);  // 2.5V center with 10k/10k voltage divider
     adPTR->setWASCountsPerDegree(30.0f);
     adPTR->process();
   }
   else
   {
-    Serial.print("\r\n✗ ADProcessor FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "ADProcessor FAILED");
   }
   
   // Initialize PWMProcessor
   pwmPTR = PWMProcessor::getInstance();
   if (pwmPTR->init())
   {
-    Serial.print("\r\n- PWMProcessor initialized");
+    LOG_INFO(EventSource::SYSTEM, "PWMProcessor initialized");
     pwmPTR->setSpeedPulseHz(10.0f);
     pwmPTR->setSpeedPulseDuty(0.5f);
     pwmPTR->enableSpeedPulse(true);
@@ -175,195 +179,120 @@ void setup()
   }
   else
   {
-    Serial.print("\r\n✗ PWMProcessor FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "PWMProcessor FAILED");
   }
 
   // Initialize NAVProcessor
   NAVProcessor::init();
   navPTR = navPTR->getInstance();
-  Serial.print("\r\n- NAVProcessor initialized");
+  LOG_INFO(EventSource::SYSTEM, "NAVProcessor initialized");
 
   // Initialize Motor Driver
   MotorDriverType detectedType = MotorDriverFactory::detectMotorType(canPTR);
   motorPTR = MotorDriverFactory::createMotorDriver(detectedType, hardwarePTR, canPTR);
   
   if (motorPTR && motorPTR->init()) {
-    Serial.print("\r\n- Motor driver initialized");
+    LOG_INFO(EventSource::SYSTEM, "Motor driver initialized");
   } else {
-    Serial.print("\r\n✗ Motor driver FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "Motor driver FAILED");
   }
 
   // Initialize AutosteerProcessor
   autosteerPTR = AutosteerProcessor::getInstance();
   if (autosteerPTR->init()) {
-    Serial.print("\r\n- AutosteerProcessor initialized");
+    LOG_INFO(EventSource::SYSTEM, "AutosteerProcessor initialized");
   } else {
-    Serial.print("\r\n✗ AutosteerProcessor FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "AutosteerProcessor FAILED");
   }
 
   // Initialize MachineProcessor
   if (MachineProcessor::init()) {
-    Serial.print("\r\n- MachineProcessor initialized");
+    LOG_INFO(EventSource::SYSTEM, "MachineProcessor initialized");
   } else {
-    Serial.print("\r\n✗ MachineProcessor FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "MachineProcessor FAILED");
   }
 
   // Initialize SubnetManager for PGN 201 handling
   if (SubnetManager::init()) {
-    Serial.print("\r\n- SubnetManager initialized");
+    LOG_INFO(EventSource::SYSTEM, "SubnetManager initialized");
   } else {
-    Serial.print("\r\n✗ SubnetManager FAILED");
+    LOG_ERROR(EventSource::SYSTEM, "SubnetManager FAILED");
   }
 
-  // Motor Driver Testing
-  if (MOTOR_TEST_MODE) {
-    Serial.print("\r\n\n*** Motor Test Mode Active ***");
-    
-    // Auto-detect motor type
-    MotorDriverType detectedType = MotorDriverFactory::detectMotorType(canPTR);
-    
-    // Create motor driver
-    motorPTR = MotorDriverFactory::createMotorDriver(detectedType, hardwarePTR, canPTR);
-    
-    if (motorPTR) {
-      if (motorPTR->init()) {
-        Serial.print("\r\n- Motor driver initialized (Test Mode)");
-      
-        // Skip automatic test for Keya
-        if (motorPTR->getType() != MotorDriverType::KEYA_CAN) {
-          // Run automatic test for PWM motors only
-          motorPTR->enable(true);
-          delay(1000);
-          
-          motorPTR->setSpeed(25.0f);
-          delay(2000);
-          
-          motorPTR->setSpeed(50.0f);
-          delay(2000);
-          
-          motorPTR->stop();
-          delay(1000);
-          
-          motorPTR->setSpeed(-25.0f);
-          delay(2000);
-          
-          motorPTR->setSpeed(-50.0f);
-          delay(2000);
-          
-          motorPTR->stop();
-          motorPTR->enable(false);
-        }
-        
-        Serial.print("\r\nCommands: e/d (enable/disable), +/- (speed), s (stop), ? (status)");
-      } else {
-        Serial.print("\r\n✗ Motor driver FAILED (Test Mode)");
-      }
-    }
-  }
+  // Initialize CommandHandler
+  CommandHandler::init();
+  CommandHandler* cmdHandler = CommandHandler::getInstance();
+  cmdHandler->setConfigManager(configPTR);
+  cmdHandler->setMachineProcessor(MachineProcessor::getInstance());
+  LOG_INFO(EventSource::SYSTEM, "CommandHandler initialized");
 
-  Serial.print("\r\n\n=== System Ready ===\r\n");
+
+  // Exit startup mode - start enforcing configured log levels
+  EventLogger::getInstance()->setStartupMode(false);
   
+  LOG_INFO(EventSource::SYSTEM, "=== System Ready ===");
 }
 
 void loop()
 {
   mongoose_poll();
-
-  static uint32_t lastPWMTest = 0;
   
-  // Motor test mode variables
-  static float motorTestSpeed = 0.0f;
-
-  // Motor test mode interactive commands
-  if (MOTOR_TEST_MODE && motorPTR) {
-    // Check for serial commands
-    if (Serial.available()) {
-      char cmd = Serial.read();
-      
-      switch (cmd) {
-        case '+':
-          motorTestSpeed = constrain(motorTestSpeed + 10.0f, -100.0f, 100.0f);
-          motorPTR->setSpeed(motorTestSpeed);
-          Serial.printf("\r\n[Motor] Speed: %.1f%%", motorTestSpeed);
-          break;
-          
-        case '*':  // Add a way to set higher speed for testing
-          motorTestSpeed = 50.0f;  // 50% = 500 in Keya units
-          motorPTR->setSpeed(motorTestSpeed);
-          Serial.printf("\r\n[Motor] Speed set to: %.1f%%", motorTestSpeed);
-          break;
-          
-        case '-':
-          motorTestSpeed = constrain(motorTestSpeed - 10.0f, -100.0f, 100.0f);
-          motorPTR->setSpeed(motorTestSpeed);
-          Serial.printf("\r\n[Motor] Speed: %.1f%%", motorTestSpeed);
-          break;
-          
-        case 'e':
-        case 'E':
-          motorPTR->enable(true);
-          Serial.print("\r\n[Motor] ENABLED");
-          break;
-          
-        case 'd':
-        case 'D':
-          motorPTR->enable(false);
-          Serial.print("\r\n[Motor] DISABLED");
-          break;
-          
-        case 's':
-        case 'S':
-          motorTestSpeed = 0.0f;
-          motorPTR->stop();
-          Serial.print("\r\n[Motor] STOPPED");
-          break;
-          
-        case 'f':
-        case 'F':
-          motorTestSpeed = abs(motorTestSpeed);
-          motorPTR->setSpeed(motorTestSpeed);
-          Serial.printf("\r\n[Motor] Forward: %.1f%%", motorTestSpeed);
-          break;
-          
-        case 'r':
-        case 'R':
-          motorTestSpeed = -abs(motorTestSpeed);
-          motorPTR->setSpeed(motorTestSpeed);
-          Serial.printf("\r\n[Motor] Reverse: %.1f%%", motorTestSpeed);
-          break;
-          
-        case '?':
-          MotorStatus status = motorPTR->getStatus();
-          Serial.printf("\r\n[Motor Status]");
-          Serial.printf("\r\n  Type: %s", motorPTR->getTypeName());
-          Serial.printf("\r\n  Enabled: %s", status.enabled ? "YES" : "NO");
-          Serial.printf("\r\n  Target: %.1f%%", status.targetSpeed);
-          Serial.printf("\r\n  Actual: %.1f%%", status.actualSpeed);
-          if (motorPTR->hasCurrentSensing()) {
-            Serial.printf("\r\n  Current: %.2fA", status.currentDraw);
-          }
-          if (status.hasError) {
-            Serial.printf("\r\n  ERROR: %s", status.errorMessage);
-          }
-          break;
-      }
+  // Show prominent system ready message after network is up and stable
+  static bool systemReadyShown = false;
+  static bool networkWasReady = false;
+  static uint32_t networkReadyTime = 0;
+  static uint32_t lastNetworkDownTime = 0;
+  
+  // Check if network is ready
+  bool networkReady = (g_mgr.ifp->state == MG_TCPIP_STATE_READY);
+  
+  // Track network state changes
+  if (!networkReady && networkWasReady) {
+    // Network went down - reset our tracking
+    networkWasReady = false;
+    lastNetworkDownTime = millis();
+  } else if (networkReady && !networkWasReady) {
+    // Network came up - but wait to ensure it's stable
+    if (millis() - lastNetworkDownTime > 1000) {  // Only if network was down for > 1 second
+      networkWasReady = true;
+      networkReadyTime = millis();
     }
-    // Don't return - let motor process() run below
   }
-
-  // Section diagnostics command handler (available in all modes)
-  if (Serial.available()) {
-    char cmd = Serial.read();
+  
+  // Show system ready message 3 seconds after network is stable (increased from 2)
+  if (!systemReadyShown && networkWasReady && networkReady && (millis() - networkReadyTime > 3000)) {
+    systemReadyShown = true;
     
-    if (cmd == 'd' || cmd == 'D') {
-      Serial.print("\r\n\n*** Running Section Diagnostics ***");
-      if (machinePTR) {
-        machinePTR->runSectionDiagnostics();
-      } else {
-        Serial.print("\r\nERROR: MachineProcessor not initialized!");
-      }
-    }
+    // Temporarily increase Mongoose log level to reduce interference
+    EventLogger* logger = EventLogger::getInstance();
+    int savedMongooseLevel = logger->getMongooseLogLevel();
+    logger->setMongooseLogLevel(1);  // Reduce Mongoose logging temporarily
+    
+    // Display the complete boxed message as separate lines to avoid rate limiting
+    // Use Serial.print directly for the visual box to ensure it displays properly
+    Serial.println("\r\n**************************************************");
+    Serial.printf("*** System ready - UDP syslog active at %s level ***\r\n", 
+                  logger->getLevelName(logger->getEffectiveLogLevel()));
+    Serial.println("*** Press '?' for menu, 'L' for logging control ***");
+    Serial.println("**************************************************\r\n");
+    
+    // Send a syslog-friendly message with menu instructions
+    LOG_WARNING(EventSource::SYSTEM, "* System ready - Press '?' for menu, 'L' for logging control *");
+    
+    // Restore Mongoose log level after a brief delay
+    delay(50);
+    logger->setMongooseLogLevel(savedMongooseLevel);
   }
+  
+  // Check if network is ready to reduce Mongoose logging
+  static uint32_t lastNetworkCheck = 0;
+  if (millis() - lastNetworkCheck > 1000) {  // Check every second
+    lastNetworkCheck = millis();
+    EventLogger::getInstance()->checkNetworkReady();
+  }
+
+  // Process serial commands through CommandHandler
+  CommandHandler::getInstance()->process();
   
   // Process IMU data
   if (imuPTR)
@@ -396,7 +325,7 @@ void loop()
   }
   
   // Process autosteer
-  if (autosteerPTR && !MOTOR_TEST_MODE)
+  if (autosteerPTR)
   {
     autosteerPTR->process();
   }
@@ -488,10 +417,11 @@ void loop()
         speedKmh = testSpeed;
         
         // Debug output every 3 seconds
+        static uint32_t lastPWMTest = 0;
         if (millis() - lastPWMTest > 3000)
         {
           lastPWMTest = millis();
-          Serial.printf("\r\n[PWM] TEST Speed: %.1f km/h = %.1f Hz (130 ppm)", 
+          LOG_DEBUG(EventSource::SYSTEM, "[PWM] TEST Speed: %.1f km/h = %.1f Hz (130 ppm)", 
                         speedKmh, pwmPTR->getSpeedPulseHz());
         }
       }

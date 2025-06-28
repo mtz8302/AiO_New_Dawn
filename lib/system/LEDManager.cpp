@@ -1,6 +1,7 @@
 // LEDManager.cpp - Implementation of front panel LED control
 #include "LEDManager.h"
 #include <Wire.h>
+#include "EventLogger.h"
 
 // Global pointer
 LEDManager* ledPTR = nullptr;
@@ -32,7 +33,7 @@ LEDManager::LEDManager() : pwm(nullptr), brightness(DEFAULT_BRIGHTNESS) {
 }
 
 bool LEDManager::init() {
-    Serial.print("\r\n- Initializing LED Manager");
+    LOG_INFO(EventSource::SYSTEM, "Initializing LED Manager");
     
     // Create PCA9685 driver - explicitly specify Wire like NG-V6
     pwm = new Adafruit_PWMServoDriver(LED_CONTROLLER_ADDRESS, Wire);
@@ -41,12 +42,12 @@ bool LEDManager::init() {
     Wire.beginTransmission(LED_CONTROLLER_ADDRESS);
     uint8_t error = Wire.endTransmission();
     if (error != 0) {
-        Serial.printf(" - PCA9685 not found at 0x70 (error=%d)", error);
+        LOG_ERROR(EventSource::SYSTEM, "PCA9685 not found at 0x70 (error=%d)", error);
         delete pwm;
         pwm = nullptr;
         return false;
     }
-    Serial.print(" - PCA9685 detected");
+    LOG_DEBUG(EventSource::SYSTEM, "PCA9685 detected at 0x70");
     
     // Initialize PCA9685
     pwm->begin();
@@ -62,16 +63,16 @@ bool LEDManager::init() {
         pwm->setPin(i, 0, true);  // 0 with invert=true means fully off
     }
     
-    Serial.printf(" - SUCCESS (brightness=%d%%)", brightness);
+    LOG_INFO(EventSource::SYSTEM, "LED Manager initialized (brightness=%d%%)", brightness);
     
     // Direct test - try to turn off channel 0 completely
-    Serial.print("\r\n[LED] Direct test: turning off channel 0");
+    LOG_DEBUG(EventSource::SYSTEM, "LED Direct test: turning off channel 0");
     pwm->setPWM(0, 0, 4095);  // Full off
     delay(500);
-    Serial.print("\r\n[LED] Direct test: turning on channel 0");
+    LOG_DEBUG(EventSource::SYSTEM, "LED Direct test: turning on channel 0");
     pwm->setPWM(0, 0, 0);     // Full on
     delay(500);
-    Serial.print("\r\n[LED] Direct test: done");
+    LOG_DEBUG(EventSource::SYSTEM, "LED Direct test: done");
     
     // Quick test flash - all LEDs green for 100ms
     for (int i = 0; i < 4; i++) {
@@ -203,7 +204,7 @@ void LEDManager::updateSingleLED(LED_ID id) {
     if (!ledOn || leds[id].color == OFF) {
         // Turn off LED
         if (!firstUpdate[id]) {
-            Serial.printf("\r\n[LED] %d: OFF", id);
+            LOG_DEBUG(EventSource::SYSTEM, "LED %d: OFF", id);
             firstUpdate[id] = true;
         }
         setLEDPins(id, 0, 0, 0);
@@ -223,7 +224,7 @@ void LEDManager::updateSingleLED(LED_ID id) {
         
         if (!firstUpdate[id]) {
             const char* colors[] = {"OFF", "RED", "YELLOW", "GREEN"};
-            Serial.printf("\r\n[LED] %d: %s (R=%d G=%d B=%d)", 
+            LOG_DEBUG(EventSource::SYSTEM, "LED %d: %s (R=%d G=%d B=%d)", 
                          id, colors[leds[id].color], r, g, b);
             firstUpdate[id] = true;
         }
@@ -247,16 +248,16 @@ void LEDManager::setLEDPins(LED_ID id, uint16_t r, uint16_t g, uint16_t b) {
 void LEDManager::testLEDs() {
     if (!pwm) return;
     
-    Serial.print("\r\n[LED] Running LED test sequence");
+    LOG_INFO(EventSource::SYSTEM, "Running LED test sequence");
     
     // Test each LED with each color
     for (int led = 0; led < 4; led++) {
         const char* ledNames[] = {"PWR_ETH", "GPS", "STEER", "INS"};
-        Serial.printf("\r\n  Testing %s LED:", ledNames[led]);
+        LOG_DEBUG(EventSource::SYSTEM, "Testing %s LED:", ledNames[led]);
         
         for (int color = 1; color <= 3; color++) {  // Skip OFF
             const char* colorNames[] = {"", "RED", "YELLOW", "GREEN"};
-            Serial.printf(" %s", colorNames[color]);
+            LOG_DEBUG(EventSource::SYSTEM, "  %s", colorNames[color]);
             
             setLED((LED_ID)led, (LED_COLOR)color, SOLID);
             delay(500);
@@ -266,7 +267,7 @@ void LEDManager::testLEDs() {
     }
     
     // Test blinking
-    Serial.print("\r\n  Testing all LEDs blinking green");
+    LOG_DEBUG(EventSource::SYSTEM, "Testing all LEDs blinking green");
     for (int led = 0; led < 4; led++) {
         setLED((LED_ID)led, GREEN, BLINKING);
     }
@@ -282,5 +283,5 @@ void LEDManager::testLEDs() {
         setLED((LED_ID)led, OFF, SOLID);
     }
     
-    Serial.print("\r\n[LED] Test sequence complete");
+    LOG_INFO(EventSource::SYSTEM, "LED test sequence complete");
 }

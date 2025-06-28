@@ -1,5 +1,6 @@
 #include "PGNProcessor.h"
 #include "ConfigManager.h" // Full definition needed for method calls
+#include "EventLogger.h"
 
 // External declaration of the global pointer (defined in main.cpp)
 extern ConfigManager *configPTR;
@@ -71,7 +72,7 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
         if (pgn == 200) {
             for (size_t i = 0; i < registrationCount; i++) {
                 if (registrations[i].pgn == 200) {
-                    Serial.printf("\r\n  - Found callback: %s", registrations[i].name);
+                    LOG_DEBUG(EventSource::NETWORK, "Found callback: %s", registrations[i].name);
                 }
             }
         }
@@ -110,7 +111,7 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
                     
                     // Only print for non-254 PGNs to reduce noise
                     if (pgn != 254 && pgn != 239) {  // Also skip PGN 239 (frequent machine data)
-                        Serial.printf("\r\n[PGNProcessor] Calling %s for PGN %d", registrations[i].name, pgn);
+                        LOG_DEBUG(EventSource::NETWORK, "Calling %s for PGN %d", registrations[i].name, pgn);
                     }
                     registrations[i].callback(pgn, data, dataLen);
                     handled = true;
@@ -141,17 +142,21 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
 
 void PGNProcessor::printPgnAnnouncement(struct mg_connection *udpPacket, char *pgnName)
 {
-    Serial.printf("\r\n0x%02X(%d)-%s",
-                  udpPacket->recv.buf[3],
-                  udpPacket->recv.buf[3],
-                  pgnName);
+    // Build the data string
+    char dataStr[256];
+    int offset = snprintf(dataStr, sizeof(dataStr), "0x%02X(%d)-%s %d Data>",
+                         udpPacket->recv.buf[3],
+                         udpPacket->recv.buf[3],
+                         pgnName,
+                         udpPacket->recv.len);
 
-    // Print data bytes
-    Serial.printf(" %d Data>", udpPacket->recv.len);
-    for (int i = 4; i < udpPacket->recv.len - 1; i++)
+    // Add data bytes
+    for (int i = 4; i < udpPacket->recv.len - 1 && offset < 250; i++)
     {
-        Serial.printf("%3d ", udpPacket->recv.buf[i]);
+        offset += snprintf(dataStr + offset, sizeof(dataStr) - offset, "%3d ", udpPacket->recv.buf[i]);
     }
+    
+    LOG_DEBUG(EventSource::NETWORK, "%s", dataStr);
 }
 
 bool PGNProcessor::registerCallback(uint8_t pgn, PGNCallback callback, const char* name)
@@ -159,7 +164,7 @@ bool PGNProcessor::registerCallback(uint8_t pgn, PGNCallback callback, const cha
     // Check if we have room for more registrations
     if (registrationCount >= MAX_REGISTRATIONS)
     {
-        Serial.printf("\r\n[PGNProcessor] Registration failed - max callbacks reached (%d)", MAX_REGISTRATIONS);
+        LOG_ERROR(EventSource::NETWORK, "Registration failed - max callbacks reached (%d)", MAX_REGISTRATIONS);
         return false;
     }
     
@@ -168,7 +173,7 @@ bool PGNProcessor::registerCallback(uint8_t pgn, PGNCallback callback, const cha
     {
         if (registrations[i].pgn == pgn)
         {
-            Serial.printf("\r\n[PGNProcessor] PGN %d already registered to %s", pgn, registrations[i].name);
+            LOG_WARNING(EventSource::NETWORK, "PGN %d already registered to %s", pgn, registrations[i].name);
             return false;
         }
     }
@@ -179,7 +184,7 @@ bool PGNProcessor::registerCallback(uint8_t pgn, PGNCallback callback, const cha
     registrations[registrationCount].name = name;
     registrationCount++;
     
-    Serial.printf("\r\n[PGNProcessor] Registered callback for PGN %d (%s)", pgn, name);
+    LOG_INFO(EventSource::NETWORK, "Registered callback for PGN %d (%s)", pgn, name);
     return true;
 }
 
@@ -191,7 +196,7 @@ bool PGNProcessor::unregisterCallback(uint8_t pgn)
         if (registrations[i].pgn == pgn)
         {
             // Found it - remove by shifting remaining entries
-            Serial.printf("\r\n[PGNProcessor] Unregistering callback for PGN %d (%s)", pgn, registrations[i].name);
+            LOG_INFO(EventSource::NETWORK, "Unregistering callback for PGN %d (%s)", pgn, registrations[i].name);
             
             for (size_t j = i; j < registrationCount - 1; j++)
             {

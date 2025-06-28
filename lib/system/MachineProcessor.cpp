@@ -4,6 +4,7 @@
 #include "PGNUtils.h"
 #include <Wire.h>
 #include "Adafruit_PWMServoDriver.h"
+#include "EventLogger.h"
 
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 
@@ -57,7 +58,7 @@ static Adafruit_PWMServoDriver& getSectionOutputs() {
 }
 
 MachineProcessor::MachineProcessor() {
-    Serial.println("MachineProcessor: Constructor called");
+    LOG_DEBUG(EventSource::MACHINE, "Constructor called");
 }
 
 MachineProcessor* MachineProcessor::getInstance() {
@@ -69,13 +70,13 @@ MachineProcessor* MachineProcessor::getInstance() {
 }
 
 bool MachineProcessor::init() {
-    Serial.println("MachineProcessor: Initializing (Phase 4 - Full functionality)");
+    LOG_INFO(EventSource::MACHINE, "Initializing (Phase 4 - Full functionality)");
     getInstance();
     return instance->initialize();
 }
 
 bool MachineProcessor::initialize() {
-    Serial.println("MachineProcessor: Initializing...");
+    LOG_INFO(EventSource::MACHINE, "Initializing...");
     
     // Clear initial state
     memset(&sectionState, 0, sizeof(sectionState));
@@ -86,23 +87,23 @@ bool MachineProcessor::initialize() {
     
     // Phase 4: Hardware initialization enabled
     if (!initializeSectionOutputs()) {
-        Serial.println("MachineProcessor: ERROR - Failed to initialize section outputs!");
+        LOG_ERROR(EventSource::MACHINE, "Failed to initialize section outputs!");
         return false;
     }
     
     // Register PGN handlers
-    Serial.println("MachineProcessor: Registering PGN callbacks...");
+    LOG_DEBUG(EventSource::MACHINE, "Registering PGN callbacks...");
     // We'll receive broadcast PGNs (200, 202) through our normal registrations
     bool reg238 = PGNProcessor::instance->registerCallback(MACHINE_PGN_CONFIG, handlePGN238, "Machine");
     bool reg239 = PGNProcessor::instance->registerCallback(MACHINE_PGN_DATA, handlePGN239, "Machine");
-    Serial.printf("MachineProcessor: PGN registrations - 238:%d, 239:%d\n", reg238, reg239);
+    LOG_DEBUG(EventSource::MACHINE, "PGN registrations - 238:%d, 239:%d", reg238, reg239);
     
-    Serial.println("MachineProcessor: Initialized successfully with hardware");
+    LOG_INFO(EventSource::MACHINE, "Initialized successfully with hardware");
     return true;
 }
 
 bool MachineProcessor::initializeSectionOutputs() {
-    Serial.println("MachineProcessor: Initializing section outputs...");
+    LOG_DEBUG(EventSource::MACHINE, "Initializing section outputs...");
     
     // 1. Check for PCA9685 at expected address
     if (!checkPCA9685()) {
@@ -122,31 +123,31 @@ bool MachineProcessor::initializeSectionOutputs() {
     getSectionOutputs().setOutputMode(true);  // Push-pull outputs
     
     // 5. Put all DRV8234s to sleep initially
-    Serial.println("MachineProcessor: Putting all DRV8234 drivers to sleep");
+    LOG_DEBUG(EventSource::MACHINE, "Putting all DRV8234 drivers to sleep");
     for (uint8_t pin : SLEEP_PINS) {
         getSectionOutputs().setPin(pin, 0, 0); // Set LOW for sleep mode
     }
     delayMicroseconds(150); // Wait for sleep mode to settle
     
     // 6. Set all section outputs to OFF state before waking drivers
-    Serial.println("MachineProcessor: Setting section outputs LOW (OFF state)");
+    LOG_DEBUG(EventSource::MACHINE, "Setting section outputs LOW (OFF state)");
     for (uint8_t pin : SECTION_PINS) {
         getSectionOutputs().setPin(pin, 0, 0); // Set LOW = OFF
     }
     
     // 7. Wake up the section DRV8234s with reset pulse
-    Serial.println("MachineProcessor: Waking section DRV8234 drivers");
+    LOG_DEBUG(EventSource::MACHINE, "Waking section DRV8234 drivers");
     getSectionOutputs().setPin(13, 187, 1); // Section 1/2 - 30µs LOW pulse
     getSectionOutputs().setPin(3, 187, 1);  // Section 3/4 - 30µs LOW pulse
     getSectionOutputs().setPin(7, 187, 1);  // Section 5/6 - 30µs LOW pulse
     
     // 9. Enable DRV8234 outputs by setting DRVOFF LOW
-    Serial.println("MachineProcessor: Enabling DRV8234 outputs (DRVOFF = LOW)");
+    LOG_DEBUG(EventSource::MACHINE, "Enabling DRV8234 outputs (DRVOFF = LOW)");
     for (uint8_t pin : DRVOFF_PINS) {
         getSectionOutputs().setPin(pin, 0, 0); // Set LOW to enable outputs
     }
     
-    Serial.println("MachineProcessor: Section outputs initialized");
+    LOG_INFO(EventSource::MACHINE, "Section outputs initialized");
     return true;
 }
 
@@ -154,10 +155,10 @@ bool MachineProcessor::checkPCA9685() {
     Wire.beginTransmission(0x44);
     uint8_t error = Wire.endTransmission();
     if (error == 0) {
-        Serial.println("MachineProcessor: Found PCA9685 at 0x44");
+        LOG_DEBUG(EventSource::MACHINE, "Found PCA9685 at 0x44");
         return true;
     }
-    Serial.println("MachineProcessor: ERROR - PCA9685 not found at 0x44!");
+    LOG_ERROR(EventSource::MACHINE, "PCA9685 not found at 0x44!");
     return false;
 }
 
@@ -175,7 +176,7 @@ void MachineProcessor::process() {
 
 void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len) {
     if (!instance) {
-        Serial.println("MachineProcessor: ERROR - No instance for broadcast PGN!");
+        LOG_ERROR(EventSource::MACHINE, "No instance for broadcast PGN!");
         return;
     }
     
@@ -231,7 +232,7 @@ void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len
         return;
     }
     
-    Serial.println("MachineProcessor: Received PGN 238 (Machine Config)");
+    LOG_DEBUG(EventSource::MACHINE, "Received PGN 238 (Machine Config)");
     
     instance->state.lastPGN238Time = millis();
     
@@ -239,7 +240,7 @@ void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len
     instance->config.lowerTime = data[1];
     instance->config.enableHydraulicLift = (data[2] & 0x01);
     
-    Serial.printf("MachineProcessor: Config - Raise:%d Lower:%d Hydraulic:%s\n", 
+    LOG_INFO(EventSource::MACHINE, "Config - Raise:%d Lower:%d Hydraulic:%s", 
         instance->config.raiseTime, 
         instance->config.lowerTime,
         instance->config.enableHydraulicLift ? "Yes" : "No");
@@ -278,7 +279,7 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
     bool sectionChanged = (len >= 8) && (data[6] != lastSectionBytes[0] || data[7] != lastSectionBytes[1]);
     
     if (sectionChanged) {
-        Serial.printf("\r\n[Machine] Sections changed: [6]SC1-8=0x%02X [7]SC9-16=0x%02X", data[6], data[7]);
+        LOG_INFO(EventSource::MACHINE, "Sections changed: [6]SC1-8=0x%02X [7]SC9-16=0x%02X", data[6], data[7]);
         lastSectionBytes[0] = data[6];
         lastSectionBytes[1] = data[7];
         lastPGN239Debug = millis();
@@ -296,7 +297,7 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
     if (len >= 10) {
         uint16_t possibleAutoStates = data[8] | (data[9] << 8);
         if (possibleAutoStates != 0) {
-            Serial.printf("\r\n[Machine] Found non-zero data in bytes 8-9: 0x%04X", possibleAutoStates);
+            LOG_DEBUG(EventSource::MACHINE, "Found non-zero data in bytes 8-9: 0x%04X", possibleAutoStates);
         }
     }
     
@@ -322,14 +323,25 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
             instance->sectionState.isOn[i] = sectionBit;
         }
         
-        Serial.printf("MachineProcessor: Sections=0x%04X Auto=0x%04X\n", sectionStates, autoStates);
+        // Only log state changes, not every message
+        static uint16_t lastSectionStates = 0xFFFF;
+        static uint16_t lastAutoStates = 0xFFFF;
         
-        // Debug: Show which sections should be ON
-        Serial.print("MachineProcessor: Section states:");
-        for (int i = 0; i < 6; i++) {
-            Serial.printf(" S%d=%s", i+1, instance->sectionState.isOn[i] ? "ON" : "OFF");
+        if (sectionStates != lastSectionStates || autoStates != lastAutoStates) {
+            LOG_INFO(EventSource::MACHINE, "Section state changed: Sections=0x%04X Auto=0x%04X", sectionStates, autoStates);
+            lastSectionStates = sectionStates;
+            lastAutoStates = autoStates;
+            
+            // Show which sections are ON
+            char sectionMsg[100];
+            snprintf(sectionMsg, sizeof(sectionMsg), "Section states:");
+            for (int i = 0; i < 6; i++) {
+                char buf[20];
+                snprintf(buf, sizeof(buf), " S%d=%s", i+1, instance->sectionState.isOn[i] ? "ON" : "OFF");
+                strncat(sectionMsg, buf, sizeof(sectionMsg) - strlen(sectionMsg) - 1);
+            }
+            LOG_INFO(EventSource::MACHINE, "%s", sectionMsg);
         }
-        Serial.println();
         
         // Phase 4: Section output updates enabled
         instance->updateSectionOutputs();
@@ -340,90 +352,88 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
     bool newLowered = (hydLift != 0);
     if (newLowered != instance->state.isLowered) {
         instance->state.isLowered = newLowered;
-        Serial.printf("MachineProcessor: Hydraulic %s\n", newLowered ? "lowered" : "raised");
+        LOG_INFO(EventSource::MACHINE, "Hydraulic %s", newLowered ? "lowered" : "raised");
     }
 }
 
 void MachineProcessor::printStatus() {
-    Serial.print("Machine: Active=");
-    Serial.print(isActive() ? "Yes" : "No");
-    Serial.print(" Sections=0x");
-    Serial.print(sectionState.rawPGNData, HEX);
-    Serial.print(" Lowered=");
-    Serial.println(state.isLowered ? "Yes" : "No");
+    LOG_INFO(EventSource::MACHINE, "Active=%s Sections=0x%04X Lowered=%s",
+        isActive() ? "Yes" : "No",
+        sectionState.rawPGNData,
+        state.isLowered ? "Yes" : "No");
 }
 
 void MachineProcessor::runSectionDiagnostics() {
-    Serial.println("\n=== Section Diagnostics ===");
+    LOG_INFO(EventSource::MACHINE, "=== Section Diagnostics ===");
     
     // 1. Check PCA9685 communication
     if (!checkPCA9685()) {
-        Serial.println("ERROR: PCA9685 not responding!");
+        LOG_ERROR(EventSource::MACHINE, "PCA9685 not responding!");
         return;
     }
     
     // 2. Test ONLY section control pins (avoid motor driver pins)
-    Serial.println("\nTesting ONLY section control pins...");
-    Serial.println("Section pins: 0, 1, 4, 5, 10, 9");
+    LOG_INFO(EventSource::MACHINE, "Testing ONLY section control pins...");
+    LOG_INFO(EventSource::MACHINE, "Section pins: 0, 1, 4, 5, 10, 9");
     
     // First ensure all section pins are LOW (OFF)
-    Serial.println("\nSetting all sections LOW (OFF)...");
+    LOG_INFO(EventSource::MACHINE, "Setting all sections LOW (OFF)...");
     for (int i = 0; i < 6; i++) {
         getSectionOutputs().setPin(SECTION_PINS[i], 0, 0); // LOW = OFF
     }
     delay(1000);
     
     // Test sections one by one
-    Serial.println("\nTesting each section individually (1 second each)...");
+    LOG_INFO(EventSource::MACHINE, "Testing each section individually (1 second each)...");
     for (int i = 0; i < 6; i++) {
-        Serial.printf("\nSection %d (pin %d):\n", i+1, SECTION_PINS[i]);
-        Serial.println("  Setting HIGH (LED should turn ON)...");
+        LOG_INFO(EventSource::MACHINE, "Section %d (pin %d):", i+1, SECTION_PINS[i]);
+        LOG_INFO(EventSource::MACHINE, "  Setting HIGH (LED should turn ON)...");
         getSectionOutputs().setPin(SECTION_PINS[i], 0, 1); // HIGH = ON
         delay(1000);
         
-        Serial.println("  Setting LOW (LED should turn OFF)...");
+        LOG_INFO(EventSource::MACHINE, "  Setting LOW (LED should turn OFF)...");
         getSectionOutputs().setPin(SECTION_PINS[i], 0, 0); // LOW = OFF
         delay(500);
     }
     
     // Test all sections together
-    Serial.println("\nTesting all sections together...");
-    Serial.println("All sections HIGH (all LEDs ON):");
+    LOG_INFO(EventSource::MACHINE, "Testing all sections together...");
+    LOG_INFO(EventSource::MACHINE, "All sections HIGH (all LEDs ON):");
     for (int i = 0; i < 6; i++) {
         getSectionOutputs().setPin(SECTION_PINS[i], 0, 1); // HIGH = ON
     }
     delay(2000);
     
-    Serial.println("All sections LOW (all LEDs OFF):");
+    LOG_INFO(EventSource::MACHINE, "All sections LOW (all LEDs OFF):");
     for (int i = 0; i < 6; i++) {
         getSectionOutputs().setPin(SECTION_PINS[i], 0, 0); // LOW = OFF
     }
     delay(1000);
     
     // 3. Current state summary
-    Serial.println("\nCurrent section states:");
+    LOG_INFO(EventSource::MACHINE, "Current section states:");
     for (int i = 0; i < 6; i++) {
-        Serial.printf("  Section %d: %s\n", i+1, sectionState.isOn[i] ? "ON" : "OFF");
+        LOG_INFO(EventSource::MACHINE, "  Section %d: %s", i+1, sectionState.isOn[i] ? "ON" : "OFF");
     }
     
     // 4. Pin summary
-    Serial.println("\nPin configuration summary:");
-    Serial.println("- Section signal pins: 0, 1, 4, 5, 10, 9");
-    Serial.println("- DRVOFF pins: 2, 6, 8 (LOW = enabled)");
-    Serial.println("- nSLEEP pins: 13, 3, 7 (sections only)");
-    Serial.println("- Mode: Independent (solder jumpers open)");
-    Serial.println("\nNOTE: Avoiding pins 11, 12, 14, 15 which may control motor drivers");
+    LOG_INFO(EventSource::MACHINE, "Pin configuration summary:");
+    LOG_INFO(EventSource::MACHINE, "- Section signal pins: 0, 1, 4, 5, 10, 9");
+    LOG_INFO(EventSource::MACHINE, "- DRVOFF pins: 2, 6, 8 (LOW = enabled)");
+    LOG_INFO(EventSource::MACHINE, "- nSLEEP pins: 13, 3, 7 (sections only)");
+    LOG_INFO(EventSource::MACHINE, "- Mode: Independent (solder jumpers open)");
+    LOG_INFO(EventSource::MACHINE, "NOTE: Avoiding pins 11, 12, 14, 15 which may control motor drivers");
     
     // 5. Test control pins
-    Serial.println("\nChecking DRVOFF states...");
+    LOG_INFO(EventSource::MACHINE, "Checking DRVOFF states...");
     // Make sure all DRVOFF pins are LOW (enabled)
     for (uint8_t pin : DRVOFF_PINS) {
-        Serial.printf("Setting DRVOFF pin %d LOW (enabled)\n", pin);
+        LOG_DEBUG(EventSource::MACHINE, "Setting DRVOFF pin %d LOW (enabled)", pin);
         getSectionOutputs().setPin(pin, 0, 0); // Ensure LOW
     }
     delay(100);
     
-    Serial.println("\nTesting if DRVOFF disables sections...");
+    LOG_INFO(EventSource::MACHINE, "Testing if DRVOFF disables sections...");
     // Turn all sections ON
     for (int i = 0; i < 6; i++) {
         getSectionOutputs().setPin(SECTION_PINS[i], 0, 0); // LOW = ON
@@ -431,28 +441,23 @@ void MachineProcessor::runSectionDiagnostics() {
     delay(1000);
     
     // Toggle DRVOFF to see effect
-    Serial.println("Setting DRVOFF HIGH (should disable all)...");
+    LOG_INFO(EventSource::MACHINE, "Setting DRVOFF HIGH (should disable all)...");
     for (uint8_t pin : DRVOFF_PINS) {
         getSectionOutputs().setPin(pin, 0, 1); // HIGH = disabled
     }
     delay(1000);
     
-    Serial.println("Setting DRVOFF LOW (should re-enable all)...");
+    LOG_INFO(EventSource::MACHINE, "Setting DRVOFF LOW (should re-enable all)...");
     for (uint8_t pin : DRVOFF_PINS) {
         getSectionOutputs().setPin(pin, 0, 0); // LOW = enabled
     }
     delay(1000);
     
-    Serial.println("\n=== Diagnostics Complete ===");
+    LOG_INFO(EventSource::MACHINE, "=== Diagnostics Complete ===");
 }
 
 void MachineProcessor::updateSectionOutputs() {
-    // Debug: Show we're updating outputs
-    static uint32_t lastUpdateDebug = 0;
-    if (millis() - lastUpdateDebug > 1000) {
-        Serial.println("\r\n[Machine] updateSectionOutputs called");
-        lastUpdateDebug = millis();
-    }
+    // Removed periodic debug logging - this is called frequently from PGN 239
     
     // Update physical outputs for sections 1-6
     // Logic is inverted: HIGH turns LED ON, LOW turns LED OFF

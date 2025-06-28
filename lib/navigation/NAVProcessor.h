@@ -25,13 +25,8 @@ private:
     elapsedMillis timeSinceLastMessage;
     static constexpr uint32_t MESSAGE_INTERVAL_MS = 100; // 10Hz
     
-    // Statistics
-    struct Stats {
-        uint32_t pandaMessagesSent;
-        uint32_t paogiMessagesSent;
-        uint32_t messageErrors;
-        uint32_t lastMessageTime;
-    } stats;
+    // Last message time for connection tracking
+    uint32_t lastMessageTime;
     
     // Private constructor for singleton
     NAVProcessor();
@@ -40,9 +35,6 @@ private:
     NavMessageType selectMessageType();
     bool formatPANDAMessage();
     bool formatPAOGIMessage();
-    
-    // Simple startup checks
-    bool startupCheckComplete;
     
     // Utility methods
     void convertToNMEACoordinates(double decimalDegrees, bool isLongitude, 
@@ -66,13 +58,12 @@ public:
     
     // Status and debugging
     void printStatus();
-    const Stats& getStats() const { return stats; }
+    uint32_t getLastMessageTime() const { return lastMessageTime; }
     NavMessageType getCurrentMessageType();
     
     // AgIO connection status (based on recent message sending)
     bool hasAgIOConnection() const { 
-        return (millis() - stats.lastMessageTime) < 5000 && 
-               (stats.pandaMessagesSent > 0 || stats.paogiMessagesSent > 0);
+        return (millis() - lastMessageTime) < 5000;
     }
 };
 

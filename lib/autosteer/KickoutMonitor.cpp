@@ -2,6 +2,7 @@
 #include "ConfigManager.h"
 #include "ADProcessor.h"
 #include "pcb.h"
+#include "EventLogger.h"
 
 // External global pointers
 extern ConfigManager* configPTR;
@@ -38,14 +39,14 @@ KickoutMonitor* KickoutMonitor::getInstance() {
 }
 
 bool KickoutMonitor::init() {
-    Serial.print("\r\n- Initializing KickoutMonitor");
+    LOG_INFO(EventSource::AUTOSTEER, "Initializing KickoutMonitor");
     
     // Get external dependencies
     configMgr = configPTR;
     adProcessor = adPTR;
     
     if (!configMgr || !adProcessor) {
-        Serial.print(" - ERROR: Missing dependencies");
+        LOG_ERROR(EventSource::AUTOSTEER, "KickoutMonitor - Missing dependencies");
         return false;
     }
     
@@ -53,12 +54,10 @@ bool KickoutMonitor::init() {
     if (configMgr->getShaftEncoder()) {
         pinMode(KICKOUT_D_PIN, INPUT_PULLUP);
         lastEncoderState = digitalRead(KICKOUT_D_PIN);
-        Serial.print("\r\n  - Encoder input configured on pin ");
-        Serial.print(KICKOUT_D_PIN);
-        Serial.print(" (polling mode)");
+        LOG_DEBUG(EventSource::AUTOSTEER, "Encoder input configured on pin %d (polling mode)", KICKOUT_D_PIN);
     }
     
-    Serial.print(" - SUCCESS");
+    LOG_INFO(EventSource::AUTOSTEER, "KickoutMonitor initialized successfully");
     return true;
 }
 
@@ -113,7 +112,7 @@ bool KickoutMonitor::checkEncoderKickout() {
     
     // Check if we exceeded the threshold
     if (pulsesSinceLast > maxPulses) {
-        Serial.printf("\r\n[KICKOUT] Encoder overspeed: %lu pulses (max %u)", 
+        LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Encoder overspeed: %lu pulses (max %u)", 
                       pulsesSinceLast, maxPulses);
         return true;
     }
@@ -130,7 +129,7 @@ bool KickoutMonitor::checkPressureKickout() {
     const uint16_t PRESSURE_THRESHOLD = 800;  // ADC value
     
     if (lastPressureReading > PRESSURE_THRESHOLD) {
-        Serial.printf("\r\n[KICKOUT] Pressure high: %u (threshold %u)", 
+        LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Pressure high: %u (threshold %u)", 
                       lastPressureReading, PRESSURE_THRESHOLD);
         return true;
     }
@@ -147,7 +146,7 @@ bool KickoutMonitor::checkCurrentKickout() {
     const uint16_t CURRENT_THRESHOLD = 900;  // ADC value
     
     if (lastCurrentReading > CURRENT_THRESHOLD) {
-        Serial.printf("\r\n[KICKOUT] Current high: %u (threshold %u)", 
+        LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Current high: %u (threshold %u)", 
                       lastCurrentReading, CURRENT_THRESHOLD);
         return true;
     }
@@ -157,7 +156,7 @@ bool KickoutMonitor::checkCurrentKickout() {
 
 void KickoutMonitor::clearKickout() {
     if (kickoutActive) {
-        Serial.printf("\r\n[KICKOUT] Cleared after %lu ms", 
+        LOG_INFO(EventSource::AUTOSTEER, "KICKOUT: Cleared after %lu ms", 
                       millis() - kickoutTime);
     }
     kickoutActive = false;

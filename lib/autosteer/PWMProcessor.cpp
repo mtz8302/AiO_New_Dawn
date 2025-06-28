@@ -1,4 +1,5 @@
 #include "PWMProcessor.h"
+#include "EventLogger.h"
 
 // Static instance
 PWMProcessor* PWMProcessor::instance = nullptr;
@@ -23,7 +24,7 @@ PWMProcessor* PWMProcessor::getInstance()
 
 bool PWMProcessor::init()
 {
-    Serial.print("\r\n=== PWM Processor Initialization ===");
+    LOG_INFO(EventSource::AUTOSTEER, "=== PWM Processor Initialization ===");
     
     // Configure speed pulse pin as output
     pinMode(SPEED_PULSE_PIN, OUTPUT);
@@ -39,11 +40,11 @@ bool PWMProcessor::init()
     analogWriteFrequency(SPEED_PULSE_PIN, 100);  // Start at 100Hz
     analogWriteResolution(12);  // 12-bit resolution (0-4095)
     
-    Serial.print("\r\n- Speed pulse pin (D33) configured");
-    Serial.print("\r\n- PWM resolution: 12-bit");
-    Serial.print("\r\n- Default frequency: 100Hz");
-    Serial.print("\r\n- Output type: Open collector (inverted)");
-    Serial.print("\r\n- PWM Processor initialization SUCCESS\r\n");
+    LOG_DEBUG(EventSource::AUTOSTEER, "Speed pulse pin (D33) configured");
+    LOG_DEBUG(EventSource::AUTOSTEER, "PWM resolution: 12-bit");
+    LOG_DEBUG(EventSource::AUTOSTEER, "Default frequency: 100Hz");
+    LOG_DEBUG(EventSource::AUTOSTEER, "Output type: Open collector (inverted)");
+    LOG_INFO(EventSource::AUTOSTEER, "PWM Processor initialization SUCCESS");
     
     return true;
 }
@@ -131,18 +132,18 @@ float PWMProcessor::speedToFrequency(float speedKmh) const
 
 void PWMProcessor::printStatus() const
 {
-    Serial.print("\r\n\r\n=== PWM Processor Status ===");
+    LOG_INFO(EventSource::AUTOSTEER, "=== PWM Processor Status ===");
     
-    Serial.print("\r\nSpeed Pulse Output:");
-    Serial.printf("\r\n  Enabled: %s", pulseEnabled ? "YES" : "NO");
-    Serial.printf("\r\n  Frequency: %.1f Hz", pulseFrequency);
-    Serial.printf("\r\n  Duty Cycle: %.1f%%", pulseDuty * 100.0f);
-    Serial.printf("\r\n  Pin: D%d (open collector)", SPEED_PULSE_PIN);
+    LOG_INFO(EventSource::AUTOSTEER, "Speed Pulse Output:");
+    LOG_INFO(EventSource::AUTOSTEER, "  Enabled: %s", pulseEnabled ? "YES" : "NO");
+    LOG_INFO(EventSource::AUTOSTEER, "  Frequency: %.1f Hz", pulseFrequency);
+    LOG_INFO(EventSource::AUTOSTEER, "  Duty Cycle: %.1f%%", pulseDuty * 100.0f);
+    LOG_INFO(EventSource::AUTOSTEER, "  Pin: D%d (open collector)", SPEED_PULSE_PIN);
     
-    Serial.print("\r\n\r\nSpeed Settings:");
-    Serial.printf("\r\n  Current Speed: %.1f km/h", currentSpeedKmh);
-    Serial.printf("\r\n  Pulses/Meter: %.2f", pulsesPerMeter);
-    Serial.printf("\r\n  Calculated Hz: %.1f", speedToFrequency(currentSpeedKmh));
+    LOG_INFO(EventSource::AUTOSTEER, "Speed Settings:");
+    LOG_INFO(EventSource::AUTOSTEER, "  Current Speed: %.1f km/h", currentSpeedKmh);
+    LOG_INFO(EventSource::AUTOSTEER, "  Pulses/Meter: %.2f", pulsesPerMeter);
+    LOG_INFO(EventSource::AUTOSTEER, "  Calculated Hz: %.1f", speedToFrequency(currentSpeedKmh));
     
-    Serial.print("\r\n=============================\r\n");
+    LOG_INFO(EventSource::AUTOSTEER, "=============================");
 }

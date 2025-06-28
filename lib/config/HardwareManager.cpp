@@ -1,5 +1,5 @@
 #include "HardwareManager.h"
-
+#include "EventLogger.h"
 
 // Static instance pointer
 HardwareManager *HardwareManager::instance = nullptr;
@@ -35,34 +35,34 @@ bool HardwareManager::initialize()
 
 bool HardwareManager::initializeHardware()
 {
-    Serial.print("\r\n=== Hardware Manager Initialization ===");
+    LOG_INFO(EventSource::SYSTEM, "Hardware Manager Initialization starting");
 
     if (!initializePins())
     {
-        Serial.print("\r\n** Pin initialization FAILED **");
+        LOG_ERROR(EventSource::SYSTEM, "Pin initialization FAILED");
         return false;
     }
 
     if (!initializePWM())
     {
-        Serial.print("\r\n** PWM initialization FAILED **");
+        LOG_ERROR(EventSource::SYSTEM, "PWM initialization FAILED");
         return false;
     }
 
     if (!initializeADC())
     {
-        Serial.print("\r\n** ADC initialization FAILED **");
+        LOG_ERROR(EventSource::SYSTEM, "ADC initialization FAILED");
         return false;
     }
 
     isInitialized = true;
-    Serial.print("\r\n- Hardware initialization SUCCESS");
+    LOG_INFO(EventSource::SYSTEM, "Hardware initialization SUCCESS");
     return true;
 }
 
 bool HardwareManager::initializePins()
 {
-    Serial.print("\r\n- Configuring pins");
+    LOG_DEBUG(EventSource::SYSTEM, "Configuring pins");
 
     // Configure output pins
     pinMode(getBuzzerPin(), OUTPUT);
@@ -84,24 +84,24 @@ bool HardwareManager::initializePins()
     analogWrite(getPWM1Pin(), 0);
     analogWrite(getPWM2Pin(), 0);
 
-    Serial.print("\r\n  - Pin configuration complete");
+    LOG_DEBUG(EventSource::SYSTEM, "Pin configuration complete");
     return true;
 }
 
 bool HardwareManager::initializePWM()
 {
-    Serial.print("\r\n- Configuring PWM");
+    LOG_DEBUG(EventSource::SYSTEM, "Configuring PWM");
     return setPWMFrequency(pwmFrequencyMode);
 }
 
 bool HardwareManager::initializeADC()
 {
-    Serial.print("\r\n- Configuring ADC");
+    LOG_DEBUG(EventSource::SYSTEM, "Configuring ADC");
 
     analogReadResolution(12);
     analogReadAveraging(16);
 
-    Serial.print("\r\n  - ADC: 12-bit resolution, 16x averaging");
+    LOG_DEBUG(EventSource::SYSTEM, "ADC: 12-bit resolution, 16x averaging");
     return true;
 }
 
@@ -136,7 +136,7 @@ bool HardwareManager::setPWMFrequency(uint8_t mode)
     analogWriteFrequency(getPWM1Pin(), frequency);
     analogWriteFrequency(getPWM2Pin(), frequency);
 
-    Serial.printf("\r\n  - PWM frequency: %i Hz (mode %i)", frequency, pwmFrequencyMode);
+    LOG_DEBUG(EventSource::SYSTEM, "PWM frequency: %i Hz (mode %i)", frequency, pwmFrequencyMode);
 
     return true;
 }
