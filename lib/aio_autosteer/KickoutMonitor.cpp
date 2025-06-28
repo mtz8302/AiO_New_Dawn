@@ -1,12 +1,13 @@
 #include "KickoutMonitor.h"
 #include "ConfigManager.h"
 #include "ADProcessor.h"
-#include "pcb.h"
+#include "HardwareManager.h"
 #include "EventLogger.h"
 
 // External global pointers
 extern ConfigManager* configPTR;
 extern ADProcessor* adPTR;
+extern HardwareManager* hardwarePTR;
 
 // Singleton instance
 KickoutMonitor* KickoutMonitor::instance = nullptr;
