@@ -6,6 +6,7 @@
 #include "ConfigManager.h"
 #include "LEDManager.h"
 #include "EventLogger.h"
+#include <cmath>  // For sin() function
 
 // External network function
 extern void sendUDPbytes(uint8_t* data, int len);
@@ -474,13 +475,30 @@ void AutosteerProcessor::updateMotorControl() {
     }
     
     // Check if steering should be active
-    if (!shouldSteerBeActive()) {
-        // Stop motor
+    bool shouldBeActive = shouldSteerBeActive();
+    
+    // Handle state transitions
+    if (shouldBeActive && motorState == MotorState::DISABLED) {
+        // Transition: Start soft-start sequence
+        motorState = MotorState::SOFT_START;
+        softStartBeginTime = millis();
+        softStartRampValue = 0.0f;
+        LOG_INFO(EventSource::AUTOSTEER, "Starting soft-start sequence (duration=%dms, maxPWM=%.1f%%)", 
+                 softStartDurationMs, softStartMaxPWM * 100.0f);
+    } 
+    else if (!shouldBeActive && motorState != MotorState::DISABLED) {
+        // Transition: Disable motor
+        motorState = MotorState::DISABLED;
         motorSpeed = 0.0f;
         if (motorPTR) {
             motorPTR->enable(false);
             motorPTR->setSpeed(0.0f);
         }
+        LOG_INFO(EventSource::AUTOSTEER, "Motor disabled");
+        return;
+    }
+    else if (!shouldBeActive) {
+        // Already disabled, nothing to do
         return;
     }
     
@@ -516,6 +534,43 @@ void AutosteerProcessor::updateMotorControl() {
             // Convert to percentage for motor driver
             motorSpeed = (scaledPWM / 255.0f) * 100.0f;
             if (pidOutput < 0) motorSpeed = -motorSpeed;
+            
+            // Apply soft-start if active
+            if (motorState == MotorState::SOFT_START) {
+                uint32_t elapsed = millis() - softStartBeginTime;
+                
+                if (elapsed >= softStartDurationMs) {
+                    // Soft-start complete, transition to normal
+                    motorState = MotorState::NORMAL_CONTROL;
+                    LOG_INFO(EventSource::AUTOSTEER, "Soft-start complete, entering normal control");
+                } else {
+                    // Calculate ramp progress (0.0 to 1.0)
+                    float rampProgress = (float)elapsed / softStartDurationMs;
+                    
+                    // Use sine curve for smooth acceleration (slow-fast-slow)
+                    float sineRamp = sin(rampProgress * PI / 2.0f);
+                    
+                    // Calculate soft-start limit based on lowPWM
+                    float softStartLimit = (lowPWM / 255.0f) * 100.0f * softStartMaxPWM * sineRamp;
+                    
+                    // Apply limit in direction of motor speed
+                    if (motorSpeed > 0) {
+                        motorSpeed = min(motorSpeed, softStartLimit);
+                    } else if (motorSpeed < 0) {
+                        motorSpeed = max(motorSpeed, -softStartLimit);
+                    }
+                    
+                    softStartRampValue = softStartLimit;
+                    
+                    // Debug logging every 50ms during soft-start
+                    static uint32_t lastSoftStartDebug = 0;
+                    if (millis() - lastSoftStartDebug > 50) {
+                        lastSoftStartDebug = millis();
+                        LOG_DEBUG(EventSource::AUTOSTEER, "Soft-start: elapsed=%dms, progress=%.2f, limit=%.1f%%, speed=%.1f%%", 
+                                  elapsed, rampProgress, softStartLimit, motorSpeed);
+                    }
+                }
+            }
         }
     } else {
         // No config, use raw PID output
@@ -558,6 +613,9 @@ bool AutosteerProcessor::shouldSteerBeActive() const {
 
 void AutosteerProcessor::emergencyStop() {
     LOG_WARNING(EventSource::AUTOSTEER, "EMERGENCY STOP");
+    
+    // Reset motor state
+    motorState = MotorState::DISABLED;
     
     // Disable motor immediately
     motorSpeed = 0.0f;

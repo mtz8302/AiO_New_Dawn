@@ -93,6 +93,21 @@ private:
     uint32_t kickoutTime = 0;            // Time of last kickout
     static constexpr uint32_t KICKOUT_COOLDOWN_MS = 2000; // 2 second cooldown
     
+    // Soft-start motor control
+    enum class MotorState {
+        DISABLED,
+        SOFT_START,
+        NORMAL_CONTROL
+    };
+    
+    MotorState motorState = MotorState::DISABLED;
+    uint32_t softStartBeginTime = 0;
+    float softStartRampValue = 0.0f;
+    
+    // Soft-start parameters (configurable via Web UI)
+    uint16_t softStartDurationMs = 175;     // Duration of soft-start ramp (150-200ms range)
+    float softStartMaxPWM = 0.4f;           // Maximum PWM during soft-start (percentage of lowPWM)
+    
 public:
     // Singleton access
     static AutosteerProcessor* getInstance();
@@ -133,6 +148,17 @@ public:
     // Public getters for state
     bool isEnabled() const { return autosteerEnabled; }
     float getTargetAngle() const { return targetAngle; }
+    
+    // Soft-start configuration
+    uint16_t getSoftStartDuration() const { return softStartDurationMs; }
+    void setSoftStartDuration(uint16_t durationMs) { 
+        softStartDurationMs = constrain(durationMs, 0, 500); // Max 500ms
+    }
+    
+    float getSoftStartMaxPWM() const { return softStartMaxPWM; }
+    void setSoftStartMaxPWM(float maxPWM) { 
+        softStartMaxPWM = constrain(maxPWM, 0.0f, 1.0f); // 0-100% of lowPWM
+    }
 };
 
 // Global pointer
