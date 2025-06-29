@@ -1,0 +1,270 @@
+{
+  "version": "1.0.2",
+  "level": 0,
+  "http": {
+    "http": true,
+    "https": false,
+    "ui": true,
+    "login": false
+  },
+  "mqtt": {
+    "enable": false
+  },
+  "dns": {
+    "type": "default",
+    "url": "udp://8.8.8.8:53",
+    "captive": false
+  },
+  "sntp": {
+    "enable": false
+  },
+  "modbus": {
+    "enable": false
+  },
+  "build": {
+    "board": "teensy41",
+    "ide": "PlatformIO",
+    "rtos": "baremetal",
+    "cores": [],
+    "mode": "existing"
+  },
+  "api": {
+    "logger_config": {
+      "type": "data",
+      "read_level": 0,
+      "write_level": 3,
+      "attributes": {
+        "enableSerial": {
+          "type": "bool",
+          "value": true
+        },
+        "serialLevel": {
+          "type": "int",
+          "value": 6,
+          "min": 0,
+          "max": 7
+        },
+        "enableUDP": {
+          "type": "bool",
+          "value": false
+        },
+        "udpLevel": {
+          "type": "int",
+          "value": 4,
+          "min": 0,
+          "max": 7
+        },
+        "syslogPort": {
+          "type": "int",
+          "value": 514,
+          "min": 1,
+          "max": 65535
+        },
+        "mongooseLogLevel": {
+          "type": "int",
+          "value": 2,
+          "min": 0,
+          "max": 4
+        }
+      }
+    },
+    "logger_stats": {
+      "type": "data",
+      "read_level": 0,
+      "write_level": 7,
+      "readonly": true,
+      "attributes": {
+        "eventCount": {
+          "type": "int",
+          "value": 0
+        },
+        "startupMode": {
+          "type": "bool",
+          "value": true
+        }
+      }
+    },
+    "logger_reset": {
+      "type": "action",
+      "read_level": 0,
+      "write_level": 3,
+      "value": false
+    },
+    "logger_test": {
+      "type": "action",
+      "read_level": 0,
+      "write_level": 0,
+      "value": false
+    }
+  },
+  "ui": {
+    "production": true,
+    "brand": "AiO New Dawn",
+    "logo": "",
+    "pages": [
+      {
+        "title": "EventLogger Settings",
+        "icon": "fa-list-alt"
+      }
+    ],
+    "container": [
+      {
+        "type": "container",
+        "items": [
+          {
+            "type": "text",
+            "value": "Serial Console Settings",
+            "api": "",
+            "http": false,
+            "mqtt": false,
+            "url": "",
+            "port": 0,
+            "build": "",
+            "size": "",
+            "bold": true
+          },
+          {
+            "type": "toggle",
+            "api": "api.logger_config.attributes.enableSerial",
+            "settings": {
+              "gps_pass": "Enable Serial Logging"
+            }
+          },
+          {
+            "type": "select",
+            "api": "api.logger_config.attributes.serialLevel",
+            "settings": {
+              "0": "EMERGENCY",
+              "1": "ALERT",
+              "2": "CRITICAL",
+              "3": "ERROR",
+              "4": "WARNING",
+              "5": "NOTICE",
+              "6": "INFO",
+              "7": "DEBUG"
+            }
+          },
+          {
+            "type": "text",
+            "value": "UDP Syslog Settings",
+            "api": "",
+            "http": false,
+            "mqtt": false,
+            "url": "",
+            "port": 0,
+            "build": "",
+            "size": "",
+            "bold": true
+          },
+          {
+            "type": "toggle",
+            "api": "api.logger_config.attributes.enableUDP",
+            "settings": {
+              "gps_pass": "Enable UDP Syslog"
+            }
+          },
+          {
+            "type": "select",
+            "api": "api.logger_config.attributes.udpLevel",
+            "settings": {
+              "0": "EMERGENCY",
+              "1": "ALERT",
+              "2": "CRITICAL",
+              "3": "ERROR",
+              "4": "WARNING",
+              "5": "NOTICE",
+              "6": "INFO",
+              "7": "DEBUG"
+            }
+          },
+          {
+            "type": "input",
+            "api": "api.logger_config.attributes.syslogPort",
+            "settings": {
+              "bd_ip3": "Syslog Port"
+            }
+          },
+          {
+            "type": "text",
+            "value": "Advanced Settings",
+            "api": "",
+            "http": false,
+            "mqtt": false,
+            "url": "",
+            "port": 0,
+            "build": "",
+            "size": "",
+            "bold": true
+          },
+          {
+            "type": "select",
+            "api": "api.logger_config.attributes.mongooseLogLevel",
+            "settings": {
+              "0": "Disabled",
+              "1": "Error",
+              "2": "Info",
+              "3": "Debug",
+              "4": "Verbose"
+            }
+          },
+          {
+            "type": "text",
+            "value": "Statistics",
+            "api": "",
+            "http": false,
+            "mqtt": false,
+            "url": "",
+            "port": 0,
+            "build": "",
+            "size": "",
+            "bold": true
+          },
+          {
+            "type": "input",
+            "api": "api.logger_stats.attributes.eventCount",
+            "settings": {
+              "bd_ip3": "Total Events Logged"
+            },
+            "read_only": true
+          },
+          {
+            "type": "toggle",
+            "api": "api.logger_stats.attributes.startupMode",
+            "settings": {
+              "gps_pass": "Startup Mode Active"
+            },
+            "read_only": true
+          },
+          {
+            "type": "text",
+            "value": "",
+            "api": "",
+            "http": false,
+            "mqtt": false,
+            "url": "",
+            "port": 0,
+            "build": "",
+            "size": "",
+            "bold": false
+          },
+          {
+            "type": "action",
+            "api": "api.logger_reset",
+            "type": "reboot",
+            "settings": {
+              "reboot": "Reset Event Counter"
+            }
+          },
+          {
+            "type": "action",
+            "api": "api.logger_test",
+            "type": "reboot",
+            "settings": {
+              "reboot": "Generate Test Messages"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

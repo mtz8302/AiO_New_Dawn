@@ -1,0 +1,336 @@
+{
+  "version": "1.0.2",
+  "api": {
+    "logger_config": {
+      "type": "data",
+      "read_level": 0,
+      "write_level": 3,
+      "attributes": {
+        "enableSerial": {
+          "type": "bool",
+          "value": true
+        },
+        "serialLevel": {
+          "type": "int",
+          "value": 6,
+          "min": 0,
+          "max": 7
+        },
+        "enableUDP": {
+          "type": "bool",
+          "value": false
+        },
+        "udpLevel": {
+          "type": "int",
+          "value": 4,
+          "min": 0,
+          "max": 7
+        },
+        "syslogPort": {
+          "type": "int",
+          "value": 514,
+          "min": 1,
+          "max": 65535
+        },
+        "mongooseLogLevel": {
+          "type": "int",
+          "value": 2,
+          "min": 0,
+          "max": 4
+        }
+      }
+    },
+    "logger_stats": {
+      "type": "data",
+      "read_level": 0,
+      "write_level": 7,
+      "attributes": {
+        "eventCount": {
+          "type": "int",
+          "value": 0
+        },
+        "startupMode": {
+          "type": "bool",
+          "value": true
+        }
+      }
+    },
+    "logger_reset": {
+      "type": "action",
+      "read_level": 0,
+      "write_level": 3,
+      "value": false
+    },
+    "logger_test": {
+      "type": "action",
+      "read_level": 0,
+      "write_level": 0,
+      "value": false
+    }
+  },
+  "ui": {
+    "production": true,
+    "brand": "AiO New Dawn EventLogger",
+    "logo": "",
+    "toolbar": {
+      "label": "EventLogger Configuration"
+    },
+    "theme": {},
+    "pages": [
+      {
+        "title": "EventLogger Settings",
+        "icon": "list-alt",
+        "level": 0,
+        "css": "padding: 0.75rem; gap: 0.5rem; min-height: 2rem; display: flex; flex-direction: column; flex-grow: 1;",
+        "layout": [
+          {
+            "classes": "container",
+            "layout": [
+              {
+                "classes": "panel",
+                "css": "width: 50%; margin-bottom: 1rem",
+                "layout": [
+                  {
+                    "classes": "title",
+                    "format": "Serial Console Settings"
+                  },
+                  {
+                    "classes": "labeled",
+                    "layout": [
+                      {
+                        "classes": "label",
+                        "format": "Enable Serial Logging"
+                      },
+                      {
+                        "type": "toggle",
+                        "ref": "logger_config.enableSerial",
+                        "autosave": true
+                      }
+                    ]
+                  },
+                  {
+                    "classes": "labeled",
+                    "layout": [
+                      {
+                        "classes": "label",
+                        "format": "Serial Log Level"
+                      },
+                      {
+                        "type": "select",
+                        "ref": "logger_config.serialLevel",
+                        "autosave": true,
+                        "options": {
+                          "0": "EMERGENCY",
+                          "1": "ALERT",
+                          "2": "CRITICAL",
+                          "3": "ERROR",
+                          "4": "WARNING",
+                          "5": "NOTICE",
+                          "6": "INFO",
+                          "7": "DEBUG"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "classes": "panel",
+                "css": "width: 50%; margin-bottom: 1rem",
+                "layout": [
+                  {
+                    "classes": "title",
+                    "format": "UDP Syslog Settings"
+                  },
+                  {
+                    "classes": "labeled",
+                    "layout": [
+                      {
+                        "classes": "label",
+                        "format": "Enable UDP Syslog"
+                      },
+                      {
+                        "type": "toggle",
+                        "ref": "logger_config.enableUDP",
+                        "autosave": true
+                      }
+                    ]
+                  },
+                  {
+                    "classes": "labeled",
+                    "layout": [
+                      {
+                        "classes": "label",
+                        "format": "UDP Log Level"
+                      },
+                      {
+                        "type": "select",
+                        "ref": "logger_config.udpLevel",
+                        "autosave": true,
+                        "options": {
+                          "0": "EMERGENCY",
+                          "1": "ALERT",
+                          "2": "CRITICAL",
+                          "3": "ERROR",
+                          "4": "WARNING",
+                          "5": "NOTICE",
+                          "6": "INFO",
+                          "7": "DEBUG"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "classes": "labeled",
+                    "layout": [
+                      {
+                        "classes": "label",
+                        "format": "Syslog Port"
+                      },
+                      {
+                        "type": "input",
+                        "ref": "logger_config.syslogPort",
+                        "autosave": true
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "classes": "container",
+            "layout": [
+              {
+                "classes": "panel",
+                "css": "width: 50%; margin-bottom: 1rem",
+                "layout": [
+                  {
+                    "classes": "title",
+                    "format": "Advanced Settings"
+                  },
+                  {
+                    "classes": "labeled",
+                    "layout": [
+                      {
+                        "classes": "label",
+                        "format": "Mongoose Network Log Level"
+                      },
+                      {
+                        "type": "select",
+                        "ref": "logger_config.mongooseLogLevel",
+                        "autosave": true,
+                        "options": {
+                          "0": "Disabled",
+                          "1": "Error",
+                          "2": "Info",
+                          "3": "Debug",
+                          "4": "Verbose"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "classes": "panel",
+                "css": "width: 50%; margin-bottom: 1rem",
+                "layout": [
+                  {
+                    "classes": "title",
+                    "format": "Statistics"
+                  },
+                  {
+                    "classes": "labeled",
+                    "layout": [
+                      {
+                        "classes": "label",
+                        "format": "Total Events Logged"
+                      },
+                      {
+                        "type": "text",
+                        "ref": "logger_stats.eventCount"
+                      }
+                    ]
+                  },
+                  {
+                    "classes": "labeled",
+                    "layout": [
+                      {
+                        "classes": "label",
+                        "format": "Startup Mode Active"
+                      },
+                      {
+                        "type": "text",
+                        "ref": "logger_stats.startupMode"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "classes": "container",
+            "layout": [
+              {
+                "classes": "panel",
+                "css": "width: 100%",
+                "layout": [
+                  {
+                    "classes": "title",
+                    "format": "Actions"
+                  },
+                  {
+                    "css": "display: flex; gap: 1rem; justify-content: center;",
+                    "layout": [
+                      {
+                        "type": "button",
+                        "ref": "logger_reset",
+                        "format": "Reset Event Counter",
+                        "css": "background-color: #f39c12; color: white; padding: 0.5rem 1rem; border-radius: 0.25rem;"
+                      },
+                      {
+                        "type": "button",
+                        "ref": "logger_test",
+                        "format": "Generate Test Messages",
+                        "css": "background-color: #3498db; color: white; padding: 0.5rem 1rem; border-radius: 0.25rem;"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "http": {
+    "http": true,
+    "https": false,
+    "ui": true,
+    "login": false
+  },
+  "mqtt": {
+    "enable": false
+  },
+  "dns": {
+    "type": "default",
+    "url": "udp://8.8.8.8:53",
+    "captive": false
+  },
+  "sntp": {
+    "enable": false
+  },
+  "modbus": {
+    "enable": false
+  },
+  "build": {
+    "board": "teensy41",
+    "ide": "PlatformIO",
+    "rtos": "baremetal",
+    "cores": [],
+    "mode": "existing"
+  }
+}

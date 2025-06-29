@@ -1,0 +1,243 @@
+{
+  "version": "1.0.2",
+  "level": 0,
+  "http": {
+    "http": true,
+    "https": false,
+    "ui": true,
+    "login": false
+  },
+  "mqtt": {
+    "enable": false
+  },
+  "dns": {
+    "type": "default",
+    "url": "udp://8.8.8.8:53",
+    "captive": false
+  },
+  "sntp": {
+    "enable": false
+  },
+  "modbus": {
+    "enable": false
+  },
+  "build": {
+    "board": "teensy41",
+    "ide": "PlatformIO",
+    "rtos": "baremetal",
+    "cores": [],
+    "mode": "existing"
+  },
+  "api": {
+    "logger_config": {
+      "type": "data",
+      "read_level": 0,
+      "write_level": 3,
+      "attributes": {
+        "enableSerial": {
+          "type": "bool",
+          "value": true
+        },
+        "serialLevel": {
+          "type": "int",
+          "value": 6,
+          "min": 0,
+          "max": 7
+        },
+        "enableUDP": {
+          "type": "bool",
+          "value": false
+        },
+        "udpLevel": {
+          "type": "int",
+          "value": 4,
+          "min": 0,
+          "max": 7
+        },
+        "syslogPort": {
+          "type": "int",
+          "value": 514,
+          "min": 1,
+          "max": 65535
+        },
+        "mongooseLogLevel": {
+          "type": "int",
+          "value": 2,
+          "min": 0,
+          "max": 4
+        }
+      }
+    },
+    "logger_stats": {
+      "type": "data",
+      "read_level": 0,
+      "write_level": 7,
+      "readonly": true,
+      "attributes": {
+        "eventCount": {
+          "type": "int",
+          "value": 0
+        },
+        "startupMode": {
+          "type": "bool",
+          "value": true
+        }
+      }
+    },
+    "logger_reset": {
+      "type": "action",
+      "read_level": 0,
+      "write_level": 3,
+      "value": false
+    },
+    "logger_test": {
+      "type": "action",
+      "read_level": 0,
+      "write_level": 0,
+      "value": false
+    }
+  },
+  "ui": {
+    "production": true,
+    "brand": "AiO New Dawn",
+    "logo": "",
+    "toolbar": [
+      {
+        "type": "logo"
+      },
+      {
+        "type": "label",
+        "value": "EventLogger Configuration"
+      },
+      {
+        "type": "spacer"
+      },
+      {
+        "type": "url",
+        "icon": "fa-question-circle",
+        "url": "https://github.com/AOG",
+        "target": "_blank"
+      }
+    ],
+    "pages": [
+      {
+        "title": "EventLogger Settings",
+        "icon": "fa-list",
+        "cards": [
+          {
+            "type": "card",
+            "title": "Serial Console Output",
+            "items": [
+              {
+                "type": "toggle",
+                "bind": "api.logger_config.attributes.enableSerial",
+                "title": "Enable Serial Logging"
+              },
+              {
+                "type": "select",
+                "bind": "api.logger_config.attributes.serialLevel",
+                "title": "Serial Log Level",
+                "options": [
+                  {"value": 0, "title": "EMERGENCY"},
+                  {"value": 1, "title": "ALERT"},
+                  {"value": 2, "title": "CRITICAL"},
+                  {"value": 3, "title": "ERROR"},
+                  {"value": 4, "title": "WARNING"},
+                  {"value": 5, "title": "NOTICE"},
+                  {"value": 6, "title": "INFO"},
+                  {"value": 7, "title": "DEBUG"}
+                ]
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "title": "UDP Syslog Output",
+            "items": [
+              {
+                "type": "toggle",
+                "bind": "api.logger_config.attributes.enableUDP",
+                "title": "Enable UDP Syslog"
+              },
+              {
+                "type": "select",
+                "bind": "api.logger_config.attributes.udpLevel",
+                "title": "UDP Log Level",
+                "options": [
+                  {"value": 0, "title": "EMERGENCY"},
+                  {"value": 1, "title": "ALERT"},
+                  {"value": 2, "title": "CRITICAL"},
+                  {"value": 3, "title": "ERROR"},
+                  {"value": 4, "title": "WARNING"},
+                  {"value": 5, "title": "NOTICE"},
+                  {"value": 6, "title": "INFO"},
+                  {"value": 7, "title": "DEBUG"}
+                ]
+              },
+              {
+                "type": "input",
+                "bind": "api.logger_config.attributes.syslogPort",
+                "title": "Syslog Port",
+                "input": "number"
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "title": "Advanced Settings",
+            "items": [
+              {
+                "type": "select",
+                "bind": "api.logger_config.attributes.mongooseLogLevel",
+                "title": "Mongoose Network Log Level",
+                "options": [
+                  {"value": 0, "title": "Disabled"},
+                  {"value": 1, "title": "Error"},
+                  {"value": 2, "title": "Info"},
+                  {"value": 3, "title": "Debug"},
+                  {"value": 4, "title": "Verbose"}
+                ]
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "title": "Statistics",
+            "items": [
+              {
+                "type": "label",
+                "bind": "api.logger_stats.attributes.eventCount",
+                "title": "Total Events Logged",
+                "format": "{value} events"
+              },
+              {
+                "type": "label",
+                "bind": "api.logger_stats.attributes.startupMode",
+                "title": "Startup Mode",
+                "format": "{value}"
+              }
+            ]
+          },
+          {
+            "type": "card",
+            "title": "Actions",
+            "items": [
+              {
+                "type": "button",
+                "bind": "api.logger_reset",
+                "title": "Reset Event Counter",
+                "icon": "fa-refresh"
+              },
+              {
+                "type": "button",
+                "bind": "api.logger_test",
+                "title": "Generate Test Messages",
+                "icon": "fa-bug"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
