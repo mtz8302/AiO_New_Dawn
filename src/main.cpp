@@ -51,8 +51,32 @@ void setup()
   // Network and communication setup FIRST
   QNetworkBase::init();
   
-  // Give the network stack time to stabilize - match example timing
-  delay(2000);  // 2 seconds for static IP as per AsyncUDP examples
+  // Dell laptop negotiation workaround - wait for speed to stabilize
+  Serial.print("\r\n- Waiting for network speed negotiation (Dell workaround)...");
+  uint32_t startWait = millis();
+  int lastSpeed = 0;
+  
+  // Wait up to 10 seconds for link speed to stabilize
+  while (millis() - startWait < 10000) {
+    int currentSpeed = Ethernet.linkSpeed();
+    if (currentSpeed != lastSpeed) {
+      Serial.printf("\r\n  Link speed changed: %d Mbps", currentSpeed);
+      lastSpeed = currentSpeed;
+      startWait = millis(); // Reset timer on speed change
+    }
+    
+    // If we've been stable at 100Mbps for 2 seconds, we're good
+    if (currentSpeed == 100 && millis() - startWait > 2000) {
+      Serial.print("\r\n  Link stable at 100 Mbps");
+      break;
+    }
+    
+    delay(100);
+  }
+  
+  // Additional delay for network stack to stabilize after negotiation
+  Serial.print("\r\n- Waiting for network stack to stabilize...");
+  delay(2000);
   
   // Verify we have an IP address
   IPAddress localIP = Ethernet.localIP();
@@ -60,14 +84,13 @@ void setup()
     Serial.print("\r\n- ERROR: No IP address assigned!");
   } else {
     Serial.printf("\r\n- IP ready: %d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+    Serial.printf("\r\n- Final link speed: %d Mbps", Ethernet.linkSpeed());
   }
   
-  // Use AsyncUDP instead of traditional UDP
-  AsyncUDPHandler::init();
-
-  Serial.print("\r\n- Network stack initialized with AsyncUDP");
+  // Network stack is ready but don't initialize AsyncUDP yet
+  Serial.print("\r\n- Network stack initialized");
   
-  // Initialize global CAN buses AFTER mongoose
+  // Initialize global CAN buses
   initializeGlobalCANBuses();
 
   // ConfigManager is already constructed
@@ -101,28 +124,7 @@ void setup()
     LOG_ERROR(EventSource::SYSTEM, "HardwareManager FAILED");
   }
 
-  // Initialize I2CManager
-  if (i2cManager.initializeI2C())
-  {
-    LOG_INFO(EventSource::SYSTEM, "I2CManager initialized");
-  }
-  else
-  {
-    LOG_ERROR(EventSource::SYSTEM, "I2CManager FAILED");
-  }
-
-  // Initialize LED Manager
-  if (ledManager.init()) 
-  {
-    LOG_INFO(EventSource::SYSTEM, "LEDManager initialized");
-    ledManager.setBrightness(configManager.getLEDBrightness());
-  }
-  else
-  {
-    LOG_ERROR(EventSource::SYSTEM, "LEDManager FAILED");
-  }
-
-  // Initialize CANManager
+  // Initialize CANManager first (more critical than I2C)
   if (canManager.init())
   {
     LOG_INFO(EventSource::SYSTEM, "CANManager initialized");
@@ -150,6 +152,30 @@ void setup()
   else
   {
     LOG_ERROR(EventSource::SYSTEM, "GNSSProcessor FAILED");
+  }
+
+  // Add a delay before I2C to let network/interrupts stabilize
+  delay(100);
+  
+  // Initialize I2CManager later in sequence after critical systems
+  if (i2cManager.initializeI2C())
+  {
+    LOG_INFO(EventSource::SYSTEM, "I2CManager initialized");
+  }
+  else
+  {
+    LOG_ERROR(EventSource::SYSTEM, "I2CManager FAILED");
+  }
+
+  // Initialize LED Manager (needs I2C)
+  if (ledManager.init()) 
+  {
+    LOG_INFO(EventSource::SYSTEM, "LEDManager initialized");
+    ledManager.setBrightness(configManager.getLEDBrightness());
+  }
+  else
+  {
+    LOG_ERROR(EventSource::SYSTEM, "LEDManager FAILED");
   }
 
   // Initialize IMUProcessor
@@ -205,6 +231,11 @@ void setup()
     LOG_ERROR(EventSource::SYSTEM, "Motor driver FAILED");
   }
 
+  // NOW initialize AsyncUDP after ALL hardware is up
+  LOG_INFO(EventSource::SYSTEM, "All hardware initialized, starting AsyncUDP");
+  AsyncUDPHandler::init();
+  LOG_INFO(EventSource::SYSTEM, "AsyncUDP handlers ready");
+
   // Initialize AutosteerProcessor
   AutosteerProcessor* autosteerPTR = AutosteerProcessor::getInstance();
   if (autosteerPTR->init()) {
@@ -249,16 +280,11 @@ void loop()
   
   QNetworkBase::poll();
   
+  // Poll AsyncUDP for network diagnostics
+  AsyncUDPHandler::poll();
+  
   // AsyncUDP handles all UDP packet reception via callbacks
-  // No need for polling - just periodic status update
-  static uint32_t lastNetworkStatus = 0;
-  if (millis() - lastNetworkStatus > 5000) {
-    lastNetworkStatus = millis();
-    IPAddress localIP = Ethernet.localIP();
-    LOG_DEBUG(EventSource::NETWORK, "Network status: IP=%d.%d.%d.%d, Link=%s", 
-              localIP[0], localIP[1], localIP[2], localIP[3],
-              Ethernet.linkStatus() ? "UP" : "DOWN");
-  }
+  // The poll() call above is just for diagnostics and status monitoring
   
   // Check network status and display system ready message when appropriate
   static uint32_t lastNetworkCheck = 0;

@@ -40,35 +40,38 @@ void AsyncUDPHandler::init() {
     LOG_INFO(EventSource::NETWORK, "Link Speed: %d Mbps, Full Duplex: %s", 
              Ethernet.linkSpeed(), Ethernet.linkIsFullDuplex() ? "Yes" : "No");
     
-    // Set up PGN listener on port 9999
-    if (udpPGN.listen(9999)) {
-        LOG_INFO(EventSource::NETWORK, "AsyncUDP listening on port 9999 for PGN");
+    // Set up PGN listener on port 8888 (AgIO sends PGNs to this port)
+    if (udpPGN.listen(8888)) {
+        LOG_INFO(EventSource::NETWORK, "AsyncUDP listening on port 8888 for PGN from AgIO");
         
         udpPGN.onPacket([](AsyncUDPPacket packet) {
             handlePGNPacket(packet);
         });
     } else {
-        LOG_ERROR(EventSource::NETWORK, "Failed to start AsyncUDP on port 9999");
+        LOG_ERROR(EventSource::NETWORK, "Failed to start AsyncUDP on port 8888");
     }
     
-    // Set up RTCM listener on port 8888
-    if (udpRTCM.listen(8888)) {
-        LOG_INFO(EventSource::NETWORK, "AsyncUDP listening on port 8888 for RTCM");
+    // Add delay between UDP listeners to avoid conflicts
+    delay(100);
+    
+    // Set up RTCM listener on port 2233
+    if (udpRTCM.listen(2233)) {
+        LOG_INFO(EventSource::NETWORK, "AsyncUDP listening on port 2233 for RTCM");
         
         udpRTCM.onPacket([](AsyncUDPPacket packet) {
             handleRTCMPacket(packet);
         });
     } else {
-        LOG_ERROR(EventSource::NETWORK, "Failed to start AsyncUDP on port 8888");
+        LOG_ERROR(EventSource::NETWORK, "Failed to start AsyncUDP on port 2233");
     }
     
     LOG_INFO(EventSource::NETWORK, "AsyncUDP initialization complete");
     
-    // Send a test broadcast to verify UDP is working
-    delay(100); // Let the stack settle
-    LOG_INFO(EventSource::NETWORK, "Sending UDP test broadcast");
-    uint8_t testMsg[] = {0x80, 0x81, 0x7F, 0xC8, 0x05, 'T', 'E', 'S', 'T', 0x00}; 
-    sendUDPPacket(testMsg, sizeof(testMsg));
+    // SKIP test broadcast for now
+    // delay(100); // Let the stack settle
+    // LOG_INFO(EventSource::NETWORK, "Sending UDP test broadcast");
+    // uint8_t testMsg[] = {0x80, 0x81, 0x7F, 0xC8, 0x05, 'T', 'E', 'S', 'T', 0x00}; 
+    // sendUDPPacket(testMsg, sizeof(testMsg));
 }
 
 static void handlePGNPacket(AsyncUDPPacket& packet) {
@@ -156,9 +159,9 @@ void AsyncUDPHandler::sendUDPPacket(uint8_t* data, int length) {
                  length, data[0], data[1], data[2], data[3], data[4]);
     }
     
-    // Use udpPGN instance which is already initialized with listen()
-    // According to AsyncUDP examples, the same instance can be used for both listen and send
-    if (udpPGN.broadcastTo(data, length, netConfig.destPort)) {
+    // Use writeTo() with subnet broadcast address instead of broadcastTo()
+    // broadcastTo() uses 255.255.255.255, but we need 192.168.5.255
+    if (udpPGN.writeTo(data, length, broadcastIP, netConfig.destPort)) {
         // Success - packet sent
         static uint32_t successCount = 0;
         successCount++;

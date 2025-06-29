@@ -47,13 +47,11 @@ bool I2CManager::initializeI2C() {
         success = false;
     }
     
-    // Detect devices on all initialized buses
+    // Skip device detection scan - it can hang on startup with misbehaving devices
+    // The system will still work with known device addresses
     if (success) {
-        LOG_INFO(EventSource::SYSTEM, "Starting I2C device detection on %d buses", 
-                 (wire0Info.initialized ? 1 : 0) + 
-                 (wire1Info.initialized ? 1 : 0) + 
-                 (wire2Info.initialized ? 1 : 0));
-        detectDevices();
+        LOG_INFO(EventSource::SYSTEM, "I2C buses initialized, skipping device scan");
+        // detectDevices();  // Commented out to prevent startup hangs
     }
     
     return success;
@@ -110,9 +108,16 @@ bool I2CManager::scanBus(TwoWire& wire, I2CBusInfo& busInfo) {
     memset(busInfo.deviceAddresses, 0, sizeof(busInfo.deviceAddresses));
     
     bool foundAny = false;
+    uint32_t scanStart = millis();
     
     // Scan all valid I2C addresses (0x08-0x77)
     for (uint8_t address = 0x08; address <= 0x77; address++) {
+        // Check for timeout - max 2 seconds per bus
+        if (millis() - scanStart > 2000) {
+            LOG_WARNING(EventSource::SYSTEM, "  I2C scan timeout at address 0x%02X", address);
+            break;
+        }
+        
         wire.beginTransmission(address);
         uint8_t error = wire.endTransmission();
         
@@ -127,6 +132,16 @@ bool I2CManager::scanBus(TwoWire& wire, I2CBusInfo& busInfo) {
             
             LOG_INFO(EventSource::SYSTEM, "  Found device at 0x%02X: %s", 
                          address, getDeviceTypeName(deviceType));
+        } else if (error == 2) {
+            // NACK on address - no device present (normal)
+        } else if (error == 3) {
+            // NACK on data - device present but not responding properly
+            LOG_DEBUG(EventSource::SYSTEM, "  Device at 0x%02X not responding properly", address);
+        } else if (error == 4) {
+            // Other error - could indicate bus problem
+            LOG_WARNING(EventSource::SYSTEM, "  I2C error %d at address 0x%02X", error, address);
+            // Don't continue scanning if we get unknown errors
+            break;
         }
         
         delay(1); // Small delay between scans
