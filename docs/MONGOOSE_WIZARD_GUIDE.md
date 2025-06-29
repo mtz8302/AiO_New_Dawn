@@ -123,25 +123,35 @@ For firmware updates:
 
 ## UI Structure
 
-### Pages/Tabs
-Define navigation structure:
-
+### Basic UI Configuration
 ```json
 "ui": {
-  "production": true,
+  "production": false,
   "brand": "Your Product Name",
-  "logo": "",
+  "logo": "<?xml version=\"1.0\" encoding=\"utf-8\"?>...",  // SVG logo
+  "toolbar": {
+    "label": "Your Console Name"
+  },
+  "theme": {},
   "pages": [
-    {
-      "title": "Settings",
-      "icon": "fa-cog"
-    },
-    {
-      "title": "Status", 
-      "icon": "fa-info-circle"
-    }
+    // Page definitions go here
   ]
 }
+```
+
+### Pages Structure
+```json
+"pages": [
+  {
+    "title": "Dashboard",
+    "icon": "desktop",  // Font Awesome icon name (without fa- prefix)
+    "level": 0,  // Access level
+    "css": "padding: 0.75rem; gap: 0.5rem; min-height: 2rem; display: flex; flex-direction: column; flex-grow: 1;",
+    "layout": [
+      // UI elements go here
+    ]
+  }
+]
 ```
 
 ### UI Elements
@@ -199,36 +209,43 @@ UI elements are defined within a `layout` array hierarchy. Each page has a layou
 }
 ```
 
-3. **Select Dropdown**
+3. **Dropdown**
 ```json
 {
-  "classes": "labeled",
+  "css": "display:flex; align-items:center; justify-content:space-between; gap: 1rem;",
   "layout": [
-    {"classes": "label", "format": "Select Label"},
+    {"format": "Dropdown Label"},
     {
-      "type": "select",
+      "type": "dropdown",  // Note: use "dropdown" not "select"
       "ref": "api_endpoint.attribute_name",
       "autosave": true,
-      "options": {
-        "0": "Option Zero",
-        "1": "Option One",
-        "2": "Option Two"
-      }
+      "options": "option1,option2,option3",  // Comma-separated string
+      "css": "width: 8rem;"
     }
   ]
+}
+```
+
+For numeric values with text labels:
+```json
+{
+  "type": "dropdown",
+  "ref": "logger.serialLevel",
+  "options": "EMERGENCY,ALERT,CRITICAL,ERROR,WARNING,NOTICE,INFO,DEBUG"
+  // Will store 0-7 based on position
 }
 ```
 
 4. **Input Field**
 ```json
 {
-  "classes": "labeled",
+  "css": "display:flex; align-items:center; justify-content:space-between; gap: 1rem;",
   "layout": [
-    {"classes": "label", "format": "Input Label"},
+    {"format": "Input Label"},
     {
       "type": "input",
       "ref": "api_endpoint.attribute_name",
-      "autosave": true
+      "css": "width: 8rem;"
     }
   ]
 }
@@ -237,34 +254,72 @@ UI elements are defined within a `layout` array hierarchy. Each page has a layou
 5. **Text Display (Read-only)**
 ```json
 {
-  "classes": "labeled",
+  "css": "display:flex; align-items:center; justify-content:space-between; gap: 1rem;",
   "layout": [
-    {"classes": "label", "format": "Value Label"},
+    {"format": "Label Text"},
+    {"format": "${api_endpoint.attribute_name}"}  // Template syntax for values
+  ]
+}
+```
+
+6. **Save Button**
+```json
+{
+  "css": "margin-top: 0.25rem; justify-content:end;display:flex; align-items:center; gap: 1rem;",
+  "layout": [
     {
-      "type": "text",
-      "ref": "api_endpoint.attribute_name"
+      "type": "savebutton",
+      "ref": "api_endpoint",  // References the API endpoint to save
+      "title": "Save Settings",
+      "icon": "save"
     }
   ]
 }
 ```
 
-6. **Button**
+7. **Action Button**
 ```json
 {
-  "type": "button",
-  "ref": "api_endpoint",
-  "format": "Button Text",
-  "css": "background-color: #3498db; color: white; ..."
+  "type": "action",
+  "title": "Reboot",
+  "icon": "refresh",
+  "ref": "action_api_endpoint"
+}
+```
+
+8. **OTA Update Button**
+```json
+{
+  "type": "ota",
+  "title": "Choose .bin file",
+  "icon": "ellipsis-horizontal",
+  "ref": "firmware_update",
+  "accept": ".bin",  // File type filter
+  "api": {
+    "firmware_update": {
+      "type": "ota"
+    }
+  }
 }
 ```
 
 #### Key Points:
-- Use `ref` to bind UI elements to API endpoints (not `api` or `bind`)
-- Elements are nested within `layout` arrays
-- Use `classes` for structural elements (container, panel, title, label, labeled)
-- Use `type` for interactive elements (toggle, select, input, button, text)
-- `autosave: true` enables automatic saving when values change
-- CSS can be applied at any level for custom styling
+- Use `ref` to bind UI elements to API endpoints
+- Use `type: "dropdown"` not `"select"` for dropdowns
+- Dropdown options are comma-separated strings, not objects or arrays
+- Use template syntax `${api.value}` to display dynamic values
+- Common layout pattern for form fields:
+  ```json
+  {
+    "css": "display:flex; align-items:center; justify-content:space-between; gap: 1rem;",
+    "layout": [
+      {"format": "Label"},
+      {/* UI element */}
+    ]
+  }
+  ```
+- The `classes: "labeled"` pattern still works for toggles
+- Save buttons reference the API endpoint to save, not individual fields
 
 ## Data Types
 
@@ -489,11 +544,14 @@ Here's a minimal working example showing the correct structure:
 ## TODO
 
 - [x] Complete UI element structure documentation
-- [ ] Add more complex UI element examples
+- [x] Document all button types (save, action, OTA)
+- [ ] Create complete EventLogger Web UI with all features
+- [ ] Add more complex UI layout examples (multiple panels, tabs)
 - [ ] Document CSS classes and styling options
 - [ ] Add WebSocket configuration for real-time updates
 - [ ] Include examples of generated C code
 - [ ] Add migration guide from manual REST API implementation
+- [ ] Document how to integrate generated code with firmware
 
 ## Resources
 
