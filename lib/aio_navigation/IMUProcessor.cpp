@@ -2,6 +2,7 @@
 #include "TM171AiOParser.h"
 #include "PGNUtils.h"
 #include "EventLogger.h"
+#include "QNetworkBase.h"
 
 
 // Static instance pointer
@@ -292,11 +293,7 @@ void IMUProcessor::printCurrentData()
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 
 // External network config
-extern struct NetConfigStruct {
-    uint8_t currentIP[5];
-    uint8_t gatewayIP[5];
-    uint8_t broadcastIP[5];
-} netConfig;
+extern struct NetworkConfig netConfig;
 
 void IMUProcessor::registerPGNCallbacks()
 {
@@ -312,10 +309,9 @@ void IMUProcessor::registerPGNCallbacks()
     PGNProcessor* pgnProcessor = PGNProcessor::instance;
     if (pgnProcessor)
     {
-        // Register for IMU PGN (121/0x79) - this also makes us receive broadcasts
-        // Even though we register for 121, we'll still receive broadcast PGNs like Hello (200)
-        bool success = pgnProcessor->registerCallback(IMU_SOURCE_ID, handleBroadcastPGN, "IMU Handler");
-        LOG_DEBUG(EventSource::IMU, "Registration %s for PGN %d", success ? "SUCCESS" : "FAILED", IMU_SOURCE_ID);
+        // Register for broadcast PGNs (200 and 202)
+        bool success = pgnProcessor->registerBroadcastCallback(handleBroadcastPGN, "IMU Handler");
+        LOG_DEBUG(EventSource::IMU, "Broadcast registration %s", success ? "SUCCESS" : "FAILED");
     }
     else
     {

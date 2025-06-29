@@ -158,19 +158,8 @@ void CommandHandler::handleLoggingMenu(char cmd) {
             Serial.print("\r\nEvent counter reset");
             break;
             
-        case 'm':  // Mongoose log level
-        case 'M':
-            Serial.print("\r\nEnter Mongoose log level (0-4): ");
-            while (!Serial.available()) { delay(10); }
-            {
-                char level = Serial.read();
-                if (level >= '0' && level <= '4') {
-                    loggerPtr->setMongooseLogLevel(level - '0');
-                } else {
-                    Serial.print("\r\nInvalid level");
-                }
-            }
-            break;
+        // QNEthernet doesn't need explicit log level management
+        // Removed Mongoose log level option
             
         case 'q':  // Quit to main menu
         case 'Q':
@@ -227,7 +216,7 @@ void CommandHandler::showLoggingMenu() {
     Serial.print("\r\n2 - Toggle UDP syslog");
     Serial.print("\r\n3/4 - Decrease/Increase serial level");
     Serial.print("\r\n5/6 - Decrease/Increase UDP level");
-    Serial.print("\r\nM - Set Mongoose log level (0-4)");
+    // QNEthernet handles its own logging internally
     Serial.print("\r\nT - Generate test messages");
     Serial.print("\r\nS - Show statistics");
     Serial.print("\r\nR - Reset event counter");

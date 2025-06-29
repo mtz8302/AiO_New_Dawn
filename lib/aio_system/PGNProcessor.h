@@ -2,10 +2,12 @@
 #define PGNProcessor_H_
 
 #include "Arduino.h"
-#include "mongoose.h"
+#include "QNetworkBase.h"
+#include <QNEthernet.h>
+#include <QNEthernetUDP.h>
 
-// Forward declarations for external dependencies
-extern struct mg_mgr g_mgr;
+// QNEthernet namespace
+using namespace qindesign::network;
 
 // Define callback function type for PGN handlers
 // Parameters: PGN number, data buffer, data length
@@ -28,19 +30,22 @@ private:
     static constexpr size_t MAX_REGISTRATIONS = 20;
     PGNRegistration registrations[MAX_REGISTRATIONS];
     size_t registrationCount = 0;
+    
+    // Separate array for broadcast callbacks (PGN 200, 202)
+    static constexpr size_t MAX_BROADCAST_CALLBACKS = 4; // GPS, IMU, Steer, Machine
+    PGNCallback broadcastCallbacks[MAX_BROADCAST_CALLBACKS];
+    const char* broadcastNames[MAX_BROADCAST_CALLBACKS];
+    size_t broadcastCount = 0;
 
 public:
     PGNProcessor();
     ~PGNProcessor();
 
-    // Static method for Mongoose callback (3 parameters to match mg_event_handler_t)
-    static void handlePGN(struct mg_connection *udpPacket, int ev, void *ev_data);
-
-    // Instance method that does the actual work
-    void processPGN(struct mg_connection *udpPacket, int ev, void *ev_data);
+    // Process incoming PGN data
+    void processPGN(const uint8_t* data, size_t len, const IPAddress& remoteIP, uint16_t remotePort);
 
     // Utility methods
-    void printPgnAnnouncement(struct mg_connection *udpPacket, char *pgnName);
+    void printPgnAnnouncement(uint8_t pgn, const char *pgnName, size_t dataLen);
 
     // PGN processing methods - REMOVED
     // PGNProcessor only routes to registered callbacks
@@ -52,6 +57,9 @@ public:
     bool registerCallback(uint8_t pgn, PGNCallback callback, const char* name);
     bool unregisterCallback(uint8_t pgn);
     void listRegisteredCallbacks();  // For debugging
+    
+    // Broadcast callback registration (for PGN 200, 202)
+    bool registerBroadcastCallback(PGNCallback callback, const char* name);
 };
 
 #endif // PGNProcessor_H_

@@ -67,7 +67,7 @@ public:
     }
 };
 
-// Global pointer declaration
-extern NAVProcessor* navPTR;
+// Global instance declaration
+extern NAVProcessor navProcessor;
 
 #endif // NAV_PROCESSOR_H

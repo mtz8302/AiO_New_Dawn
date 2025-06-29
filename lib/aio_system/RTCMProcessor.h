@@ -2,22 +2,25 @@
 #define RTCMProcessor_H_
 
 #include "Arduino.h"
-#include "mongoose.h"
+#include "QNetworkBase.h"
+#include <QNEthernet.h>
+#include <QNEthernetUDP.h>
+
+// QNEthernet namespace
+using namespace qindesign::network;
 
 class RTCMProcessor
 {
-private:
+public:
     static RTCMProcessor *instance;
 
-public:
+private:
     RTCMProcessor();
     ~RTCMProcessor();
 
-    // Static method for Mongoose callback (3 parameters to match mg_event_handler_t)
-    static void handleRTCM(struct mg_connection *rtcm, int ev, void *ev_data);
-
-    // Instance method that does the actual work
-    void processRTCM(struct mg_connection *rtcm, int ev, void *ev_data);
+public:
+    // Process incoming RTCM data
+    void processRTCM(const uint8_t* data, size_t len, const IPAddress& remoteIP, uint16_t remotePort);
 
     // Initialize the handler
     static void init();

@@ -59,7 +59,7 @@ public:
     void runSectionDiagnostics();
 };
 
-extern MachineProcessor* machinePTR;
+extern MachineProcessor machineProcessor;
 
 constexpr uint8_t MACHINE_SOURCE_ID = 0x7C;
 constexpr uint8_t MACHINE_PGN_CONFIG = 0xEE;    // 238 - Machine Config from AOG

@@ -107,7 +107,7 @@ public:
     bool isSerialInitialized() const;
 };
 
-// Global pointer (following the same pattern as configPTR)
-extern SerialManager *serialPTR;
+// Global instance (following the same pattern as configManager)
+extern SerialManager serialManager;
 
 #endif // SERIALMANAGER_H_

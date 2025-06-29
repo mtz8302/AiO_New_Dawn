@@ -2,24 +2,15 @@
 #include "ConfigManager.h" // Full definition needed for method calls
 #include "EventLogger.h"
 
-// External declaration of the global pointer (defined in main.cpp)
-extern ConfigManager *configPTR;
+// External declaration of the global object (defined in main.cpp)
+extern ConfigManager configManager;
 
-// Forward declaration for NetworkBase structure
-struct NetConfigStruct
-{
-    static constexpr uint8_t defaultIP[5] = {192, 168, 5, 126};
-    uint8_t currentIP[5] = {192, 168, 5, 126};
-    uint8_t gatewayIP[5] = {192, 168, 5, 1};
-    uint8_t broadcastIP[5] = {192, 168, 5, 255};
-};
+// External UDP instances from QNetworkBase
+extern EthernetUDP udpSend;
+extern EthernetUDP udpRecv;
 
-// External references to NetworkBase functions and variables
-extern void sendUDPbytes(uint8_t *message, int msgLen);
-extern void sendUDPchars(char *stuff);
-extern void save_current_net();
-extern struct mg_connection *sendAgio;
-extern NetConfigStruct netConfig;
+// QNEthernet namespace
+using namespace qindesign::network;
 
 // Static instance pointer
 PGNProcessor *PGNProcessor::instance = nullptr;
@@ -42,31 +33,22 @@ void PGNProcessor::init()
     }
 }
 
-// Static callback for Mongoose - matching mg_event_handler_t signature
-void PGNProcessor::handlePGN(struct mg_connection *udpPacket, int ev, void *ev_data)
-{
-    if (instance != nullptr)
-    {
-        instance->processPGN(udpPacket, ev, ev_data);
-    }
-}
+// Remove static callback - QNEthernet uses a different approach
 
-void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_data)
+void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& remoteIP, uint16_t remotePort)
 {
-    if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
+    if (!QNetworkBase::isConnected())
         return;
 
-    if (ev == MG_EV_READ && mg_ntohs(udpPacket->rem.port) == 9999 && udpPacket->recv.len >= 5)
+    if (remotePort == 9999 && len >= 5)
     {
-
         // Verify first 3 PGN header bytes
-        if (udpPacket->recv.buf[0] != 128 || udpPacket->recv.buf[1] != 129 || udpPacket->recv.buf[2] != 127)
+        if (data[0] != 128 || data[1] != 129 || data[2] != 127)
         {
-            mg_iobuf_del(&udpPacket->recv, 0, udpPacket->recv.len);
             return;
         }
 
-        uint8_t pgn = udpPacket->recv.buf[3];
+        uint8_t pgn = data[3];
         
         // Debug: show registered callbacks for this PGN
         if (pgn == 200) {
@@ -81,16 +63,16 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
         // Check if this is a broadcast PGN (Hello or Scan Request)
         bool isBroadcast = (pgn == 200 || pgn == 202);
         
-        // For broadcast PGNs, call ALL registered callbacks
+        // For broadcast PGNs, call only broadcast callbacks
         if (isBroadcast)
         {
             
-            const uint8_t* data = &udpPacket->recv.buf[5];
-            size_t dataLen = udpPacket->recv.len - 6; // Subtract header(3) + pgn(1) + len(1) + crc(1)
+            const uint8_t* pgnData = &data[5];
+            size_t dataLen = len - 6; // Subtract header(3) + pgn(1) + len(1) + crc(1)
             
-            for (size_t i = 0; i < registrationCount; i++)
+            for (size_t i = 0; i < broadcastCount; i++)
             {
-                registrations[i].callback(pgn, data, dataLen);
+                broadcastCallbacks[i](pgn, pgnData, dataLen);
                 handled = true;
             }
         }
@@ -106,14 +88,14 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
                     
                     // Pass the data starting after the 5-byte header
                     // PGN 254 data starts at position 5: speed(2), status(1), steerAngle(2), etc.
-                    const uint8_t* data = &udpPacket->recv.buf[5];
-                    size_t dataLen = udpPacket->recv.len - 6; // Subtract header(5) + crc(1)
+                    const uint8_t* pgnData = &data[5];
+                    size_t dataLen = len - 6; // Subtract header(5) + crc(1)
                     
                     // Only print for non-254 PGNs to reduce noise
                     if (pgn != 254 && pgn != 239) {  // Also skip PGN 239 (frequent machine data)
                         LOG_DEBUG(EventSource::NETWORK, "Calling %s for PGN %d", registrations[i].name, pgn);
                     }
-                    registrations[i].callback(pgn, data, dataLen);
+                    registrations[i].callback(pgn, pgnData, dataLen);
                     handled = true;
                     break; // Only one handler per non-broadcast PGN
                 }
@@ -123,12 +105,8 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
         // PGNProcessor only routes - no built-in handlers
         // Unhandled PGNs are simply dropped
 
-        mg_iobuf_del(&udpPacket->recv, 0, udpPacket->recv.len);
     }
-    else
-    {
-        mg_iobuf_del(&udpPacket->recv, 0, udpPacket->recv.len);
-    }
+    // No need to delete buffer - QNEthernet handles memory management
 }
 
 // REMOVED ALL BUILT-IN HANDLERS
@@ -140,23 +118,9 @@ void PGNProcessor::processPGN(struct mg_connection *udpPacket, int ev, void *ev_
 // - processSteerSettings
 // - processSteerData
 
-void PGNProcessor::printPgnAnnouncement(struct mg_connection *udpPacket, char *pgnName)
+void PGNProcessor::printPgnAnnouncement(uint8_t pgn, const char *pgnName, size_t dataLen)
 {
-    // Build the data string
-    char dataStr[256];
-    int offset = snprintf(dataStr, sizeof(dataStr), "0x%02X(%d)-%s %d Data>",
-                         udpPacket->recv.buf[3],
-                         udpPacket->recv.buf[3],
-                         pgnName,
-                         udpPacket->recv.len);
-
-    // Add data bytes
-    for (int i = 4; i < udpPacket->recv.len - 1 && offset < 250; i++)
-    {
-        offset += snprintf(dataStr + offset, sizeof(dataStr) - offset, "%3d ", udpPacket->recv.buf[i]);
-    }
-    
-    LOG_DEBUG(EventSource::NETWORK, "%s", dataStr);
+    LOG_DEBUG(EventSource::NETWORK, "PGN 0x%02X(%d)-%s Length:%d", pgn, pgn, pgnName, dataLen);
 }
 
 bool PGNProcessor::registerCallback(uint8_t pgn, PGNCallback callback, const char* name)
@@ -218,4 +182,22 @@ void PGNProcessor::listRegisteredCallbacks()
     {
         Serial.printf("\r\n  - PGN %d: %s", registrations[i].pgn, registrations[i].name);
     }
+}
+
+bool PGNProcessor::registerBroadcastCallback(PGNCallback callback, const char* name)
+{
+    // Check if we have room for more broadcast callbacks
+    if (broadcastCount >= MAX_BROADCAST_CALLBACKS)
+    {
+        LOG_ERROR(EventSource::NETWORK, "Broadcast registration failed - max callbacks reached (%d)", MAX_BROADCAST_CALLBACKS);
+        return false;
+    }
+    
+    // Add the new broadcast callback
+    broadcastCallbacks[broadcastCount] = callback;
+    broadcastNames[broadcastCount] = name;
+    broadcastCount++;
+    
+    LOG_INFO(EventSource::NETWORK, "Registered broadcast callback for %s (total: %d/%d)", name, broadcastCount, MAX_BROADCAST_CALLBACKS);
+    return true;
 }

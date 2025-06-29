@@ -91,7 +91,7 @@ private:
     void setLEDPins(LED_ID id, uint16_t r, uint16_t g, uint16_t b);
 };
 
-// Global pointer following established pattern
-extern LEDManager* ledPTR;
+// Global instance following established pattern
+extern LEDManager ledManager;
 
 #endif // LED_MANAGER_H

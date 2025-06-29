@@ -6,10 +6,9 @@
 #include "IMUProcessor.h"
 #include "NAVProcessor.h"
 
-// External pointers needed for status checks
-extern GNSSProcessor* gnssPTR;
-extern IMUProcessor* imuPTR;
-extern NAVProcessor* navPTR;
+// External processor instances needed for status checks
+extern GNSSProcessor gnssProcessor;
+extern IMUProcessor imuProcessor;
 
 // Global pointer
 LEDManager* ledPTR = nullptr;
@@ -298,22 +297,22 @@ void LEDManager::updateAll() {
     // Power/Ethernet LED
     // TODO: Add proper ethernet link detection when NetworkBase is updated
     bool ethernetUp = true;  // For now assume ethernet is up
-    setPowerState(ethernetUp, navPTR && navPTR->hasAgIOConnection());
+    // Check AgIO connection through NAVProcessor singleton
+    NAVProcessor* navInstance = NAVProcessor::getInstance();
+    setPowerState(ethernetUp, navInstance && navInstance->hasAgIOConnection());
     
     // GPS LED
-    if (gnssPTR) {
-        setGPSState(gnssPTR->getData().fixQuality, gnssPTR->hasGPS());
-    }
+    setGPSState(gnssProcessor.getData().fixQuality, gnssProcessor.hasGPS());
     
     // IMU/INS LED
-    if (imuPTR && imuPTR->getIMUType() != IMUType::NONE) {
+    if (imuProcessor.getIMUType() != IMUType::NONE) {
         // Separate IMU detected (BNO08x or TM171)
         setIMUState(true,
-                   imuPTR->isIMUInitialized(),
-                   imuPTR->hasValidData());
-    } else if (gnssPTR && gnssPTR->getData().hasINS) {
+                   imuProcessor.isIMUInitialized(),
+                   imuProcessor.hasValidData());
+    } else if (gnssProcessor.getData().hasINS) {
         // UM981 INS system
-        const auto& gpsData = gnssPTR->getData();
+        const auto& gpsData = gnssProcessor.getData();
         bool insDetected = true;
         bool insInitialized = gpsData.insAlignmentStatus != 0;
         bool insValid = gpsData.insAlignmentStatus == 3; // Solution good

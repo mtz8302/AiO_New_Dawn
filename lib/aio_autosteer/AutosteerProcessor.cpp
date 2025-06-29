@@ -6,21 +6,20 @@
 #include "ConfigManager.h"
 #include "LEDManager.h"
 #include "EventLogger.h"
+#include "QNetworkBase.h"
 #include <cmath>  // For sin() function
 
 // External network function
 extern void sendUDPbytes(uint8_t* data, int len);
 
-// External pointers
-extern ConfigManager* configPTR;
-extern LEDManager* ledPTR;
+// External objects and pointers
+extern ConfigManager configManager;
+extern LEDManager ledManager;
+extern ADProcessor adProcessor;
+extern MotorDriverInterface* motorPTR;
 
 // External network config
-extern struct NetConfigStruct {
-    uint8_t currentIP[5];
-    uint8_t gatewayIP[5];
-    uint8_t broadcastIP[5];
-} netConfig;
+extern struct NetworkConfig netConfig;
 
 // Global pointer definition
 AutosteerProcessor* autosteerPTR = nullptr;
@@ -67,9 +66,8 @@ bool AutosteerProcessor::init() {
     if (PGNProcessor::instance) {
         LOG_DEBUG(EventSource::AUTOSTEER, "Registering PGN callbacks...");
         
-        // Register for a dummy PGN so we receive broadcast messages like PGN 200
-        // Using PGN 255 as it's unused
-        bool reg255 = PGNProcessor::instance->registerCallback(255, handlePGNStatic, "AutosteerHandler");
+        // Register for broadcast messages (PGN 200, 202)
+        bool regBroadcast = PGNProcessor::instance->registerBroadcastCallback(handlePGNStatic, "AutosteerHandler");
         
         // Register for PGN 251 (Steer Config)
         bool reg251 = PGNProcessor::instance->registerCallback(251, handlePGNStatic, "AutosteerHandler");
@@ -80,7 +78,7 @@ bool AutosteerProcessor::init() {
         // Register for PGN 254 (Steer Data with button)
         bool reg254 = PGNProcessor::instance->registerCallback(254, handlePGNStatic, "AutosteerHandler");
             
-        LOG_DEBUG(EventSource::AUTOSTEER, "PGN registrations: 255=%d, 251=%d, 252=%d, 254=%d", reg255, reg251, reg252, reg254);
+        LOG_DEBUG(EventSource::AUTOSTEER, "PGN registrations: Broadcast=%d, 251=%d, 252=%d, 254=%d", regBroadcast, reg251, reg252, reg254);
     } else {
         LOG_ERROR(EventSource::AUTOSTEER, "PGNProcessor not initialized!");
         return false;
@@ -155,12 +153,10 @@ void AutosteerProcessor::process() {
     sendPGN253();
     
     // Update LED status
-    if (ledPTR) {
-        bool wasReady = (adPTR != nullptr);  // Have WAS sensor
-        bool enabled = (steerState == 0);    // Button/OSB active
-        bool active = (shouldSteerBeActive() && motorSpeed != 0.0f);  // Actually steering
-        ledPTR->setSteerState(wasReady, enabled, active);
-    }
+    bool wasReady = true;  // ADProcessor is always available as an object
+    bool enabled = (steerState == 0);    // Button/OSB active
+    bool active = (shouldSteerBeActive() && motorSpeed != 0.0f);  // Actually steering
+    ledManager.setSteerState(wasReady, enabled, active);
 }
 
 void AutosteerProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -344,6 +340,18 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     lastPGN254Time = millis();
     lastCommandTime = millis();  // Update watchdog timer
     
+    // Debug: Log raw PGN 254 data
+    static uint32_t lastRawLog = 0;
+    if (millis() - lastRawLog > 500) { // Every 500ms
+        lastRawLog = millis();
+        char hexBuf[64];
+        int pos = 0;
+        for (int i = 0; i < len && i < 16 && pos < 60; i++) {
+            pos += snprintf(hexBuf + pos, sizeof(hexBuf) - pos, "%02X ", data[i]);
+        }
+        LOG_DEBUG(EventSource::AUTOSTEER, "PGN254 raw (%d bytes): %s", len, hexBuf);
+    }
+    
     
     // Data format (from PGNProcessor we get data starting at speed):
     // [0-1] = Speed (uint16, cm/s)
@@ -371,6 +379,12 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     // Extract steer angle
     int16_t angleRaw = (int16_t)(data[4] << 8 | data[3]);
     targetAngle = angleRaw / 100.0f;
+    
+    // Debug log for AgIO test mode
+    if (targetAngle != 0.0f || autosteerEnabled) {
+        LOG_DEBUG(EventSource::AUTOSTEER, "PGN254: speed=%.1f km/h, target=%.1f°, enabled=%d, guidance=%d", 
+                  vehicleSpeed, targetAngle, autosteerEnabled, guidanceActive);
+    }
     
     // Extract XTE
     crossTrackError = (int8_t)data[5];
@@ -470,9 +484,7 @@ void AutosteerProcessor::sendPGN253() {
 
 void AutosteerProcessor::updateMotorControl() {
     // Get current WAS angle
-    if (adPTR) {
-        currentAngle = adPTR->getWASAngle();
-    }
+    currentAngle = adProcessor.getWASAngle();
     
     // Check if steering should be active
     bool shouldBeActive = shouldSteerBeActive();
@@ -578,7 +590,7 @@ void AutosteerProcessor::updateMotorControl() {
     }
     
     // Apply motor direction from config
-    if (configPTR && configPTR->getMotorDriveDirection()) {
+    if (configManager.getMotorDriveDirection()) {
         motorSpeed = -motorSpeed;  // Invert if configured
     }
     
@@ -607,6 +619,14 @@ bool AutosteerProcessor::shouldSteerBeActive() const {
     bool active = guidanceActive &&           // Guidance line active (bit 0 from PGN 254)
                   (steerState == 0) &&        // Our button/OSB state (0=active)
                   (vehicleSpeed > 0.1f);      // Moving (TODO: use MinSpeed from config)
+    
+    // Debug logging for test mode
+    static uint32_t lastDebugTime = 0;
+    if (millis() - lastDebugTime > 1000) {
+        lastDebugTime = millis();
+        LOG_DEBUG(EventSource::AUTOSTEER, "shouldSteerBeActive: guidance=%d, steerState=%d, speed=%.1f -> %s",
+                  guidanceActive, steerState, vehicleSpeed, active ? "YES" : "NO");
+    }
     
     return active;
 }

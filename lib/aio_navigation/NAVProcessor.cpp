@@ -4,9 +4,9 @@
 #include <cstring>
 #include "EventLogger.h"
 
-// External pointers from main.cpp
-extern GNSSProcessor* gnssPTR;
-extern IMUProcessor* imuPTR;
+// External processor instances from main.cpp
+extern GNSSProcessor gnssProcessor;
+extern IMUProcessor imuProcessor;
 
 // External UDP send function
 extern void sendUDPbytes(uint8_t *message, int msgLen);
@@ -26,29 +26,25 @@ NAVProcessor::NAVProcessor() {
     LOG_INFO(EventSource::GNSS, "NAVProcessor initialized");
     
     // Report what we see from GNSSProcessor during startup
-    if (gnssPTR) {
-        const auto& gnssData = gnssPTR->getData();
+    const auto& gnssData = gnssProcessor.getData();
+    
+    if (gnssData.messageTypeMask == 0) {
+        LOG_DEBUG(EventSource::GNSS, "  No NMEA data available yet");
+    } else {
+        LOG_DEBUG(EventSource::GNSS, "  NMEA messages detected (mask=0x%02X)", gnssData.messageTypeMask);
         
-        if (gnssData.messageTypeMask == 0) {
-            LOG_DEBUG(EventSource::GNSS, "  No NMEA data available yet");
+        if (!gnssData.hasPosition) {
+            LOG_DEBUG(EventSource::GNSS, "  No position fix (quality=%d, sats=%d)", 
+                     gnssData.fixQuality, gnssData.numSatellites);
         } else {
-            LOG_DEBUG(EventSource::GNSS, "  NMEA messages detected (mask=0x%02X)", gnssData.messageTypeMask);
-            
-            if (!gnssData.hasPosition) {
-                LOG_DEBUG(EventSource::GNSS, "  No position fix (quality=%d, sats=%d)", 
-                         gnssData.fixQuality, gnssData.numSatellites);
+            if (gnssData.hasDualHeading) {
+                LOG_DEBUG(EventSource::GNSS, "  Dual antenna mode (heading=%.1f°)", gnssData.dualHeading);
+            } else if (gnssData.hasINS) {
+                LOG_DEBUG(EventSource::GNSS, "  INS mode (align status=%d)", gnssData.insAlignmentStatus);
             } else {
-                if (gnssData.hasDualHeading) {
-                    LOG_DEBUG(EventSource::GNSS, "  Dual antenna mode (heading=%.1f°)", gnssData.dualHeading);
-                } else if (gnssData.hasINS) {
-                    LOG_DEBUG(EventSource::GNSS, "  INS mode (align status=%d)", gnssData.insAlignmentStatus);
-                } else {
-                    LOG_DEBUG(EventSource::GNSS, "  Single antenna mode");
-                }
+                LOG_DEBUG(EventSource::GNSS, "  Single antenna mode");
             }
         }
-    } else {
-        LOG_DEBUG(EventSource::GNSS, "  GNSSProcessor not available");
     }
 }
 
@@ -68,11 +64,7 @@ void NAVProcessor::init() {
 }
 
 NavMessageType NAVProcessor::selectMessageType() {
-    if (!gnssPTR) {
-        return NavMessageType::NONE;
-    }
-    
-    const auto& gnssData = gnssPTR->getData();
+    const auto& gnssData = gnssProcessor.getData();
     
     // For dual/INS systems, send PAOGI even without fix (for INS_ALIGNING state)
     if (gnssData.hasDualHeading || gnssData.hasINS) {
@@ -80,7 +72,7 @@ NavMessageType NAVProcessor::selectMessageType() {
     }
     
     // For single GPS, require fix
-    if (!gnssPTR->hasFix()) {
+    if (!gnssProcessor.hasFix()) {
         return NavMessageType::NONE;
     }
     
@@ -146,11 +138,11 @@ float NAVProcessor::convertGPStoUTC(uint16_t gpsWeek, float gpsSeconds) {
 }
 
 bool NAVProcessor::formatPANDAMessage() {
-    if (!gnssPTR || !gnssPTR->isValid()) {
+    if (!gnssProcessor.isValid()) {
         return false;
     }
     
-    const auto& gnssData = gnssPTR->getData();
+    const auto& gnssData = gnssProcessor.getData();
     
     // Convert coordinates to NMEA format
     double latNMEA, lonNMEA;
@@ -164,8 +156,8 @@ bool NAVProcessor::formatPANDAMessage() {
     char imuPitch[10] = "0";        // Default "no IMU" value
     char imuYawRate[10] = "0";      // Default "no IMU" value
     
-    if (imuPTR && imuPTR->hasValidData()) {
-        const auto& imuData = imuPTR->getCurrentData();
+    if (imuProcessor.hasValidData()) {
+        const auto& imuData = imuProcessor.getCurrentData();
         snprintf(imuHeading, sizeof(imuHeading), "%d", (int)(imuData.heading * 10.0));
         snprintf(imuRoll, sizeof(imuRoll), "%d", (int)round(imuData.roll));
         snprintf(imuPitch, sizeof(imuPitch), "%d", (int)round(imuData.pitch));
@@ -202,12 +194,12 @@ bool NAVProcessor::formatPANDAMessage() {
 }
 
 bool NAVProcessor::formatPAOGIMessage() {
-    if (!gnssPTR || !gnssPTR->getData().hasDualHeading) {
+    if (!gnssProcessor.getData().hasDualHeading) {
         return false;
     }
     // Allow PAOGI even without valid position for INS_ALIGNING state
     
-    const auto& gnssData = gnssPTR->getData();
+    const auto& gnssData = gnssProcessor.getData();
     
     // Convert coordinates to NMEA format
     double latNMEA, lonNMEA;
@@ -223,8 +215,8 @@ bool NAVProcessor::formatPAOGIMessage() {
     if (gnssData.hasINS) {
         pitch = (int16_t)round(gnssData.insPitch);
     }
-    else if (imuPTR && imuPTR->hasValidData()) {
-        const auto& imuData = imuPTR->getCurrentData();
+    else if (imuProcessor.hasValidData()) {
+        const auto& imuData = imuProcessor.getCurrentData();
         pitch = (int16_t)round(imuData.pitch);
         yawRate = imuData.yawRate;
     }
@@ -281,14 +273,9 @@ void NAVProcessor::sendMessage(const char* message) {
 }
 
 void NAVProcessor::process() {
-    // Check if GNSSProcessor exists
-    if (!gnssPTR) {
-        return;
-    }
-    
     // For single antenna systems, we need at least position data
     // For dual/INS systems, we can send messages even without full fix (for alignment)
-    const auto& gnssData = gnssPTR->getData();
+    const auto& gnssData = gnssProcessor.getData();
     bool isDualSystem = gnssData.hasDualHeading || gnssData.hasINS;
     
     if (!isDualSystem && !gnssData.hasPosition) {
@@ -383,8 +370,8 @@ void NAVProcessor::printStatus() {
     
     // Show data sources
     LOG_INFO(EventSource::GNSS, "Data sources:");
-    if (gnssPTR && gnssPTR->isValid()) {
-        const auto& gnssData = gnssPTR->getData();
+    if (gnssProcessor.isValid()) {
+        const auto& gnssData = gnssProcessor.getData();
         LOG_INFO(EventSource::GNSS, "  GPS: Valid (Fix=%d, Sats=%d)", 
             gnssData.fixQuality, gnssData.numSatellites);
         if (gnssData.hasDualHeading) {
@@ -395,8 +382,8 @@ void NAVProcessor::printStatus() {
         LOG_INFO(EventSource::GNSS, "  GPS: No valid fix");
     }
     
-    if (imuPTR && imuPTR->hasValidData()) {
-        LOG_INFO(EventSource::GNSS, "  IMU: %s connected", imuPTR->getIMUTypeName());
+    if (imuProcessor.hasValidData()) {
+        LOG_INFO(EventSource::GNSS, "  IMU: %s connected", imuProcessor.getIMUTypeName());
     } else {
         LOG_INFO(EventSource::GNSS, "  IMU: Not detected");
     }

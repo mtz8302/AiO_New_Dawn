@@ -5,19 +5,12 @@
 #include <Wire.h>
 #include "Adafruit_PWMServoDriver.h"
 #include "EventLogger.h"
+#include "QNetworkBase.h"
 
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 
 // External network configuration - defined elsewhere
-struct NetConfigStruct {
-    uint8_t currentIP[4];
-    uint8_t subnetMask[4];
-    uint8_t gatewayIP[4];
-    uint8_t destIP[4];
-    uint16_t listenPort;
-    uint16_t destPort;
-};
-extern NetConfigStruct netConfig;
+extern struct NetworkConfig netConfig;
 
 // PCA9685 PWM driver for section outputs - moved to static instance
 // Note: Front panel LEDs use 0x70 on Wire, sections use 0x44
@@ -93,10 +86,11 @@ bool MachineProcessor::initialize() {
     
     // Register PGN handlers
     LOG_DEBUG(EventSource::MACHINE, "Registering PGN callbacks...");
-    // We'll receive broadcast PGNs (200, 202) through our normal registrations
+    // Register for broadcast PGNs (200, 202)
+    bool regBroadcast = PGNProcessor::instance->registerBroadcastCallback(handleBroadcastPGN, "Machine");
     bool reg238 = PGNProcessor::instance->registerCallback(MACHINE_PGN_CONFIG, handlePGN238, "Machine");
     bool reg239 = PGNProcessor::instance->registerCallback(MACHINE_PGN_DATA, handlePGN239, "Machine");
-    LOG_DEBUG(EventSource::MACHINE, "PGN registrations - 238:%d, 239:%d", reg238, reg239);
+    LOG_DEBUG(EventSource::MACHINE, "PGN registrations - Broadcast:%d, 238:%d, 239:%d", regBroadcast, reg238, reg239);
     
     LOG_INFO(EventSource::MACHINE, "Initialized successfully with hardware");
     return true;

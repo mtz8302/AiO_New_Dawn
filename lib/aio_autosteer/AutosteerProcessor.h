@@ -6,10 +6,10 @@
 
 // External pointers
 class ADProcessor;
-extern ADProcessor* adPTR;
+extern ADProcessor adProcessor;
 
 class MotorDriverInterface;
-extern MotorDriverInterface* motorPTR;
+extern MotorDriverInterface motorDriver;
 
 // Steer Config structure (PGN 251)
 struct SteerConfig {
@@ -161,7 +161,7 @@ public:
     }
 };
 
-// Global pointer
-extern AutosteerProcessor* autosteerPTR;
+// Global instance
+extern AutosteerProcessor autosteerProcessor;
 
 #endif // AUTOSTEER_PROCESSOR_H

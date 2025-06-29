@@ -1,14 +1,10 @@
 #include "SubnetManager.h"
 #include "PGNProcessor.h"
+#include "QNetworkBase.h"
 #include <Arduino.h>
 
 // External network configuration - declare what we need
-struct NetConfigStruct {
-    uint8_t currentIP[5];
-    uint8_t gatewayIP[5];
-    uint8_t broadcastIP[5];
-};
-extern NetConfigStruct netConfig;
+extern struct NetworkConfig netConfig;
 extern void save_current_net();
 
 // Singleton instance
@@ -81,10 +77,10 @@ void SubnetManager::handlePGN201(uint8_t pgn, const uint8_t* data, size_t len) {
     netConfig.currentIP[2] = newSubnet[2];
     
     // Update gateway to .1
-    netConfig.gatewayIP[0] = newSubnet[0];
-    netConfig.gatewayIP[1] = newSubnet[1];
-    netConfig.gatewayIP[2] = newSubnet[2];
-    netConfig.gatewayIP[3] = 1;
+    netConfig.gateway[0] = newSubnet[0];
+    netConfig.gateway[1] = newSubnet[1];
+    netConfig.gateway[2] = newSubnet[2];
+    netConfig.gateway[3] = 1;
     
     // Update broadcast to .255
     netConfig.broadcastIP[0] = newSubnet[0];

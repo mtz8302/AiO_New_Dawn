@@ -76,9 +76,7 @@ private:
     // Rate limiting check
     bool checkRateLimit(EventSeverity severity);
     
-    // Mongoose logging
-    int mongooseLogLevel = 3;  // Default to debug during startup
-    bool mongooseLogReduced = false;
+    // QNEthernet doesn't need explicit log level management
     
     // Startup mode tracking
     bool startupMode = true;  // Don't enforce levels during startup
@@ -122,10 +120,8 @@ public:
     // Display current configuration
     void printConfig();
     
-    // Mongoose log control
-    void setMongooseLogLevel(int level);
-    int getMongooseLogLevel() { return mongooseLogLevel; }
-    void checkNetworkReady();  // Auto-adjust Mongoose logging when network is ready
+    // Network status check
+    void checkNetworkReady();  // Check when network is ready
     
     // System startup logging control
     void setStartupMode(bool startup);

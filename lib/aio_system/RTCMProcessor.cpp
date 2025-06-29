@@ -1,9 +1,14 @@
 #include "RTCMProcessor.h"
-#include "mongoose_glue.h"
+#include "QNetworkBase.h"
 
 // Just declare what we need, don't include pcb.h
 #define SerialGPS1 Serial5 // From pcb.h
-extern struct mg_mgr g_mgr;
+
+// External UDP instances from QNetworkBase
+extern EthernetUDP udpRTCM;
+
+// QNEthernet namespace
+using namespace qindesign::network;
 
 // Static instance pointer
 RTCMProcessor *RTCMProcessor::instance = nullptr;
@@ -26,39 +31,18 @@ void RTCMProcessor::init()
     }
 }
 
-// Static callback for Mongoose
-void RTCMProcessor::handleRTCM(struct mg_connection *rtcm, int ev, void *ev_data)
-{
-    if (instance != nullptr)
-    {
-        instance->processRTCM(rtcm, ev, ev_data);
-    }
-}
+// Remove static callback - QNEthernet uses a different approach
 
-void RTCMProcessor::processRTCM(struct mg_connection *rtcm, int ev, void *ev_data)
+void RTCMProcessor::processRTCM(const uint8_t* data, size_t len, const IPAddress& remoteIP, uint16_t remotePort)
 {
     // Match the original code logic exactly
-    if (g_mgr.ifp->state != MG_TCPIP_STATE_READY)
+    if (!QNetworkBase::isConnected())
         return;
 
-    if (ev == MG_EV_READ && mg_ntohs(rtcm->rem.port) == 9999 && rtcm->recv.len >= 5)
+    if (remotePort == 9999 && len >= 5)
     {
-
-        // Copy to buffer exactly like the original code
-        char TXbuf[1024];
-        for (size_t i = 0; i < rtcm->recv.len; i++)
-        {
-            TXbuf[i] = rtcm->recv.buf[i];
-        }
-        int length = rtcm->recv.len;
-
-        // Write using the same pattern as your original
-        SerialGPS1.write(TXbuf, length);
-
-        mg_iobuf_del(&rtcm->recv, 0, rtcm->recv.len);
+        // Write directly to serial port
+        SerialGPS1.write(data, len);
     }
-    else
-    {
-        mg_iobuf_del(&rtcm->recv, 0, rtcm->recv.len);
-    }
+    // No need to delete buffer - QNEthernet handles memory management
 }
