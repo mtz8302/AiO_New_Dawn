@@ -47,11 +47,10 @@ bool I2CManager::initializeI2C() {
         success = false;
     }
     
-    // Skip device detection scan - it can hang on startup with misbehaving devices
-    // The system will still work with known device addresses
+    // Device detection disabled - can hang with misbehaving devices
+    // System works fine with known device addresses
     if (success) {
-        LOG_INFO(EventSource::SYSTEM, "I2C buses initialized, skipping device scan");
-        // detectDevices();  // Commented out to prevent startup hangs
+        LOG_INFO(EventSource::SYSTEM, "I2C buses initialized");
     }
     
     return success;

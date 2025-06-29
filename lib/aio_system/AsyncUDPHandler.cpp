@@ -66,62 +66,11 @@ void AsyncUDPHandler::init() {
     }
     
     LOG_INFO(EventSource::NETWORK, "AsyncUDP initialization complete");
-    
-    // SKIP test broadcast for now
-    // delay(100); // Let the stack settle
-    // LOG_INFO(EventSource::NETWORK, "Sending UDP test broadcast");
-    // uint8_t testMsg[] = {0x80, 0x81, 0x7F, 0xC8, 0x05, 'T', 'E', 'S', 'T', 0x00}; 
-    // sendUDPPacket(testMsg, sizeof(testMsg));
 }
 
 static void handlePGNPacket(AsyncUDPPacket& packet) {
-    // Debug logging with more detail
-    static uint32_t lastDebugTime = 0;
-    static uint32_t packetCount = 0;
-    static uint32_t totalBytes = 0;
-    packetCount++;
-    totalBytes += packet.length();
-    
-    // Get packet details
-    IPAddress remoteIP = packet.remoteIP();
-    IPAddress destIP = packet.localIP();
-    uint16_t destPort = packet.localPort();
-    bool isBroadcast = packet.isBroadcast();
-    bool isMulticast = packet.isMulticast();
-    
-    // Log packet type and details
-    const char* packetType = isBroadcast ? "Broadcast" : (isMulticast ? "Multicast" : "Unicast");
-    LOG_INFO(EventSource::NETWORK, "PGN %s packet: %d bytes from %d.%d.%d.%d:%d to %d.%d.%d.%d:%d", 
-             packetType, packet.length(), 
-             remoteIP[0], remoteIP[1], remoteIP[2], remoteIP[3], packet.remotePort(),
-             destIP[0], destIP[1], destIP[2], destIP[3], destPort);
-    
-    // Log first few bytes of packet for debugging
-    if (packet.length() >= 5) {
-        uint8_t* data = packet.data();
-        LOG_DEBUG(EventSource::NETWORK, "PGN header: %02X %02X %02X %02X %02X", 
-                  data[0], data[1], data[2], data[3], data[4]);
-    }
-    
-    // Periodic statistics
-    if (millis() - lastDebugTime > 1000) {
-        lastDebugTime = millis();
-        LOG_INFO(EventSource::NETWORK, "PGN stats: %lu packets/sec, %lu bytes/sec", 
-                 packetCount, totalBytes);
-        packetCount = 0;
-        totalBytes = 0;
-    }
-    
     // Process the packet
     if (packet.length() > 0 && PGNProcessor::instance) {
-        // Log first packet details
-        static bool firstPacket = true;
-        if (firstPacket) {
-            firstPacket = false;
-            LOG_INFO(EventSource::NETWORK, "First PGN packet received - processing started");
-        }
-        
-        // Pass to PGN processor
         PGNProcessor::instance->processPGN(packet.data(), packet.length(), 
                                          packet.remoteIP(), packet.remotePort());
     }
@@ -145,36 +94,10 @@ void AsyncUDPHandler::sendUDPPacket(uint8_t* data, int length) {
     // Use the correct broadcast address for subnet 192.168.5.x
     IPAddress broadcastIP(192, 168, 5, 255);
     
-    // Debug logging with more detail
-    static bool firstSend = true;
-    static uint32_t sendCount = 0;
-    static uint32_t lastSendReport = 0;
-    sendCount++;
-    
-    if (firstSend) {
-        firstSend = false;
-        LOG_INFO(EventSource::NETWORK, "First UDP send to %d.%d.%d.%d:%d (broadcast)", 
-                 broadcastIP[0], broadcastIP[1], broadcastIP[2], broadcastIP[3], netConfig.destPort);
-        LOG_INFO(EventSource::NETWORK, "Sending %d bytes, first 5: %02X %02X %02X %02X %02X", 
-                 length, data[0], data[1], data[2], data[3], data[4]);
-    }
-    
     // Use writeTo() with subnet broadcast address instead of broadcastTo()
     // broadcastTo() uses 255.255.255.255, but we need 192.168.5.255
-    if (udpPGN.writeTo(data, length, broadcastIP, netConfig.destPort)) {
-        // Success - packet sent
-        static uint32_t successCount = 0;
-        successCount++;
-        
-        // Report send statistics periodically
-        if (millis() - lastSendReport > 5000) {
-            lastSendReport = millis();
-            LOG_INFO(EventSource::NETWORK, "UDP send stats: %lu total, %lu successful", 
-                     sendCount, successCount);
-        }
-    } else {
-        LOG_ERROR(EventSource::NETWORK, "Failed to send UDP packet to %d.%d.%d.%d:%d", 
-                  broadcastIP[0], broadcastIP[1], broadcastIP[2], broadcastIP[3], netConfig.destPort);
+    if (!udpPGN.writeTo(data, length, broadcastIP, netConfig.destPort)) {
+        LOG_ERROR(EventSource::NETWORK, "Failed to send UDP packet");
     }
 }
 

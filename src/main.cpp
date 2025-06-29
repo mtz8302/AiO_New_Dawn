@@ -51,8 +51,8 @@ void setup()
   // Network and communication setup FIRST
   QNetworkBase::init();
   
-  // Dell laptop negotiation workaround - wait for speed to stabilize
-  Serial.print("\r\n- Waiting for network speed negotiation (Dell workaround)...");
+  // Wait for network speed to stabilize (some switches negotiate in steps)
+  Serial.print("\r\n- Waiting for network speed negotiation...");
   uint32_t startWait = millis();
   int lastSpeed = 0;
   
@@ -74,7 +74,7 @@ void setup()
     delay(100);
   }
   
-  // Additional delay for network stack to stabilize after negotiation
+  // Additional delay for network stack to stabilize
   Serial.print("\r\n- Waiting for network stack to stabilize...");
   delay(2000);
   
