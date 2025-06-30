@@ -24,6 +24,13 @@ EventLogger* EventLogger::instance = nullptr;
 EventLogger::EventLogger() {
     loadConfig();
     
+    // Initialize token buckets
+    uint32_t now = millis();
+    for (int i = 0; i < 8; i++) {
+        buckets[i].tokens = maxMessagesPerSecond[i];
+        buckets[i].lastRefillTime = now;
+    }
+    
     // QNEthernet doesn't need explicit log level management
 }
 
@@ -150,12 +157,26 @@ bool EventLogger::checkRateLimit(EventSeverity severity) {
     uint8_t sevIndex = static_cast<uint8_t>(severity);
     uint32_t now = millis();
     
-    if (rateLimit[sevIndex] == 0) {
-        return true;  // No rate limit for this level
+    // Get the bucket for this severity level
+    TokenBucket& bucket = buckets[sevIndex];
+    uint8_t maxPerSecond = maxMessagesPerSecond[sevIndex];
+    
+    // Calculate time elapsed since last refill
+    uint32_t elapsed = now - bucket.lastRefillTime;
+    if (elapsed > RATE_WINDOW_MS) {
+        // More than 1 second passed, reset bucket
+        bucket.tokens = maxPerSecond;
+        bucket.lastRefillTime = now;
+    } else if (elapsed > 0) {
+        // Refill tokens based on time elapsed
+        float tokensToAdd = (float)elapsed * maxPerSecond / RATE_WINDOW_MS;
+        bucket.tokens = min(bucket.tokens + tokensToAdd, (float)maxPerSecond);
+        bucket.lastRefillTime = now;
     }
     
-    if (now - lastLogTime[sevIndex] >= rateLimit[sevIndex]) {
-        lastLogTime[sevIndex] = now;
+    // Check if we have a token available
+    if (bucket.tokens >= 1.0f) {
+        bucket.tokens -= 1.0f;
         return true;
     }
     
