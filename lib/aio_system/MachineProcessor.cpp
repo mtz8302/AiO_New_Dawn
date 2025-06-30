@@ -19,10 +19,10 @@ extern struct NetworkConfig netConfig;
 // Section signal pins on PCA9685 (control the actual sections)
 const uint8_t SECTION_PINS[6] = {0, 1, 4, 5, 10, 9};  // SEC1_SIG through SEC6_SIG
 
-// DRV8234 control pins on PCA9685
+// DRV8243 control pins on PCA9685
 const uint8_t DRVOFF_PINS[3] = {2, 6, 8};    // DRVOFF pins (must be LOW to enable)
 
-// DRV8234 sleep pins - these need a reset pulse to activate
+// DRV8243 sleep pins - these need a reset pulse to activate
 const uint8_t SLEEP_PINS[3] = {
     13, // Section 1/2 nSLEEP
     3,  // Section 3/4 nSLEEP
@@ -116,8 +116,8 @@ bool MachineProcessor::initializeSectionOutputs() {
     getSectionOutputs().setPWMFreq(1526);  // Max frequency
     getSectionOutputs().setOutputMode(true);  // Push-pull outputs
     
-    // 5. Put all DRV8234s to sleep initially
-    LOG_DEBUG(EventSource::MACHINE, "Putting all DRV8234 drivers to sleep");
+    // 5. Put all DRV8243s to sleep initially
+    LOG_DEBUG(EventSource::MACHINE, "Putting all DRV8243 drivers to sleep");
     for (uint8_t pin : SLEEP_PINS) {
         getSectionOutputs().setPin(pin, 0, 0); // Set LOW for sleep mode
     }
@@ -129,14 +129,14 @@ bool MachineProcessor::initializeSectionOutputs() {
         getSectionOutputs().setPin(pin, 0, 0); // Set LOW = OFF
     }
     
-    // 7. Wake up the section DRV8234s with reset pulse
-    LOG_DEBUG(EventSource::MACHINE, "Waking section DRV8234 drivers");
+    // 7. Wake up the section DRV8243s with reset pulse
+    LOG_DEBUG(EventSource::MACHINE, "Waking section DRV8243 drivers");
     getSectionOutputs().setPin(13, 187, 1); // Section 1/2 - 30µs LOW pulse
     getSectionOutputs().setPin(3, 187, 1);  // Section 3/4 - 30µs LOW pulse
     getSectionOutputs().setPin(7, 187, 1);  // Section 5/6 - 30µs LOW pulse
     
-    // 9. Enable DRV8234 outputs by setting DRVOFF LOW
-    LOG_DEBUG(EventSource::MACHINE, "Enabling DRV8234 outputs (DRVOFF = LOW)");
+    // 9. Enable DRV8243 outputs by setting DRVOFF LOW
+    LOG_DEBUG(EventSource::MACHINE, "Enabling DRV8243 outputs (DRVOFF = LOW)");
     for (uint8_t pin : DRVOFF_PINS) {
         getSectionOutputs().setPin(pin, 0, 0); // Set LOW to enable outputs
     }

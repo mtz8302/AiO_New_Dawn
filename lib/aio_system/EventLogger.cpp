@@ -272,8 +272,12 @@ void EventLogger::checkNetworkReady() {
         // Display the complete boxed message as separate lines to avoid rate limiting
         // Use Serial.print directly for the visual box to ensure it displays properly
         Serial.println("\r\n**************************************************");
-        Serial.printf("*** System ready - UDP syslog active at %s level ***\r\n", 
-                      getLevelName(getEffectiveLogLevel()));
+        if (config.enableUDP) {
+            Serial.printf("*** System ready - UDP syslog active at %s level ***\r\n", 
+                          getLevelName(getEffectiveLogLevel()));
+        } else {
+            Serial.println("*** System ready - UDP syslog disabled ***");
+        }
         Serial.println("*** Press '?' for menu, 'L' for logging control ***");
         Serial.println("**************************************************\r\n");
         
