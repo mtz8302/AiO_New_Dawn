@@ -242,6 +242,26 @@ void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len
     // No reply needed - AgIO does nothing with PGN 237
 }
 
+// Helper function to convert byte to binary string with spaces
+static void byteToBinary(uint8_t byte, char* buffer) {
+    int pos = 0;
+    for (int i = 7; i >= 0; i--) {
+        buffer[pos++] = (byte & (1 << i)) ? '1' : '0';
+        if (i > 0) buffer[pos++] = ' ';  // Add space between bits
+    }
+    buffer[pos] = '\0';
+}
+
+// Helper function to convert 16-bit value to binary string with spaces
+static void uint16ToBinary(uint16_t value, char* buffer) {
+    int pos = 0;
+    for (int i = 15; i >= 0; i--) {
+        buffer[pos++] = (value & (1 << i)) ? '1' : '0';
+        if (i > 0) buffer[pos++] = ' ';  // Add space between bits
+    }
+    buffer[pos] = '\0';
+}
+
 void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len) {
     if (!instance) return;
     
@@ -273,7 +293,11 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
     bool sectionChanged = (len >= 8) && (data[6] != lastSectionBytes[0] || data[7] != lastSectionBytes[1]);
     
     if (sectionChanged) {
-        LOG_INFO(EventSource::MACHINE, "Sections changed: [6]SC1-8=0x%02X [7]SC9-16=0x%02X", data[6], data[7]);
+        char bin1[16], bin2[16];  // 8 bits + 7 spaces + null terminator
+        byteToBinary(data[6], bin1);
+        byteToBinary(data[7], bin2);
+        LOG_INFO(EventSource::MACHINE, "Sections changed: [6]SC1-8=0x%02X (0b%s) [7]SC9-16=0x%02X (0b%s)", 
+                 data[6], bin1, data[7], bin2);
         lastSectionBytes[0] = data[6];
         lastSectionBytes[1] = data[7];
         lastPGN239Debug = millis();
@@ -322,7 +346,10 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
         static uint16_t lastAutoStates = 0xFFFF;
         
         if (sectionStates != lastSectionStates || autoStates != lastAutoStates) {
-            LOG_INFO(EventSource::MACHINE, "Section state changed: Sections=0x%04X Auto=0x%04X", sectionStates, autoStates);
+            char binSections[32];  // 16 bits + 15 spaces + null terminator
+            uint16ToBinary(sectionStates, binSections);
+            LOG_INFO(EventSource::MACHINE, "Section state changed: Sections=0x%04X (0b%s) Auto=0x%04X", 
+                     sectionStates, binSections, autoStates);
             lastSectionStates = sectionStates;
             lastAutoStates = autoStates;
             
@@ -351,9 +378,12 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
 }
 
 void MachineProcessor::printStatus() {
-    LOG_INFO(EventSource::MACHINE, "Active=%s Sections=0x%04X Lowered=%s",
+    char binSections[32];  // 16 bits + 15 spaces + null terminator
+    uint16ToBinary(sectionState.rawPGNData, binSections);
+    LOG_INFO(EventSource::MACHINE, "Active=%s Sections=0x%04X (0b%s) Lowered=%s",
         isActive() ? "Yes" : "No",
         sectionState.rawPGNData,
+        binSections,
         state.isLowered ? "Yes" : "No");
 }
 
