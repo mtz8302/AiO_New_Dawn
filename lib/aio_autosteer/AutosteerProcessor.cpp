@@ -522,7 +522,16 @@ void AutosteerProcessor::updateMotorControl() {
             motorPTR->enable(false);
             motorPTR->setSpeed(0.0f);
         }
-        LOG_INFO(EventSource::AUTOSTEER, "Motor disabled");
+        // Give more specific disable reason
+        if (vehicleSpeed <= 0.1f) {
+            LOG_INFO(EventSource::AUTOSTEER, "Motor disabled - speed too low (%.1f km/h)", vehicleSpeed);
+        } else if (!guidanceActive) {
+            LOG_INFO(EventSource::AUTOSTEER, "Motor disabled - guidance inactive");
+        } else if (steerState != 0) {
+            LOG_INFO(EventSource::AUTOSTEER, "Motor disabled - steer switch off");
+        } else {
+            LOG_INFO(EventSource::AUTOSTEER, "Motor disabled");
+        }
         return;
     }
     else if (!shouldBeActive) {
