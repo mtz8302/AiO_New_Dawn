@@ -29,6 +29,11 @@ void CommandHandler::process() {
     
     char cmd = Serial.read();
     
+    // Ignore line ending characters (CR and LF)
+    if (cmd == '\r' || cmd == '\n') {
+        return;
+    }
+    
     // Handle state-specific commands
     switch (currentState) {
         case CommandState::MAIN_MENU:
@@ -46,7 +51,6 @@ void CommandHandler::process() {
 }
 
 void CommandHandler::handleMainMenu(char cmd) {
-    Serial.printf("\r\n[CMD] Main menu received: '%c' (0x%02X)", cmd, cmd);  // Debug
     switch (cmd) {
         case 'l':
         case 'L':
