@@ -9,6 +9,9 @@ using namespace qindesign::network;
 // Global network configuration
 NetworkConfig netConfig;
 
+// Static member definition
+volatile bool QNetworkBase::linkState = false;
+
 // Save network configuration
 void save_current_net() {
     // EEPROM saving of network config not yet implemented

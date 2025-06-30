@@ -7,6 +7,7 @@
 
 #include <QNEthernet.h>
 #include <QNEthernetUDP.h>
+#include "LEDManager.h"
 
 using namespace qindesign::network;
 
@@ -23,8 +24,30 @@ public:
     static constexpr uint16_t UDP_LOCAL_PORT_RECV = 9999;
     static constexpr uint16_t UDP_DEST_PORT = 9999;
     
+    // Track link state
+    static volatile bool linkState;
+    
+    // Link state change callback
+    static void onLinkStateChanged(bool state) {
+        linkState = state;
+        if (state) {
+            Serial.printf("\r\n[LINK] Ethernet link UP: %d Mbps, %s duplex", 
+                         Ethernet.linkSpeed(),
+                         Ethernet.linkIsFullDuplex() ? "full" : "half");
+        } else {
+            Serial.println("\r\n[LINK] Ethernet link DOWN");
+        }
+        
+        // Update LED immediately on link change
+        extern LEDManager ledManager;
+        ledManager.updateAll();
+    }
+    
     // Initialize network stack
     static void init() {
+        // Register link state callback BEFORE begin()
+        Ethernet.onLinkState(onLinkStateChanged);
+        
         // Set MAC address (required for Teensy)
         uint8_t mac[6];
         Ethernet.macAddress(mac);  // Get the built-in MAC
@@ -69,7 +92,7 @@ public:
     
     // Get network status
     static bool isConnected() {
-        return Ethernet.linkStatus();
+        return linkState;  // Use cached state from callback
     }
     
     // Get current IP address
