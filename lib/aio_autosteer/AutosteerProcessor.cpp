@@ -276,6 +276,15 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     LOG_DEBUG(EventSource::AUTOSTEER, "SteerButton: %d", steerConfig.SteerButton);
     LOG_DEBUG(EventSource::AUTOSTEER, "PulseCountMax: %d", steerConfig.PulseCountMax);
     LOG_DEBUG(EventSource::AUTOSTEER, "MinSpeed: %d", steerConfig.MinSpeed);
+    
+    // Log all settings at INFO level in a single message so users see everything
+    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Cytron=%s", 
+             steerConfig.InvertWAS ? "Inv" : "Norm",
+             steerConfig.MotorDriveDirection ? "Rev" : "Norm",
+             steerConfig.MinSpeed,
+             steerConfig.SteerSwitch ? "On" : "Off",
+             steerConfig.ShaftEncoder ? "Yes" : "No",
+             steerConfig.CytronDriver ? "Yes" : "No");
 }
 
 void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -326,6 +335,13 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     float scaledKp = steerSettings.Kp / 10.0f;  // AgOpenGPS sends Kp * 10
     pid.setKp(scaledKp);
     LOG_DEBUG(EventSource::AUTOSTEER, "PID updated with Kp=%.1f", scaledKp);
+    
+    // Log all settings at INFO level in a single message so users see everything
+    LOG_INFO(EventSource::AUTOSTEER, "Steer settings: Kp=%.1f PWM=%d-%d-%d WAS_offset=%d counts=%d Ackerman=%.2f", 
+             scaledKp,
+             steerSettings.minPWM, steerSettings.lowPWM, steerSettings.highPWM,
+             steerSettings.wasOffset, steerSettings.steerSensorCounts,
+             steerSettings.AckermanFix);
 }
 
 void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_t len) {
