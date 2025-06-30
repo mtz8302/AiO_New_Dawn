@@ -26,6 +26,7 @@
 #include "CommandHandler.h"
 #include "PGNProcessor.h"
 #include "RTCMProcessor.h"
+#include "WebManager.h"
 
 // Global objects (no more pointers)
 ConfigManager configManager;
@@ -38,6 +39,7 @@ IMUProcessor imuProcessor;
 ADProcessor adProcessor;
 PWMProcessor pwmProcessor;
 LEDManager ledManager;
+WebManager webManager;
 MotorDriverInterface *motorPTR = nullptr; // Motor driver still uses factory pattern
 
 void setup()
@@ -80,7 +82,7 @@ void setup()
   
   // Verify we have an IP address
   IPAddress localIP = Ethernet.localIP();
-  if (localIP == INADDR_NONE) {
+  if (localIP == IPAddress(0, 0, 0, 0)) {
     Serial.print("\r\n- ERROR: No IP address assigned!");
   } else {
     Serial.printf("\r\n- IP ready: %d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
@@ -266,6 +268,12 @@ void setup()
   cmdHandler->setMachineProcessor(machinePTR);
   LOG_INFO(EventSource::SYSTEM, "CommandHandler initialized");
 
+  // Initialize WebManager
+  if (webManager.begin()) {
+    LOG_INFO(EventSource::SYSTEM, "WebManager initialized");
+  } else {
+    LOG_ERROR(EventSource::SYSTEM, "WebManager FAILED");
+  }
 
   // Exit startup mode - start enforcing configured log levels
   EventLogger::getInstance()->setStartupMode(false);
