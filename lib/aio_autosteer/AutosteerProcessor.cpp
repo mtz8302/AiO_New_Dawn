@@ -98,6 +98,17 @@ void AutosteerProcessor::process() {
     
     // === 100Hz AUTOSTEER LOOP STARTS HERE ===
     
+    // Track link state for down detection
+    static bool previousLinkState = true;
+    bool currentLinkState = QNetworkBase::isConnected();
+    
+    if (previousLinkState && !currentLinkState) {
+        // Link just went DOWN
+        LOG_WARNING(EventSource::AUTOSTEER, "Motor disabled - ethernet link down");
+        linkWasDown = true;  // Set flag for handleSteerData
+    }
+    previousLinkState = currentLinkState;
+    
     // Read button state with debouncing
     static uint32_t lastButtonPrint = 0;
     static bool lastButtonReading = HIGH;
@@ -354,6 +365,23 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
         return;  // Too short, ignore
     }
     
+    // Check if we're recovering from a link down event
+    static uint32_t linkUpTime = 0;
+    static bool waitingForStableLink = false;
+    
+    if (linkWasDown) {
+        // Link was down, now we're receiving PGN 254 again
+        linkUpTime = millis();
+        waitingForStableLink = true;
+        linkWasDown = false;  // Clear the flag
+    }
+    
+    // Wait 3 seconds for network negotiation after link restoration
+    if (waitingForStableLink && (millis() - linkUpTime > 3000)) {
+        LOG_INFO(EventSource::AUTOSTEER, "Communication restored - motor under AOG control");
+        waitingForStableLink = false;
+    }
+    
     lastPGN254Time = millis();
     lastCommandTime = millis();  // Update watchdog timer
     
@@ -523,12 +551,16 @@ void AutosteerProcessor::updateMotorControl() {
             motorPTR->setSpeed(0.0f);
         }
         // Give more specific disable reason
-        if (vehicleSpeed <= 0.1f) {
+        if (!QNetworkBase::isConnected()) {
+            // Already logged in link state change detection above
+        } else if (vehicleSpeed <= 0.1f) {
             LOG_INFO(EventSource::AUTOSTEER, "Motor disabled - speed too low (%.1f km/h)", vehicleSpeed);
         } else if (!guidanceActive) {
             LOG_INFO(EventSource::AUTOSTEER, "Motor disabled - guidance inactive");
         } else if (steerState != 0) {
             LOG_INFO(EventSource::AUTOSTEER, "Motor disabled - steer switch off");
+        } else if (millis() - lastCommandTime > WATCHDOG_TIMEOUT) {
+            LOG_INFO(EventSource::AUTOSTEER, "Motor disabled - communication timeout");
         } else {
             LOG_INFO(EventSource::AUTOSTEER, "Motor disabled");
         }
@@ -631,6 +663,11 @@ bool AutosteerProcessor::shouldSteerBeActive() const {
     // Check kickout cooldown
     if (kickoutTime > 0 && (millis() - kickoutTime < KICKOUT_COOLDOWN_MS)) {
         return false;  // Still in cooldown
+    }
+    
+    // Check ethernet link
+    if (!QNetworkBase::isConnected()) {
+        return false;  // No ethernet link
     }
     
     // Check watchdog timeout

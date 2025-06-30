@@ -108,6 +108,10 @@ private:
     uint16_t softStartDurationMs = 175;     // Duration of soft-start ramp (150-200ms range)
     float softStartMaxPWM = 0.4f;           // Maximum PWM during soft-start (percentage of lowPWM)
     
+    // Link state tracking
+    bool linkWasDown = false;               // Track if link was down
+    
+    
 public:
     // Singleton access
     static AutosteerProcessor* getInstance();
