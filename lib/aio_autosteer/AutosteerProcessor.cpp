@@ -109,7 +109,7 @@ void AutosteerProcessor::process() {
         if (guidanceActive) {
             // Guidance turned ON in AgOpenGPS
             steerState = 0;  // Activate steering
-            LOG_INFO(EventSource::AUTOSTEER, "Guidance activated from AgOpenGPS");
+            LOG_INFO(EventSource::AUTOSTEER, "Autosteer ARMED via AgOpenGPS (OSB)");
         }
         guidanceStatusChanged = false;  // Clear flag
     }
@@ -120,7 +120,7 @@ void AutosteerProcessor::process() {
         if (switchCounter++ > 30) {  // 30 * 10ms = 300ms delay
             steerState = 1;
             switchCounter = 0;
-            LOG_INFO(EventSource::AUTOSTEER, "Auto-deactivated (guidance off)");
+            LOG_INFO(EventSource::AUTOSTEER, "Autosteer DISARMED - guidance inactive");
         }
     } else {
         switchCounter = 0;
@@ -130,7 +130,8 @@ void AutosteerProcessor::process() {
     if (buttonReading == LOW && lastButtonReading == HIGH) {
         // Button was just pressed
         steerState = !steerState;
-        LOG_INFO(EventSource::AUTOSTEER, "Physical button pressed - steerState now: %d", steerState);
+        LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via physical button", 
+                 steerState == 0 ? "ARMED" : "DISARMED");
     }
     lastButtonReading = buttonReading;
     
@@ -412,9 +413,8 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     
     // Only print on state change to avoid spam
     if (newAutosteerState != autosteerEnabled) {
-        LOG_INFO(EventSource::AUTOSTEER, "Button state changed: %s -> %s", 
-                      autosteerEnabled ? "ON" : "OFF",
-                      newAutosteerState ? "ON" : "OFF");
+        LOG_INFO(EventSource::AUTOSTEER, "AgOpenGPS autosteer request: %s", 
+                      newAutosteerState ? "ENGAGE" : "DISENGAGE");
         autosteerEnabled = newAutosteerState;
     }
 }
@@ -511,8 +511,8 @@ void AutosteerProcessor::updateMotorControl() {
         motorState = MotorState::SOFT_START;
         softStartBeginTime = millis();
         softStartRampValue = 0.0f;
-        LOG_INFO(EventSource::AUTOSTEER, "Starting soft-start sequence (duration=%dms, maxPWM=%.1f%%)", 
-                 softStartDurationMs, softStartMaxPWM * 100.0f);
+        LOG_INFO(EventSource::AUTOSTEER, "Motor STARTING - soft-start sequence (%dms)", 
+                 softStartDurationMs);
     } 
     else if (!shouldBeActive && motorState != MotorState::DISABLED) {
         // Transition: Disable motor
@@ -579,7 +579,7 @@ void AutosteerProcessor::updateMotorControl() {
                 if (elapsed >= softStartDurationMs) {
                     // Soft-start complete, transition to normal
                     motorState = MotorState::NORMAL_CONTROL;
-                    LOG_INFO(EventSource::AUTOSTEER, "Soft-start complete, entering normal control");
+                    LOG_INFO(EventSource::AUTOSTEER, "Motor ACTIVE - normal steering control");
                 } else {
                     // Calculate ramp progress (0.0 to 1.0)
                     float rampProgress = (float)elapsed / softStartDurationMs;
