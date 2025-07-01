@@ -44,42 +44,7 @@ public:
     }
     
     // Initialize network stack
-    static void init() {
-        // Register link state callback BEFORE begin()
-        Ethernet.onLinkState(onLinkStateChanged);
-        
-        // Set MAC address (required for Teensy)
-        uint8_t mac[6];
-        Ethernet.macAddress(mac);  // Get the built-in MAC
-        Serial.printf("\r\n- MAC Address: %02X:%02X:%02X:%02X:%02X:%02X", 
-                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-        
-        // Configure static IP
-        IPAddress ip(DEFAULT_IP[0], DEFAULT_IP[1], DEFAULT_IP[2], DEFAULT_IP[3]);
-        IPAddress subnet(DEFAULT_SUBNET[0], DEFAULT_SUBNET[1], DEFAULT_SUBNET[2], DEFAULT_SUBNET[3]);
-        IPAddress gateway(DEFAULT_GATEWAY[0], DEFAULT_GATEWAY[1], DEFAULT_GATEWAY[2], DEFAULT_GATEWAY[3]);
-        
-        // Start Ethernet with static IP
-        if (!Ethernet.begin(ip, subnet, gateway)) {
-            Serial.print("\r\n- ERROR: Failed to start Ethernet!");
-            return;
-        }
-        
-        // Wait for link
-        Serial.print("\r\n- Waiting for Ethernet link...");
-        if (!Ethernet.waitForLink(5000)) {  // 5 second timeout
-            Serial.print("\r\n- WARNING: Link timeout, continuing anyway");
-        }
-        
-        if (Ethernet.linkStatus()) {
-            Serial.print(" Link UP!");
-            Serial.printf("\r\n- IP Address: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-            Serial.printf("\r\n- Link Speed: %d Mbps", Ethernet.linkSpeed());
-            Serial.printf("\r\n- Link Full Duplex: %s", Ethernet.linkIsFullDuplex() ? "Yes" : "No");
-        } else {
-            Serial.print("\r\n- ERROR: No Ethernet link detected!");
-        }
-    }
+    static void init();
     
     // Initialize UDP services
     static void udpSetup();
@@ -128,5 +93,6 @@ extern NetworkConfig netConfig;
 // UDP helper functions
 void sendUDPbytes(uint8_t* data, int length);
 void save_current_net();
+bool load_network_config();
 
 #endif // QNETWORKBASE_H

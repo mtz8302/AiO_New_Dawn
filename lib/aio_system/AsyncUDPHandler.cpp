@@ -91,11 +91,11 @@ void AsyncUDPHandler::sendUDPPacket(uint8_t* data, int length) {
         return;
     }
     
-    // Use the correct broadcast address for subnet 192.168.5.x
-    IPAddress broadcastIP(192, 168, 5, 255);
+    // Use the broadcast address from netConfig (updated when IP changes)
+    IPAddress broadcastIP(netConfig.destIP[0], netConfig.destIP[1], 
+                         netConfig.destIP[2], netConfig.destIP[3]);
     
-    // Use writeTo() with subnet broadcast address instead of broadcastTo()
-    // broadcastTo() uses 255.255.255.255, but we need 192.168.5.255
+    // Use writeTo() with subnet broadcast address from netConfig
     if (!udpPGN.writeTo(data, length, broadcastIP, netConfig.destPort)) {
         LOG_ERROR(EventSource::NETWORK, "Failed to send UDP packet");
     }

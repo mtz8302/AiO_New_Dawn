@@ -28,9 +28,11 @@ private:
     
     void setupRoutes();
     void setupEventLoggerAPI();
+    void setupNetworkAPI();
     void handleRoot(AsyncWebServerRequest* request);
     void handleApiStatus(AsyncWebServerRequest* request);
     void handleEventLoggerPage(AsyncWebServerRequest* request);
+    void handleNetworkPage(AsyncWebServerRequest* request);
     void handleNotFound(AsyncWebServerRequest* request);
     
     // Helper to build select options for log levels

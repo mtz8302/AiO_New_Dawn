@@ -18,6 +18,7 @@ enum class WebLanguage : uint8_t {
 // Include all language versions
 #include "en_HomePage.h"
 #include "en_EventLoggerPage.h"
+#include "en_NetworkPage.h"
 #include "de_HomePage.h"
 #include "de_EventLoggerPage.h"
 // Add more languages as needed:
@@ -43,6 +44,11 @@ public:
             default:
                 return EN_EVENTLOGGER_PAGE;
         }
+    }
+    
+    static const char* getNetworkPage(WebLanguage lang) {
+        // Only English version for now
+        return EN_NETWORK_PAGE;
     }
     
     // Add getters for each page type as you implement them

@@ -2,6 +2,7 @@
 #include "PGNProcessor.h"
 #include "QNetworkBase.h"
 #include <Arduino.h>
+#include "EventLogger.h"
 
 // External network configuration - declare what we need
 extern struct NetworkConfig netConfig;
@@ -44,15 +45,14 @@ void SubnetManager::handlePGN201(uint8_t pgn, const uint8_t* data, size_t len) {
     
     // Verify packet length (need at least 6 bytes after header)
     if (len < 3) {
-        Serial.print(" - ERROR: Packet too short: ");
-        Serial.println(len);
+        LOG_ERROR(EventSource::NETWORK, "PGN 201 packet too short: %d bytes", len);
         return;
     }
     
     // Check magic bytes for safety
     if (data[0] != 201 || data[1] != 201) {
-        Serial.printf(" - Invalid magic bytes: %d,%d,%d\r\n", data[0], data[1], data[2]);
-        Serial.printf("data: %d,%d,%d,%d,%d,%d\r\n", data[0], data[1], data[2], data[3], data[4], data[5]);
+        LOG_ERROR(EventSource::NETWORK, "PGN 201 invalid magic bytes: %d,%d,%d", 
+                  data[0], data[1], data[2]);
         return;
     }
     
@@ -63,18 +63,25 @@ void SubnetManager::handlePGN201(uint8_t pgn, const uint8_t* data, size_t len) {
     if (netConfig.currentIP[0] == newSubnet[0] && 
         netConfig.currentIP[1] == newSubnet[1] && 
         netConfig.currentIP[2] == newSubnet[2]) {
-        Serial.print(" - Subnet unchanged, ignoring");
+        LOG_INFO(EventSource::NETWORK, "Subnet unchanged (%d.%d.%d.x), ignoring PGN 201",
+                 newSubnet[0], newSubnet[1], newSubnet[2]);
         return;
     }
     
-    Serial.printf("\r\n- IP changed from %d.%d.%d.%d", 
-                  netConfig.currentIP[0], netConfig.currentIP[1], 
-                  netConfig.currentIP[2], netConfig.currentIP[3]);
+    LOG_INFO(EventSource::NETWORK, "IP change requested via PGN 201: %d.%d.%d.%d -> %d.%d.%d.%d", 
+             netConfig.currentIP[0], netConfig.currentIP[1], 
+             netConfig.currentIP[2], netConfig.currentIP[3],
+             newSubnet[0], newSubnet[1], newSubnet[2], netConfig.currentIP[3]);
     
     // Update subnet (keep last octet)
     netConfig.currentIP[0] = newSubnet[0];
     netConfig.currentIP[1] = newSubnet[1];
     netConfig.currentIP[2] = newSubnet[2];
+    
+    // Update ipAddress array too
+    netConfig.ipAddress[0] = newSubnet[0];
+    netConfig.ipAddress[1] = newSubnet[1];
+    netConfig.ipAddress[2] = newSubnet[2];
     
     // Update gateway to .1
     netConfig.gateway[0] = newSubnet[0];
@@ -88,11 +95,13 @@ void SubnetManager::handlePGN201(uint8_t pgn, const uint8_t* data, size_t len) {
     netConfig.broadcastIP[2] = newSubnet[2];
     netConfig.broadcastIP[3] = 255;
     
-    Serial.printf(" to %d.%d.%d.%d", 
-                  netConfig.currentIP[0], netConfig.currentIP[1], 
-                  netConfig.currentIP[2], netConfig.currentIP[3]);
+    // Update destIP too
+    netConfig.destIP[0] = newSubnet[0];
+    netConfig.destIP[1] = newSubnet[1];
+    netConfig.destIP[2] = newSubnet[2];
+    netConfig.destIP[3] = 255;
     
-    Serial.print("\r\n- Saving to EEPROM & Rebooting the Teensy...");
+    LOG_WARNING(EventSource::NETWORK, "Saving network config to EEPROM and rebooting...");
     
     // Save to EEPROM
     save_current_net();

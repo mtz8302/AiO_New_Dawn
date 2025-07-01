@@ -9,6 +9,10 @@
 #include "EventLogger.h"
 #include "Version.h"
 
+// For network config
+extern NetworkConfig netConfig;
+extern void save_current_net();
+
 using namespace qindesign::network;
 
 // Macro to read strings from PROGMEM
@@ -74,6 +78,11 @@ void WebManager::setupRoutes() {
         handleEventLoggerPage(request);
     });
     
+    // Network settings page
+    server->on("/network", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleNetworkPage(request);
+    });
+    
     // Language selection
     server->on("/lang/en", HTTP_GET, [this](AsyncWebServerRequest* request) {
         currentLanguage = WebLanguage::ENGLISH;
@@ -89,6 +98,19 @@ void WebManager::setupRoutes() {
     
     // Setup EventLogger API routes
     setupEventLoggerAPI();
+    
+    // Setup Network API routes
+    setupNetworkAPI();
+    
+    // Restart API endpoint
+    server->on("/api/restart", HTTP_POST, [](AsyncWebServerRequest* request) {
+        request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"System restarting...\"}");
+        
+        // Schedule restart after response is sent
+        // Using Teensy's restart mechanism
+        delay(100);  // Give time for response to be sent
+        SCB_AIRCR = 0x05FA0004;  // System reset request for Teensy
+    });
     
     // 404 handler
     server->onNotFound([this](AsyncWebServerRequest* request) {
@@ -243,6 +265,107 @@ String WebManager::buildLevelOptions(uint8_t selectedLevel) {
         options += F("</option>");
     }
     return options;
+}
+
+void WebManager::handleNetworkPage(AsyncWebServerRequest* request) {
+    // Get IP address and link speed for display
+    IPAddress ip = Ethernet.localIP();
+    String ipStr = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
+    String linkSpeed = String(Ethernet.linkSpeed());
+    
+    // Load template from PROGMEM and process replacements
+    String html = FPSTR(WebPageSelector::getNetworkPage(currentLanguage));
+    html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
+    html.replace("%IP_ADDRESS%", ipStr);
+    html.replace("%LINK_SPEED%", linkSpeed);
+    
+    request->send(200, "text/html", html);
+}
+
+void WebManager::setupNetworkAPI() {
+    // GET current network configuration
+    server->on("/api/network/config", HTTP_GET, [](AsyncWebServerRequest* request) {
+        // Get current IP address
+        IPAddress currentIP = Ethernet.localIP();
+        
+        JsonDocument doc;
+        JsonArray ipArray = doc["ip"].to<JsonArray>();
+        ipArray.add(currentIP[0]);
+        ipArray.add(currentIP[1]);
+        ipArray.add(currentIP[2]);
+        ipArray.add(126);  // Fixed last octet
+        
+        String response;
+        serializeJsonPretty(doc, response);
+        request->send(200, "application/json", response);
+    });
+    
+    // POST to update network configuration
+    server->on("/api/network/config", HTTP_POST, 
+        [](AsyncWebServerRequest* request) {
+            request->send(200, "application/json", "{\"status\":\"ok\"}");
+        },
+        nullptr,
+        [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            // Handle body data
+            if (index == 0) {
+                // Parse JSON data
+                JsonDocument doc;
+                DeserializationError error = deserializeJson(doc, data, len);
+                
+                if (error) {
+                    request->send(400, "application/json", "{\"status\":\"error\",\"error\":\"Invalid JSON\"}");
+                    return;
+                }
+                
+                // Extract IP settings
+                JsonArray ipArray = doc["ip"];
+                if (ipArray.size() >= 4) {
+                    uint8_t ip1 = ipArray[0];
+                    uint8_t ip2 = ipArray[1];
+                    uint8_t ip3 = ipArray[2];
+                    // ipArray[3] should be 126 but we ignore it as it's fixed
+                    
+                    // Update network configuration
+                    netConfig.ipAddress[0] = ip1;
+                    netConfig.ipAddress[1] = ip2;
+                    netConfig.ipAddress[2] = ip3;
+                    netConfig.ipAddress[3] = 126;  // Fixed last octet
+                    
+                    // Also update the other IP arrays
+                    netConfig.currentIP[0] = ip1;
+                    netConfig.currentIP[1] = ip2;
+                    netConfig.currentIP[2] = ip3;
+                    netConfig.currentIP[3] = 126;
+                    netConfig.currentIP[4] = 0;
+                    
+                    // Update broadcast IP
+                    netConfig.broadcastIP[0] = ip1;
+                    netConfig.broadcastIP[1] = ip2;
+                    netConfig.broadcastIP[2] = ip3;
+                    netConfig.broadcastIP[3] = 255;
+                    netConfig.broadcastIP[4] = 0;
+                    
+                    netConfig.destIP[0] = ip1;
+                    netConfig.destIP[1] = ip2;
+                    netConfig.destIP[2] = ip3;
+                    netConfig.destIP[3] = 255;
+                    
+                    // Update gateway (assume .1)
+                    netConfig.gateway[0] = ip1;
+                    netConfig.gateway[1] = ip2;
+                    netConfig.gateway[2] = ip3;
+                    netConfig.gateway[3] = 1;
+                    
+                    // Save to EEPROM
+                    save_current_net();
+                    
+                    LOG_INFO(EventSource::CONFIG, "Network settings updated - New IP: %d.%d.%d.126", 
+                             ip1, ip2, ip3);
+                }
+            }
+        }
+    );
 }
 
 void WebManager::handleNotFound(AsyncWebServerRequest* request) {
