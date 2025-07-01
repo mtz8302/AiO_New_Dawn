@@ -1,14 +1,19 @@
-// WebManager.cpp
-// Web server implementation using AsyncWebServer_Teensy41
+// WebSystem.cpp
+// Combined implementation file for all AsyncWebServer-using code
+// This unusual structure is required because AsyncWebServer_Teensy41 has
+// inline implementations in headers that cause multiple definition errors
+// when included in multiple compilation units. The library is archived
+// on GitHub so we can't fix it upstream.
 
 #include "WebManager.h"
+#include "OTAHandler.h"
 #include "QNetworkBase.h"
 #include <QNEthernet.h>
 #include <AsyncWebServer_Teensy41.h>
 #include <ArduinoJson.h>
 #include "EventLogger.h"
 #include "Version.h"
-#include "OTAHandler.h"
+#include "FXUtil.h"
 
 // For network config
 extern NetworkConfig netConfig;
@@ -18,6 +23,10 @@ using namespace qindesign::network;
 
 // Macro to read strings from PROGMEM
 #define FPSTR(pstr_pointer) (reinterpret_cast<const __FlashStringHelper *>(pstr_pointer))
+
+//=============================================================================
+// WebManager Implementation
+//=============================================================================
 
 WebManager::WebManager() : server(nullptr), isRunning(false), currentLanguage(WebLanguage::ENGLISH) {
     // TODO: Load language preference from config
@@ -64,7 +73,9 @@ void WebManager::stop() {
 }
 
 void WebManager::setupRoutes() {
-    // Root endpoint
+    if (!server) return;
+    
+    // Root/home page
     server->on("/", HTTP_GET, [this](AsyncWebServerRequest* request) {
         handleRoot(request);
     });
@@ -210,83 +221,76 @@ void WebManager::setupEventLoggerAPI() {
                     logger->setUDPLevel(static_cast<EventSeverity>(doc["udpLevel"].as<int>()));
                 }
                 
-                // Save configuration to EEPROM
-                logger->saveConfig();
+                // Log the configuration change
+                LOG_INFO(EventSource::CONFIG, "EventLogger configuration updated via web interface");
             }
         }
     );
     
-    // GET EventLogger stats
-    server->on("/api/eventlogger/stats", HTTP_GET, [](AsyncWebServerRequest* request) {
-        EventLogger* logger = EventLogger::getInstance();
-        
+    // GET recent log entries - placeholder for now
+    server->on("/api/eventlogger/logs", HTTP_GET, [](AsyncWebServerRequest* request) {
         JsonDocument doc;
-        doc["eventCount"] = logger->getEventCount();
-        doc["uptime"] = millis();
-        doc["startupMode"] = logger->isStartupMode();
+        JsonArray logs = doc["logs"].to<JsonArray>();
+        
+        // TODO: Implement log retrieval when EventLogger supports it
+        // For now, return empty array
         
         String response;
         serializeJsonPretty(doc, response);
         request->send(200, "application/json", response);
     });
-    
-    // POST to reset EventLogger stats
-    server->on("/api/eventlogger/reset", HTTP_POST, [](AsyncWebServerRequest* request) {
-        EventLogger* logger = EventLogger::getInstance();
-        logger->resetEventCount();
-        request->send(200, "application/json", "{\"status\":\"reset complete\"}");
-    });
 }
 
 void WebManager::handleEventLoggerPage(AsyncWebServerRequest* request) {
+    // Get current configuration
     EventLogger* logger = EventLogger::getInstance();
     EventConfig& config = logger->getConfig();
     
-    // Prepare template variables
-    String serialChecked = config.enableSerial ? "checked" : "";
-    String udpChecked = config.enableUDP ? "checked" : "";
-    String serialOptions = buildLevelOptions(config.serialLevel);
-    String udpOptions = buildLevelOptions(config.udpLevel);
-    String syslogPort = String((config.syslogPort[0] << 8) | config.syslogPort[1]);
-    
-    // Load template from PROGMEM and process replacements
+    // Load template from PROGMEM
     String html = FPSTR(WebPageSelector::getEventLoggerPage(currentLanguage));
+    
+    // Replace placeholders
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
-    html.replace("%SERIAL_ENABLED%", serialChecked);
-    html.replace("%UDP_ENABLED%", udpChecked);
-    html.replace("%SERIAL_LEVEL_OPTIONS%", serialOptions);
-    html.replace("%UDP_LEVEL_OPTIONS%", udpOptions);
-    html.replace("%SYSLOG_PORT%", syslogPort);
+    
+    // Set checked states for checkboxes
+    html.replace("%SERIAL_CHECKED%", config.enableSerial ? "checked" : "");
+    html.replace("%UDP_CHECKED%", config.enableUDP ? "checked" : "");
+    
+    // Build level select options
+    html.replace("%SERIAL_LEVEL_OPTIONS%", buildLevelOptions(config.serialLevel));
+    html.replace("%UDP_LEVEL_OPTIONS%", buildLevelOptions(config.udpLevel));
+    
+    // Set UDP port
+    uint16_t udpPort = (config.syslogPort[0] << 8) | config.syslogPort[1];
+    html.replace("%UDP_PORT%", String(udpPort));
     
     request->send(200, "text/html", html);
 }
 
 String WebManager::buildLevelOptions(uint8_t selectedLevel) {
-    EventLogger* logger = EventLogger::getInstance();
     String options;
-    for (int i = 0; i <= 7; i++) {
-        options += F("<option value='");
-        options += String(i);
-        options += F("'");
-        if (selectedLevel == i) options += F(" selected");
-        options += F(">");
-        options += logger->getLevelName(static_cast<EventSeverity>(i));
-        options += F("</option>");
+    EventLogger* logger = EventLogger::getInstance();
+    
+    for (int i = 0; i <= 4; i++) {
+        options += "<option value=\"" + String(i) + "\"";
+        if (i == selectedLevel) {
+            options += " selected";
+        }
+        options += ">" + String(logger->getLevelName(static_cast<EventSeverity>(i))) + "</option>";
     }
+    
     return options;
 }
 
 void WebManager::handleNetworkPage(AsyncWebServerRequest* request) {
-    // Get IP address and link speed for display
+    // Get current IP configuration
     IPAddress ip = Ethernet.localIP();
-    String ipStr = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
-    String linkSpeed = String(Ethernet.linkSpeed());
     
-    // Load template from PROGMEM and process replacements
     String html = FPSTR(WebPageSelector::getNetworkPage(currentLanguage));
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
-    html.replace("%IP_ADDRESS%", ipStr);
-    html.replace("%LINK_SPEED%", linkSpeed);
+    html.replace("%IP1%", String(ip[0]));
+    html.replace("%IP2%", String(ip[1]));
+    html.replace("%IP3%", String(ip[2]));
     
     request->send(200, "text/html", html);
 }
@@ -294,14 +298,13 @@ void WebManager::handleNetworkPage(AsyncWebServerRequest* request) {
 void WebManager::setupNetworkAPI() {
     // GET current network configuration
     server->on("/api/network/config", HTTP_GET, [](AsyncWebServerRequest* request) {
-        // Get current IP address
-        IPAddress currentIP = Ethernet.localIP();
+        IPAddress ip = Ethernet.localIP();
         
         JsonDocument doc;
         JsonArray ipArray = doc["ip"].to<JsonArray>();
-        ipArray.add(currentIP[0]);
-        ipArray.add(currentIP[1]);
-        ipArray.add(currentIP[2]);
+        ipArray.add(ip[0]);
+        ipArray.add(ip[1]);
+        ipArray.add(ip[2]);
         ipArray.add(126);  // Fixed last octet
         
         String response;
@@ -310,20 +313,17 @@ void WebManager::setupNetworkAPI() {
     });
     
     // POST to update network configuration
-    server->on("/api/network/config", HTTP_POST, 
+    server->on("/api/network/config", HTTP_POST,
         [](AsyncWebServerRequest* request) {
-            request->send(200, "application/json", "{\"status\":\"ok\"}");
+            request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"Network configuration saved. Please reboot.\"}");
         },
         nullptr,
         [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
-            // Handle body data
             if (index == 0) {
-                // Parse JSON data
                 JsonDocument doc;
                 DeserializationError error = deserializeJson(doc, data, len);
-                
                 if (error) {
-                    request->send(400, "application/json", "{\"status\":\"error\",\"error\":\"Invalid JSON\"}");
+                    request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
                     return;
                 }
                 
@@ -411,4 +411,204 @@ void WebManager::handleNotFound(AsyncWebServerRequest* request) {
     message += (request->method() == HTTP_GET) ? "GET" : "POST";
     
     request->send(404, "text/plain", message);
+}
+
+//=============================================================================
+// OTAHandler Implementation
+//=============================================================================
+
+// Static member definitions
+bool OTAHandler::otaInProgress = false;
+bool OTAHandler::otaComplete = false;
+bool OTAHandler::otaApply = false;
+uint32_t OTAHandler::bufferAddr = 0;
+uint32_t OTAHandler::bufferSize = 0;
+char OTAHandler::line[96] = {0};
+int OTAHandler::lineIndex = 0;
+char OTAHandler::data[32] __attribute__ ((aligned (8))) = {0};
+OTAHandler::HexInfo OTAHandler::hexInfo = {
+    OTAHandler::data, 0, 0, 0,        // data, addr, num, code
+    0, 0xFFFFFFFF, 0,                 // base, min, max
+    0, 0                              // eof, lines
+};
+
+// External flash ID from main.cpp
+extern const char* flash_id;
+
+bool OTAHandler::init() {
+    // Nothing to initialize - all state is reset per upload
+    LOG_INFO(EventSource::SYSTEM, "OTA handler initialized");
+    return true;
+}
+
+void OTAHandler::handleOTAUpload(AsyncWebServerRequest *request, String filename, 
+                                 size_t index, uint8_t *data, size_t len, bool final) {
+    
+    // Start OTA process on first chunk
+    if (!otaInProgress) {
+        LOG_INFO(EventSource::NETWORK, "Starting OTA firmware upload: %s", filename.c_str());
+        
+        // Initialize firmware buffer
+        if (firmware_buffer_init(&bufferAddr, &bufferSize) == 0) {
+            LOG_ERROR(EventSource::NETWORK, "Failed to create firmware buffer");
+            request->send(500, "text/plain", "Failed to create firmware buffer");
+            return;
+        }
+        
+        LOG_INFO(EventSource::NETWORK, "Created firmware buffer: %luK %s (0x%08lX - 0x%08lX)",
+                 bufferSize/1024, IN_FLASH(bufferAddr) ? "FLASH" : "RAM",
+                 bufferAddr, bufferAddr + bufferSize);
+        
+        // Reset hex parsing state
+        lineIndex = 0;
+        hexInfo.lines = 0;
+        hexInfo.eof = 0;
+        hexInfo.base = 0;
+        hexInfo.min = 0xFFFFFFFF;
+        hexInfo.max = 0;
+        
+        otaInProgress = true;
+        otaComplete = false;
+    }
+    
+    // Process data chunk
+    if (otaInProgress && len > 0) {
+        size_t i = 0;
+        while (i < len) {
+            // Process line by line
+            if (data[i] == '\n' || lineIndex == sizeof(line) - 1) {
+                line[lineIndex] = 0;  // null-terminate
+                
+                // Parse hex line
+                if (parse_hex_line(line, hexInfo.data, &hexInfo.addr, 
+                                  &hexInfo.num, &hexInfo.code) == 0) {
+                    LOG_ERROR(EventSource::NETWORK, "Invalid hex line: %s", line);
+                    request->send(400, "text/plain", "Invalid hex line");
+                    return;
+                }
+                
+                // Process hex record
+                if (process_hex_record(&hexInfo) != 0) {
+                    LOG_ERROR(EventSource::NETWORK, "Invalid hex code: %d", hexInfo.code);
+                    request->send(400, "text/plain", "Invalid hex code");
+                    return;
+                }
+                
+                // Handle data records
+                if (hexInfo.code == 0) {
+                    uint32_t addr = bufferAddr + hexInfo.base + hexInfo.addr - FLASH_BASE_ADDR;
+                    
+                    // Check address bounds
+                    if (hexInfo.max > (FLASH_BASE_ADDR + bufferSize)) {
+                        LOG_ERROR(EventSource::NETWORK, "Address 0x%08lX exceeds buffer", hexInfo.max);
+                        request->send(400, "text/plain", "Address exceeds buffer");
+                        return;
+                    }
+                    
+                    // Write to buffer
+                    if (!IN_FLASH(bufferAddr)) {
+                        // RAM buffer - direct copy
+                        memcpy((void*)addr, (void*)hexInfo.data, hexInfo.num);
+                    } else {
+                        // Flash buffer - use flash write
+                        int error = flash_write_block(addr, hexInfo.data, hexInfo.num);
+                        if (error) {
+                            LOG_ERROR(EventSource::NETWORK, "Flash write error: 0x%02X", error);
+                            request->send(400, "text/plain", "Flash write error");
+                            return;
+                        }
+                    }
+                }
+                
+                hexInfo.lines++;
+                lineIndex = 0;
+            } else if (data[i] != '\r') {
+                // Add character to line (skip CR)
+                line[lineIndex++] = data[i];
+            }
+            i++;
+        }
+    }
+    
+    // Handle final chunk
+    if (final) {
+        LOG_INFO(EventSource::NETWORK, "OTA upload complete: %d lines, %lu bytes (0x%08lX - 0x%08lX)",
+                 hexInfo.lines, hexInfo.max - hexInfo.min, hexInfo.min, hexInfo.max);
+        otaComplete = true;
+    }
+}
+
+void OTAHandler::handleOTAComplete(AsyncWebServerRequest *request) {
+    if (!otaComplete) {
+        request->send(400, "text/plain", "Upload incomplete");
+        return;
+    }
+    
+    bool valid = true;
+    
+    // Verify FSEC value for Kinetis (not needed for Teensy 4.x)
+    #if defined(KINETISK) || defined(KINETISL)
+    uint32_t fsec = *(uint32_t *)(0x40C + bufferAddr);
+    if (fsec != 0xfffff9de) {
+        LOG_ERROR(EventSource::NETWORK, "Invalid FSEC value: 0x%08lX (expected 0xFFFFF9DE)", fsec);
+        valid = false;
+    }
+    #endif
+    
+    // Verify flash ID
+    if (valid && !check_flash_id(bufferAddr, hexInfo.max - hexInfo.min)) {
+        LOG_ERROR(EventSource::NETWORK, "Firmware missing target ID: %s", flash_id);
+        valid = false;
+    } else if (valid) {
+        LOG_INFO(EventSource::NETWORK, "Firmware contains correct target ID: %s", flash_id);
+    }
+    
+    // Send response
+    if (valid) {
+        request->send(200, "text/plain", "OTA Success! System will reboot in 2 seconds...");
+        otaApply = true;
+    } else {
+        request->send(500, "text/plain", "OTA validation failed");
+        // Clean up buffer
+        firmware_buffer_free(bufferAddr, bufferSize);
+        otaInProgress = false;
+        otaComplete = false;
+    }
+}
+
+void OTAHandler::applyUpdate() {
+    if (!otaApply || !otaComplete) {
+        return;
+    }
+    
+    LOG_INFO(EventSource::NETWORK, "Applying firmware update...");
+    delay(100);  // Let log message send
+    
+    // Move firmware from buffer to flash base
+    flash_move(FLASH_BASE_ADDR, bufferAddr, hexInfo.max - hexInfo.min);
+    
+    // Reboot
+    SCB_AIRCR = 0x05FA0004;  // System reset
+    while(1) {}  // Wait for reset
+}
+
+// Intel hex parsing helper
+int OTAHandler::process_hex_record(HexInfo *hex) {
+    if (hex->code == 0) {  // data record
+        uint32_t addr = hex->base + hex->addr;
+        if (addr < hex->min) hex->min = addr;
+        addr += hex->num;
+        if (addr > hex->max) hex->max = addr;
+    } else if (hex->code == 1) {  // EOF record
+        hex->eof = 1;
+    } else if (hex->code == 2) {  // extended segment address
+        hex->base = ((hex->data[0] << 8) | hex->data[1]) << 4;
+    } else if (hex->code == 4) {  // extended linear address
+        hex->base = ((hex->data[0] << 8) | hex->data[1]) << 16;
+    } else if (hex->code == 5) {  // start address
+        // Ignore - we don't use the start address
+    } else {
+        return -1;  // unknown hex code
+    }
+    return 0;
 }
