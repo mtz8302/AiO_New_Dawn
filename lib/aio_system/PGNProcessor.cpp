@@ -171,16 +171,16 @@ bool PGNProcessor::unregisterCallback(uint8_t pgn)
         }
     }
     
-    Serial.printf("\r\n[PGNProcessor] PGN %d not found for unregistration", pgn);
+    LOG_WARNING(EventSource::SYSTEM, "PGN %d not found for unregistration", pgn);
     return false;
 }
 
 void PGNProcessor::listRegisteredCallbacks()
 {
-    Serial.printf("\r\n[PGNProcessor] Registered callbacks (%d):", registrationCount);
+    LOG_INFO(EventSource::SYSTEM, "Registered callbacks (%d):", registrationCount);
     for (size_t i = 0; i < registrationCount; i++)
     {
-        Serial.printf("\r\n  - PGN %d: %s", registrations[i].pgn, registrations[i].name);
+        LOG_INFO(EventSource::SYSTEM, "  - PGN %d: %s", registrations[i].pgn, registrations[i].name);
     }
 }
 
