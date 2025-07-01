@@ -198,14 +198,15 @@ public:
         if (error > abs(commandedRPM) + SLIP_RPM_TOLERANCE) {
             slipCounter++;
             if (slipCounter >= SLIP_COUNT_THRESHOLD) {
-                Serial.printf("\r\n[Keya] Motor slip detected! Counter=%d Cmd=%.1f Act=%.1f Error=%.1f",
-                             slipCounter, commandedRPM, actualRPM, error);
+                LOG_WARNING(EventSource::AUTOSTEER, 
+                           "Keya motor slip detected! Counter=%d Cmd=%.1f Act=%.1f Error=%.1f",
+                           slipCounter, commandedRPM, actualRPM, error);
                 return true;
             }
         } else {
             // Reset counter if speed is within tolerance
             if (slipCounter > 0) {
-                Serial.printf("\r\n[Keya] Slip counter reset (was %d)", slipCounter);
+                LOG_DEBUG(EventSource::AUTOSTEER, "Keya slip counter reset (was %d)", slipCounter);
             }
             slipCounter = 0;
         }
