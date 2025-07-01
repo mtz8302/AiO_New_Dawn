@@ -153,6 +153,24 @@ bool MachineProcessor::checkPCA9685() {
 }
 
 void MachineProcessor::process() {
+    // Check ethernet link state
+    static bool previousLinkState = true;
+    bool currentLinkState = QNetworkBase::isConnected();
+    
+    if (previousLinkState && !currentLinkState) {
+        // Link just went down - turn off all sections immediately
+        if (sectionState.currentStates != 0) {
+            LOG_INFO(EventSource::MACHINE, "Sections turned off - ethernet link down");
+            sectionState.currentStates = 0;
+            memset(sectionState.isOn, 0, sizeof(sectionState.isOn));
+            updateSectionOutputs();
+            
+            // Clear the timer so sections stay off
+            sectionState.lastPGN239Time = 0;
+        }
+    }
+    previousLinkState = currentLinkState;
+    
     // Watchdog timer - turn off all sections if no PGN 239 for 2 seconds
     if (sectionState.lastPGN239Time > 0 && 
         (millis() - sectionState.lastPGN239Time) > 2000) {
