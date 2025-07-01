@@ -7,6 +7,7 @@
 #include <AsyncWebServer_Teensy41.h>
 #include <ArduinoJson.h>
 #include "EventLogger.h"
+#include "Version.h"
 
 using namespace qindesign::network;
 
@@ -106,6 +107,7 @@ void WebManager::handleRoot(AsyncWebServerRequest* request) {
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     html.replace("%IP_ADDRESS%", ipStr);
     html.replace("%LINK_SPEED%", linkSpeed);
+    html.replace("%FIRMWARE_VERSION%", FIRMWARE_VERSION);
     
     request->send(200, "text/html", html);
 }

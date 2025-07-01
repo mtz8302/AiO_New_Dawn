@@ -19,29 +19,22 @@ const char DE_HOME_PAGE[] PROGMEM = R"rawliteral(
         <h1>AgOpenGPS AiO New Dawn</h1>
         <div class='status'>System läuft!</div>
         
-        <h2>Netzwerkinformationen</h2>
-        <p>IP-Adresse: %IP_ADDRESS%</p>
-        <p>Verbindungsgeschwindigkeit: %LINK_SPEED% Mbps</p>
-        
         <h2>Konfiguration</h2>
         <ul>
             <li><a href='/eventlogger'>Ereignisprotokoll-Einstellungen</a></li>
             <li><a href='/network'>Netzwerkeinstellungen</a></li>
-            <li><a href='/machine'>Maschinenkonfiguration</a></li>
-            <li><a href='/sensors'>Sensorkonfiguration</a></li>
         </ul>
         
         <h2>Werkzeuge</h2>
         <ul>
             <li><a href='/api/status'>Systemstatus (JSON)</a></li>
             <li><a href='/restart'>System neu starten</a></li>
+            <li><a href='/ota'>OTA Update</a></li>
         </ul>
         
-        <h2>Language / Sprache</h2>
-        <p>
-            <a href='/lang/en'>English</a> | 
-            <a href='/lang/de'>Deutsch</a>
-        </p>
+        <p>IP: %IP_ADDRESS% | Link: %LINK_SPEED% Mbps</p>
+        <p>Sprache: <a href='/lang/en'>English</a> | <a href='/lang/de'>Deutsch</a></p>
+        <p>Firmware Version: %FIRMWARE_VERSION%</p>
     </div>
 </body>
 </html>

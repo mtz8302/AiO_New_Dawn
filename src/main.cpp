@@ -27,6 +27,7 @@
 #include "PGNProcessor.h"
 #include "RTCMProcessor.h"
 #include "WebManager.h"
+#include "Version.h"
 
 // Global objects (no more pointers)
 ConfigManager configManager;
@@ -47,7 +48,9 @@ void setup()
   delay(5000); // delay for time to start monitor
   Serial.begin(115200);
 
-  Serial.print("\r\n\n=== Teensy 4.1 AiO-NG-v6 New Dawn ===");
+  Serial.print("\r\n\n=== Teensy 4.1 AiO-NG-v6 New Dawn v");
+  Serial.print(FIRMWARE_VERSION);
+  Serial.print(" ===");
   Serial.print("\r\nInitializing subsystems...");
 
   // Network and communication setup FIRST
