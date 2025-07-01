@@ -253,8 +253,8 @@ void WebManager::handleEventLoggerPage(AsyncWebServerRequest* request) {
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     
     // Set checked states for checkboxes
-    html.replace("%SERIAL_CHECKED%", config.enableSerial ? "checked" : "");
-    html.replace("%UDP_CHECKED%", config.enableUDP ? "checked" : "");
+    html.replace("%SERIAL_ENABLED%", config.enableSerial ? "checked" : "");
+    html.replace("%UDP_ENABLED%", config.enableUDP ? "checked" : "");
     
     // Build level select options
     html.replace("%SERIAL_LEVEL_OPTIONS%", buildLevelOptions(config.serialLevel));
@@ -262,7 +262,7 @@ void WebManager::handleEventLoggerPage(AsyncWebServerRequest* request) {
     
     // Set UDP port
     uint16_t udpPort = (config.syslogPort[0] << 8) | config.syslogPort[1];
-    html.replace("%UDP_PORT%", String(udpPort));
+    html.replace("%SYSLOG_PORT%", String(udpPort));
     
     request->send(200, "text/html", html);
 }
@@ -271,7 +271,8 @@ String WebManager::buildLevelOptions(uint8_t selectedLevel) {
     String options;
     EventLogger* logger = EventLogger::getInstance();
     
-    for (int i = 0; i <= 4; i++) {
+    // Build options for all severity levels (0-7)
+    for (int i = 0; i <= 7; i++) {
         options += "<option value=\"" + String(i) + "\"";
         if (i == selectedLevel) {
             options += " selected";
@@ -285,12 +286,16 @@ String WebManager::buildLevelOptions(uint8_t selectedLevel) {
 void WebManager::handleNetworkPage(AsyncWebServerRequest* request) {
     // Get current IP configuration
     IPAddress ip = Ethernet.localIP();
+    String ipStr = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
+    String linkSpeed = String(Ethernet.linkSpeed());
     
     String html = FPSTR(WebPageSelector::getNetworkPage(currentLanguage));
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     html.replace("%IP1%", String(ip[0]));
     html.replace("%IP2%", String(ip[1]));
     html.replace("%IP3%", String(ip[2]));
+    html.replace("%IP_ADDRESS%", ipStr);
+    html.replace("%LINK_SPEED%", linkSpeed);  // Add this replacement too
     
     request->send(200, "text/html", html);
 }
