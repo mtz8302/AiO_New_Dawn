@@ -60,12 +60,7 @@ void CommandHandler::handleMainMenu(char cmd) {
             
         case 'd':
         case 'D':
-            Serial.print("\r\n\n*** Running Section Diagnostics ***");
-            if (machinePtr) {
-                machinePtr->runSectionDiagnostics();
-            } else {
-                Serial.print("\r\nERROR: MachineProcessor not initialized!");
-            }
+            Serial.print("\r\n\n*** Section diagnostics removed - sections now controlled only by PGN 239 ***");
             break;
             
             

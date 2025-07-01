@@ -73,12 +73,9 @@ bool MachineProcessor::initialize() {
     
     // Clear initial state
     memset(&sectionState, 0, sizeof(sectionState));
-    sectionState.autoStates = 0xFFFF;  // Start with all sections in auto mode
-    state.lastPGN238Time = 0;
-    state.lastPGN232Time = 0;
-    state.isLowered = true;
+    sectionState.lastPGN239Time = 0;
     
-    // Phase 4: Hardware initialization enabled
+    // Initialize hardware
     if (!initializeSectionOutputs()) {
         LOG_ERROR(EventSource::MACHINE, "Failed to initialize section outputs!");
         return false;
@@ -88,11 +85,10 @@ bool MachineProcessor::initialize() {
     LOG_DEBUG(EventSource::MACHINE, "Registering PGN callbacks...");
     // Register for broadcast PGNs (200, 202)
     bool regBroadcast = PGNProcessor::instance->registerBroadcastCallback(handleBroadcastPGN, "Machine");
-    bool reg238 = PGNProcessor::instance->registerCallback(MACHINE_PGN_CONFIG, handlePGN238, "Machine");
     bool reg239 = PGNProcessor::instance->registerCallback(MACHINE_PGN_DATA, handlePGN239, "Machine");
-    LOG_DEBUG(EventSource::MACHINE, "PGN registrations - Broadcast:%d, 238:%d, 239:%d", regBroadcast, reg238, reg239);
+    LOG_DEBUG(EventSource::MACHINE, "PGN registrations - Broadcast:%d, 239:%d", regBroadcast, reg239);
     
-    LOG_INFO(EventSource::MACHINE, "Initialized successfully with hardware");
+    LOG_INFO(EventSource::MACHINE, "Initialized successfully");
     return true;
 }
 
@@ -157,14 +153,20 @@ bool MachineProcessor::checkPCA9685() {
 }
 
 void MachineProcessor::process() {
-    // Phase 3: Process enabled with status logging
-    static uint32_t lastStatusTime = 0;
-    
-    if (millis() - lastStatusTime > 5000) {
-        lastStatusTime = millis();
-        if (isActive()) {
-            printStatus();
+    // Watchdog timer - turn off all sections if no PGN 239 for 2 seconds
+    if (sectionState.lastPGN239Time > 0 && 
+        (millis() - sectionState.lastPGN239Time) > 2000) {
+        
+        // Turn off all sections
+        if (sectionState.currentStates != 0) {
+            LOG_INFO(EventSource::MACHINE, "Sections turned off - watchdog timeout");
+            sectionState.currentStates = 0;
+            memset(sectionState.isOn, 0, sizeof(sectionState.isOn));
+            updateSectionOutputs();
         }
+        
+        // Reset timer to prevent repeated messages
+        sectionState.lastPGN239Time = 0;
     }
 }
 
@@ -212,35 +214,6 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
     }
 }
 
-void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len) {
-    if (!instance) return;
-    
-    // First check if this is a broadcast PGN
-    if (pgn == 200 || pgn == 202) {
-        handleBroadcastPGN(pgn, data, len);
-        return;
-    }
-    
-    // Silently ignore 3-byte PGN 238 messages (unknown purpose)
-    if (len < 8) {
-        return;
-    }
-    
-    LOG_DEBUG(EventSource::MACHINE, "Received PGN 238 (Machine Config)");
-    
-    instance->state.lastPGN238Time = millis();
-    
-    instance->config.raiseTime = data[0];
-    instance->config.lowerTime = data[1];
-    instance->config.enableHydraulicLift = (data[2] & 0x01);
-    
-    LOG_INFO(EventSource::MACHINE, "Config - Raise:%d Lower:%d Hydraulic:%s", 
-        instance->config.raiseTime, 
-        instance->config.lowerTime,
-        instance->config.enableHydraulicLift ? "Yes" : "No");
-    
-    // No reply needed - AgIO does nothing with PGN 237
-}
 
 // Helper function to convert byte to binary string with spaces
 static void byteToBinary(uint8_t byte, char* buffer) {
@@ -271,214 +244,49 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
         return;
     }
     
+    // Need at least 8 bytes to have section data in bytes 6 & 7
     if (len < 8) return;
     
-    instance->state.lastPGN232Time = millis();
+    // Update watchdog timer
+    instance->sectionState.lastPGN239Time = millis();
     
-    // Debug: Print all PGN 239 data
-    static uint32_t lastPGN239Debug = 0;
-    static uint8_t lastData[16] = {0};
+    // Extract section states from bytes 6 & 7
+    uint16_t sectionStates = data[6] | (data[7] << 8);
     
-    // Check if any data changed
-    bool dataChanged = false;
-    for (int i = 0; i < len && i < 16; i++) {
-        if (data[i] != lastData[i]) {
-            dataChanged = true;
-            lastData[i] = data[i];
+    // Only update if changed
+    if (sectionStates != instance->sectionState.currentStates) {
+        instance->sectionState.currentStates = sectionStates;
+        
+        // Decode section states - simple on/off from bytes 6 & 7
+        // Bit 1 = ON, Bit 0 = OFF
+        for (int i = 0; i < 16; i++) {
+            instance->sectionState.isOn[i] = (sectionStates & (1 << i)) != 0;
         }
-    }
-    
-    // Only print when section data (bytes 6-7) changes
-    static uint8_t lastSectionBytes[2] = {0xFF, 0xFF};
-    bool sectionChanged = (len >= 8) && (data[6] != lastSectionBytes[0] || data[7] != lastSectionBytes[1]);
-    
-    if (sectionChanged) {
+        
+        // Log section changes with binary format
         char bin1[16], bin2[16];  // 8 bits + 7 spaces + null terminator
         byteToBinary(data[6], bin1);
         byteToBinary(data[7], bin2);
         LOG_INFO(EventSource::MACHINE, "Sections changed: [6]SC1-8=0x%02X (0b%s) [7]SC9-16=0x%02X (0b%s)", 
                  data[6], bin1, data[7], bin2);
-        lastSectionBytes[0] = data[6];
-        lastSectionBytes[1] = data[7];
-        lastPGN239Debug = millis();
-    }
-    
-    // Extract section states from bytes 6-7 (indices 6-7)
-    uint16_t sectionStates = data[6] | (data[7] << 8);
-    
-    // Extract auto/manual states from bytes 4-5
-    // NOTE: PGN.md says byte 4 is geoStop and byte 5 is reserved,
-    // but the working code uses these for auto/manual states
-    uint16_t autoStates = data[4] | (data[5] << 8);
-    
-    // Check if there might be auto states in later bytes (bytes 8-9 if they exist)
-    if (len >= 10) {
-        uint16_t possibleAutoStates = data[8] | (data[9] << 8);
-        if (possibleAutoStates != 0) {
-            LOG_DEBUG(EventSource::MACHINE, "Found non-zero data in bytes 8-9: 0x%04X", possibleAutoStates);
-        }
-    }
-    
-    // Only update if changed
-    if (sectionStates != instance->sectionState.rawPGNData || autoStates != instance->sectionState.autoStates) {
-        instance->sectionState.rawPGNData = sectionStates;
-        instance->sectionState.autoStates = autoStates;
-        instance->sectionState.lastUpdateTime = millis();
         
-        // Decode section states
-        // In AgOpenGPS:
-        // - Section ON (Green/Yellow) = section bit is 1
-        // - Section OFF (Red) = section bit is 0
-        // - Auto mode = auto bit is 1
-        // - Manual mode = auto bit is 0
-        // NOTE: The bits are inverted from what the old comments said!
-        for (int i = 0; i < 16; i++) {
-            bool sectionBit = (sectionStates & (1 << i)) != 0;  // bit=1 means ON
-            bool autoMode = (autoStates & (1 << i)) != 0;       // bit=1 means AUTO
-            
-            // Section is ON if the section bit is set, regardless of auto/manual mode
-            // AgOpenGPS sends section state in the section bits, not auto bits
-            instance->sectionState.isOn[i] = sectionBit;
+        // Show which sections are ON (only first 6 sections we control)
+        char sectionMsg[100];
+        snprintf(sectionMsg, sizeof(sectionMsg), "Section states:");
+        for (int i = 0; i < 6; i++) {
+            char buf[20];
+            snprintf(buf, sizeof(buf), " S%d=%s", i+1, instance->sectionState.isOn[i] ? "ON" : "OFF");
+            strncat(sectionMsg, buf, sizeof(sectionMsg) - strlen(sectionMsg) - 1);
         }
-        
-        // Only log state changes, not every message
-        static uint16_t lastSectionStates = 0xFFFF;
-        static uint16_t lastAutoStates = 0xFFFF;
-        
-        if (sectionStates != lastSectionStates || autoStates != lastAutoStates) {
-            char binSections[32];  // 16 bits + 15 spaces + null terminator
-            uint16ToBinary(sectionStates, binSections);
-            LOG_INFO(EventSource::MACHINE, "Section state changed: Sections=0x%04X (0b%s) Auto=0x%04X", 
-                     sectionStates, binSections, autoStates);
-            lastSectionStates = sectionStates;
-            lastAutoStates = autoStates;
-            
-            // Show which sections are ON
-            char sectionMsg[100];
-            snprintf(sectionMsg, sizeof(sectionMsg), "Section states:");
-            for (int i = 0; i < 6; i++) {
-                char buf[20];
-                snprintf(buf, sizeof(buf), " S%d=%s", i+1, instance->sectionState.isOn[i] ? "ON" : "OFF");
-                strncat(sectionMsg, buf, sizeof(sectionMsg) - strlen(sectionMsg) - 1);
-            }
-            LOG_INFO(EventSource::MACHINE, "%s", sectionMsg);
-        }
+        LOG_INFO(EventSource::MACHINE, "%s", sectionMsg);
         
         // Phase 4: Section output updates enabled
         instance->updateSectionOutputs();
     }
     
-    // Extract hydraulic lift state
-    uint8_t hydLift = data[2];
-    bool newLowered = (hydLift != 0);
-    if (newLowered != instance->state.isLowered) {
-        instance->state.isLowered = newLowered;
-        LOG_INFO(EventSource::MACHINE, "Hydraulic %s", newLowered ? "lowered" : "raised");
-    }
 }
 
-void MachineProcessor::printStatus() {
-    char binSections[32];  // 16 bits + 15 spaces + null terminator
-    uint16ToBinary(sectionState.rawPGNData, binSections);
-    LOG_INFO(EventSource::MACHINE, "Active=%s Sections=0x%04X (0b%s) Lowered=%s",
-        isActive() ? "Yes" : "No",
-        sectionState.rawPGNData,
-        binSections,
-        state.isLowered ? "Yes" : "No");
-}
 
-void MachineProcessor::runSectionDiagnostics() {
-    LOG_INFO(EventSource::MACHINE, "=== Section Diagnostics ===");
-    
-    // 1. Check PCA9685 communication
-    if (!checkPCA9685()) {
-        LOG_ERROR(EventSource::MACHINE, "PCA9685 not responding!");
-        return;
-    }
-    
-    // 2. Test ONLY section control pins (avoid motor driver pins)
-    LOG_INFO(EventSource::MACHINE, "Testing ONLY section control pins...");
-    LOG_INFO(EventSource::MACHINE, "Section pins: 0, 1, 4, 5, 10, 9");
-    
-    // First ensure all section pins are LOW (OFF)
-    LOG_INFO(EventSource::MACHINE, "Setting all sections LOW (OFF)...");
-    for (int i = 0; i < 6; i++) {
-        getSectionOutputs().setPin(SECTION_PINS[i], 0, 0); // LOW = OFF
-    }
-    delay(1000);
-    
-    // Test sections one by one
-    LOG_INFO(EventSource::MACHINE, "Testing each section individually (1 second each)...");
-    for (int i = 0; i < 6; i++) {
-        LOG_INFO(EventSource::MACHINE, "Section %d (pin %d):", i+1, SECTION_PINS[i]);
-        LOG_INFO(EventSource::MACHINE, "  Setting HIGH (LED should turn ON)...");
-        getSectionOutputs().setPin(SECTION_PINS[i], 0, 1); // HIGH = ON
-        delay(1000);
-        
-        LOG_INFO(EventSource::MACHINE, "  Setting LOW (LED should turn OFF)...");
-        getSectionOutputs().setPin(SECTION_PINS[i], 0, 0); // LOW = OFF
-        delay(500);
-    }
-    
-    // Test all sections together
-    LOG_INFO(EventSource::MACHINE, "Testing all sections together...");
-    LOG_INFO(EventSource::MACHINE, "All sections HIGH (all LEDs ON):");
-    for (int i = 0; i < 6; i++) {
-        getSectionOutputs().setPin(SECTION_PINS[i], 0, 1); // HIGH = ON
-    }
-    delay(2000);
-    
-    LOG_INFO(EventSource::MACHINE, "All sections LOW (all LEDs OFF):");
-    for (int i = 0; i < 6; i++) {
-        getSectionOutputs().setPin(SECTION_PINS[i], 0, 0); // LOW = OFF
-    }
-    delay(1000);
-    
-    // 3. Current state summary
-    LOG_INFO(EventSource::MACHINE, "Current section states:");
-    for (int i = 0; i < 6; i++) {
-        LOG_INFO(EventSource::MACHINE, "  Section %d: %s", i+1, sectionState.isOn[i] ? "ON" : "OFF");
-    }
-    
-    // 4. Pin summary
-    LOG_INFO(EventSource::MACHINE, "Pin configuration summary:");
-    LOG_INFO(EventSource::MACHINE, "- Section signal pins: 0, 1, 4, 5, 10, 9");
-    LOG_INFO(EventSource::MACHINE, "- DRVOFF pins: 2, 6, 8 (LOW = enabled)");
-    LOG_INFO(EventSource::MACHINE, "- nSLEEP pins: 13, 3, 7 (sections only)");
-    LOG_INFO(EventSource::MACHINE, "- Mode: Independent (solder jumpers open)");
-    LOG_INFO(EventSource::MACHINE, "NOTE: Avoiding pins 11, 12, 14, 15 which may control motor drivers");
-    
-    // 5. Test control pins
-    LOG_INFO(EventSource::MACHINE, "Checking DRVOFF states...");
-    // Make sure all DRVOFF pins are LOW (enabled)
-    for (uint8_t pin : DRVOFF_PINS) {
-        LOG_DEBUG(EventSource::MACHINE, "Setting DRVOFF pin %d LOW (enabled)", pin);
-        getSectionOutputs().setPin(pin, 0, 0); // Ensure LOW
-    }
-    delay(100);
-    
-    LOG_INFO(EventSource::MACHINE, "Testing if DRVOFF disables sections...");
-    // Turn all sections ON
-    for (int i = 0; i < 6; i++) {
-        getSectionOutputs().setPin(SECTION_PINS[i], 0, 0); // LOW = ON
-    }
-    delay(1000);
-    
-    // Toggle DRVOFF to see effect
-    LOG_INFO(EventSource::MACHINE, "Setting DRVOFF HIGH (should disable all)...");
-    for (uint8_t pin : DRVOFF_PINS) {
-        getSectionOutputs().setPin(pin, 0, 1); // HIGH = disabled
-    }
-    delay(1000);
-    
-    LOG_INFO(EventSource::MACHINE, "Setting DRVOFF LOW (should re-enable all)...");
-    for (uint8_t pin : DRVOFF_PINS) {
-        getSectionOutputs().setPin(pin, 0, 0); // LOW = enabled
-    }
-    delay(1000);
-    
-    LOG_INFO(EventSource::MACHINE, "=== Diagnostics Complete ===");
-}
 
 void MachineProcessor::updateSectionOutputs() {
     // Removed periodic debug logging - this is called frequently from PGN 239
@@ -507,7 +315,3 @@ void MachineProcessor::setPinLow(uint8_t pin) {
     getSectionOutputs().setPWM(pin, 0, 4096);
 }
 
-void MachineProcessor::setPinPWM(uint8_t pin, uint16_t dutyCycle) {
-    // For future PWM control if needed
-    getSectionOutputs().setPWM(pin, 0, dutyCycle);
-}

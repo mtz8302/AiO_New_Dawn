@@ -12,27 +12,11 @@ private:
     
     MachineProcessor();
     
-    struct MachineConfig {
-        uint8_t raiseTime = 2;
-        uint8_t lowerTime = 4;
-        bool enableHydraulicLift = false;
-        uint8_t sectionCount = 8;
-        uint8_t sectionWidths[16] = {0};
-    } config;
-    
-    struct MachineState {
-        uint16_t manualSwitches = 0;
-        bool isLowered = true;
-        uint32_t lastPGN238Time = 0;
-        uint32_t lastPGN232Time = 0;
-    } state;
-    
-    // Clear state representation for sections
+    // Simplified state - only track section states from PGN 239
     struct SectionState {
-        bool isOn[16];           // True when section should be active
-        uint16_t rawPGNData;     // Raw section state bits from PGN 239
-        uint16_t autoStates;     // Auto/Manual state bits from PGN 239
-        uint32_t lastUpdateTime;
+        uint16_t currentStates;      // Current section states (bytes 6 & 7 from PGN 239)
+        uint32_t lastPGN239Time;     // For watchdog timeout
+        bool isOn[16];               // Individual section states for easy access
     } sectionState;
     
 public:
@@ -43,20 +27,15 @@ public:
     void process();
     
     static void handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len);
-    static void handlePGN238(uint8_t pgn, const uint8_t* data, size_t len);
     static void handlePGN239(uint8_t pgn, const uint8_t* data, size_t len);
     
     void updateSectionOutputs();
-    void printStatus();
-    bool isActive() { return (millis() - state.lastPGN238Time) < 2000; }
     
     // Section control helpers
     bool initializeSectionOutputs();
     void setPinHigh(uint8_t pin);
     void setPinLow(uint8_t pin);
-    void setPinPWM(uint8_t pin, uint16_t dutyCycle);
     bool checkPCA9685();
-    void runSectionDiagnostics();
 };
 
 extern MachineProcessor machineProcessor;
