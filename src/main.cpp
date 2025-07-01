@@ -28,6 +28,10 @@
 #include "RTCMProcessor.h"
 #include "WebManager.h"
 #include "Version.h"
+#include "OTAHandler.h"
+
+// Flash ID for OTA verification - must match FLASH_ID in FlashTxx.h
+const char* flash_id = "fw_teensy41";
 
 // Global objects (no more pointers)
 ConfigManager configManager;
@@ -286,6 +290,9 @@ void setup()
 
 void loop()
 {
+  // Check for OTA update apply
+  OTAHandler::applyUpdate();
+  
   // Process Ethernet events - REQUIRED for QNEthernet!
   Ethernet.loop();
   

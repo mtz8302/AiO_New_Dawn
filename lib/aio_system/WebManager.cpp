@@ -8,6 +8,7 @@
 #include <ArduinoJson.h>
 #include "EventLogger.h"
 #include "Version.h"
+#include "OTAHandler.h"
 
 // For network config
 extern NetworkConfig netConfig;
@@ -83,6 +84,11 @@ void WebManager::setupRoutes() {
         handleNetworkPage(request);
     });
     
+    // OTA Update page
+    server->on("/ota", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleOTAPage(request);
+    });
+    
     // Language selection
     server->on("/lang/en", HTTP_GET, [this](AsyncWebServerRequest* request) {
         currentLanguage = WebLanguage::ENGLISH;
@@ -101,6 +107,9 @@ void WebManager::setupRoutes() {
     
     // Setup Network API routes
     setupNetworkAPI();
+    
+    // Setup OTA routes
+    setupOTARoutes();
     
     // Restart API endpoint
     server->on("/api/restart", HTTP_POST, [](AsyncWebServerRequest* request) {
@@ -364,6 +373,32 @@ void WebManager::setupNetworkAPI() {
                              ip1, ip2, ip3);
                 }
             }
+        }
+    );
+}
+
+void WebManager::handleOTAPage(AsyncWebServerRequest* request) {
+    String html = FPSTR(WebPageSelector::getOTAPage(currentLanguage));
+    html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
+    html.replace("%FIRMWARE_VERSION%", FIRMWARE_VERSION);
+    html.replace("%BOARD_TYPE%", TEENSY_BOARD_TYPE);
+    
+    request->send(200, "text/html", html);
+}
+
+void WebManager::setupOTARoutes() {
+    // Initialize OTA handler
+    OTAHandler::init();
+    
+    // OTA upload endpoint
+    server->on("/api/ota/upload", HTTP_POST,
+        // Request handler - called when upload is complete
+        [](AsyncWebServerRequest* request) {
+            OTAHandler::handleOTAComplete(request);
+        },
+        // Upload handler - called for each chunk of data
+        [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
+            OTAHandler::handleOTAUpload(request, filename, index, data, len, final);
         }
     );
 }
