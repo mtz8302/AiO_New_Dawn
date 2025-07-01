@@ -177,29 +177,29 @@ void HardwareManager::disableSteerMotor()
 
 void HardwareManager::printHardwareStatus()
 {
-    Serial.print("\r\n\n=== Hardware Manager Status ===");
-    Serial.printf("\r\nInitialized: %s", isInitialized ? "YES" : "NO");
-    Serial.printf("\r\nCPU Frequency: %i MHz", F_CPU_ACTUAL / 1000000);
-    Serial.printf("\r\nPWM Mode: %i", pwmFrequencyMode);
+    LOG_INFO(EventSource::CONFIG, "=== Hardware Manager Status ===");
+    LOG_INFO(EventSource::CONFIG, "Initialized: %s", isInitialized ? "YES" : "NO");
+    LOG_INFO(EventSource::CONFIG, "CPU Frequency: %i MHz", F_CPU_ACTUAL / 1000000);
+    LOG_INFO(EventSource::CONFIG, "PWM Mode: %i", pwmFrequencyMode);
 
     printPinConfiguration();
-    Serial.print("\r\n===============================\r\n");
+    LOG_INFO(EventSource::CONFIG, "===============================");
 }
 
 void HardwareManager::printPinConfiguration()
 {
-    Serial.print("\r\n\n--- Pin Configuration ---");
-    Serial.printf("\r\nWAS Sensor: A%i", getWASSensorPin() - A0);
-    Serial.printf("\r\nSpeed Pulse: %i", getSpeedPulsePin());
-    Serial.printf("\r\nBuzzer: %i", getBuzzerPin());
-    Serial.printf("\r\nMotor Sleep: %i", getSleepPin());
-    Serial.printf("\r\nPWM1: %i", getPWM1Pin());
-    Serial.printf("\r\nPWM2: %i", getPWM2Pin());
-    Serial.printf("\r\nSteer Switch: %i", getSteerPin());
-    Serial.printf("\r\nWork Input: A%i", getWorkPin() - A0);
-    Serial.printf("\r\nKickout Digital: %i", getKickoutDPin());
-    Serial.printf("\r\nCurrent Sensor: A%i", getCurrentPin() - A0);
-    Serial.printf("\r\nKickout Analog: A%i", getKickoutAPin() - A0);
+    LOG_INFO(EventSource::CONFIG, "--- Pin Configuration ---");
+    LOG_INFO(EventSource::CONFIG, "WAS Sensor: A%i", getWASSensorPin() - A0);
+    LOG_INFO(EventSource::CONFIG, "Speed Pulse: %i", getSpeedPulsePin());
+    LOG_INFO(EventSource::CONFIG, "Buzzer: %i", getBuzzerPin());
+    LOG_INFO(EventSource::CONFIG, "Motor Sleep: %i", getSleepPin());
+    LOG_INFO(EventSource::CONFIG, "PWM1: %i", getPWM1Pin());
+    LOG_INFO(EventSource::CONFIG, "PWM2: %i", getPWM2Pin());
+    LOG_INFO(EventSource::CONFIG, "Steer Switch: %i", getSteerPin());
+    LOG_INFO(EventSource::CONFIG, "Work Input: A%i", getWorkPin() - A0);
+    LOG_INFO(EventSource::CONFIG, "Kickout Digital: %i", getKickoutDPin());
+    LOG_INFO(EventSource::CONFIG, "Current Sensor: A%i", getCurrentPin() - A0);
+    LOG_INFO(EventSource::CONFIG, "Kickout Analog: A%i", getKickoutAPin() - A0);
 }
 
 bool HardwareManager::getInitializationStatus() const
