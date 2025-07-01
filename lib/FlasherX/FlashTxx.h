@@ -76,7 +76,7 @@
 #endif
 
 #if defined(FLASH_ID)
-  #define RAM_BUFFER_SIZE	(0 * 1024)
+  #define RAM_BUFFER_SIZE	(256 * 1024)
   #define IN_FLASH(a) ((a) >= FLASH_BASE_ADDR && (a) < FLASH_BASE_ADDR+FLASH_SIZE)
 #endif
 

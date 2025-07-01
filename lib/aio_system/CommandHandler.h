@@ -4,13 +4,11 @@
 #include "Arduino.h"
 #include "EventLogger.h"
 #include "MachineProcessor.h"
-#include "ConfigManager.h"
 
 // Command handler states
 enum class CommandState {
     MAIN_MENU,
-    LOGGING_MENU,
-    CONFIG_MENU
+    LOGGING_MENU
 };
 
 class CommandHandler {
@@ -20,7 +18,6 @@ private:
     
     // Pointers to system components
     MachineProcessor* machinePtr = nullptr;
-    ConfigManager* configPtr = nullptr;
     EventLogger* loggerPtr = nullptr;
     
     // Private constructor for singleton
@@ -29,12 +26,10 @@ private:
     // Menu handlers
     void handleMainMenu(char cmd);
     void handleLoggingMenu(char cmd);
-    void handleConfigMenu(char cmd);
     
     // Menu display functions
     void showMainMenu();
     void showLoggingMenu();
-    void showConfigMenu();
 
 public:
     ~CommandHandler();
@@ -45,7 +40,6 @@ public:
     
     // Set component pointers
     void setMachineProcessor(MachineProcessor* ptr) { machinePtr = ptr; }
-    void setConfigManager(ConfigManager* ptr) { configPtr = ptr; }
     
     // Main process function - call this from loop()
     void process();

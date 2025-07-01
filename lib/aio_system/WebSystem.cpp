@@ -500,7 +500,10 @@ void OTAHandler::handleOTAUpload(AsyncWebServerRequest *request, String filename
                     
                     // Check address bounds
                     if (hexInfo.max > (FLASH_BASE_ADDR + bufferSize)) {
-                        LOG_ERROR(EventSource::NETWORK, "Address 0x%08lX exceeds buffer", hexInfo.max);
+                        LOG_ERROR(EventSource::NETWORK, "Address 0x%08lX exceeds buffer (base=0x%08lX, bufSize=%lu)", 
+                                  hexInfo.max, FLASH_BASE_ADDR, bufferSize);
+                        LOG_ERROR(EventSource::NETWORK, "hexInfo: base=0x%08lX, addr=0x%04X, num=%u", 
+                                  hexInfo.base, hexInfo.addr, hexInfo.num);
                         request->send(400, "text/plain", "Address exceeds buffer");
                         return;
                     }

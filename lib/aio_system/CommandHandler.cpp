@@ -44,9 +44,7 @@ void CommandHandler::process() {
             handleLoggingMenu(cmd);
             break;
             
-        case CommandState::CONFIG_MENU:
-            handleConfigMenu(cmd);
-            break;
+        // CONFIG_MENU removed per Phase 6 simplification
     }
 }
 
@@ -58,21 +56,7 @@ void CommandHandler::handleMainMenu(char cmd) {
             showLoggingMenu();
             break;
             
-        case 'd':
-        case 'D':
-            Serial.print("\r\n\n*** Section diagnostics removed - sections now controlled only by PGN 239 ***");
-            break;
-            
-            
-        case 'c':
-        case 'C':
-            if (configPtr) {
-                currentState = CommandState::CONFIG_MENU;
-                showConfigMenu();
-            } else {
-                Serial.print("\r\nConfiguration not available");
-            }
-            break;
+        // D and C options removed per Phase 6 simplification
             
         case '?':
         case 'h':
@@ -180,30 +164,9 @@ void CommandHandler::handleLoggingMenu(char cmd) {
 }
 
 
-void CommandHandler::handleConfigMenu(char cmd) {
-    // Placeholder for future config menu
-    switch (cmd) {
-        case 'q':
-        case 'Q':
-        case 27:  // ESC
-            currentState = CommandState::MAIN_MENU;
-            Serial.print("\r\nReturned to main menu");
-            break;
-            
-        default:
-            Serial.print("\r\nConfig menu not yet implemented");
-            currentState = CommandState::MAIN_MENU;
-            break;
-    }
-}
-
 void CommandHandler::showMainMenu() {
     Serial.print("\r\n\n=== Main Menu ===");
     Serial.print("\r\nL - Logging configuration");
-    Serial.print("\r\nD - Run section diagnostics");
-    if (configPtr) {
-        Serial.print("\r\nC - Configuration menu");
-    }
     Serial.print("\r\n? - Show this menu");
     Serial.print("\r\n=================");
 }
@@ -224,10 +187,3 @@ void CommandHandler::showLoggingMenu() {
     Serial.print("\r\n============================");
 }
 
-
-void CommandHandler::showConfigMenu() {
-    Serial.print("\r\n\n=== Configuration Menu ===");
-    Serial.print("\r\n(Not yet implemented)");
-    Serial.print("\r\nQ - Return to main menu");
-    Serial.print("\r\n==========================");
-}

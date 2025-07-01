@@ -271,7 +271,6 @@ void setup()
   // Initialize CommandHandler
   CommandHandler::init();
   CommandHandler* cmdHandler = CommandHandler::getInstance();
-  cmdHandler->setConfigManager(&configManager);
   cmdHandler->setMachineProcessor(machinePTR);
   LOG_INFO(EventSource::SYSTEM, "CommandHandler initialized");
 
