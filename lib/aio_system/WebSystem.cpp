@@ -16,6 +16,7 @@
 #include "Version.h"
 #include "FXUtil.h"
 #include "ADProcessor.h"
+#include "web_pages/WebPages.h"
 
 // For network config
 extern NetworkConfig netConfig;
@@ -117,6 +118,7 @@ void WebManager::setupRoutes() {
         html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
         request->send(200, "text/html", html);
     });
+    
     
     // Language selection
     server->on("/lang/en", HTTP_GET, [this](AsyncWebServerRequest* request) {
