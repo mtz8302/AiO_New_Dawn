@@ -89,7 +89,7 @@ public:
     static void handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len);
 };
 
-// Global pointer
-extern IMUProcessor *imuPTR;
+// Global instance
+extern IMUProcessor imuProcessor;
 
 #endif // IMUPROCESSOR_H_

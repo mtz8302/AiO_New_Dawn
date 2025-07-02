@@ -47,9 +47,27 @@ private:
     char messageBuffer[256];
     uint32_t eventCounter = 0;
     
-    // For rate limiting
-    uint32_t lastLogTime[8] = {0};  // Per severity level
-    uint32_t rateLimit[8] = {0, 0, 100, 100, 200, 500, 1000, 2000};  // ms between logs per level
+    // For rate limiting - token bucket algorithm
+    static constexpr uint32_t RATE_WINDOW_MS = 1000;  // 1 second window
+    
+    // Maximum messages per second for each severity level
+    uint8_t maxMessagesPerSecond[8] = {
+        100,  // EMERG - no limit (100/sec is effectively unlimited)
+        100,  // ALERT - no limit
+        50,   // CRIT - 50/sec
+        50,   // ERROR - 50/sec  
+        10,   // WARN - 10/sec (was 100ms = 10/sec)
+        10,   // NOTICE - 10/sec
+        10,   // INFO - 10/sec (was 100ms = 10/sec)
+        5     // DEBUG - 5/sec (was 200ms = 5/sec)
+    };
+    
+    // Token bucket state for each severity level
+    struct TokenBucket {
+        float tokens = 0;
+        uint32_t lastRefillTime = 0;
+    };
+    TokenBucket buckets[8];
     
     // Severity names for display
     const char* severityNames[8] = {
@@ -76,9 +94,7 @@ private:
     // Rate limiting check
     bool checkRateLimit(EventSeverity severity);
     
-    // Mongoose logging
-    int mongooseLogLevel = 3;  // Default to debug during startup
-    bool mongooseLogReduced = false;
+    // QNEthernet doesn't need explicit log level management
     
     // Startup mode tracking
     bool startupMode = true;  // Don't enforce levels during startup
@@ -122,10 +138,8 @@ public:
     // Display current configuration
     void printConfig();
     
-    // Mongoose log control
-    void setMongooseLogLevel(int level);
-    int getMongooseLogLevel() { return mongooseLogLevel; }
-    void checkNetworkReady();  // Auto-adjust Mongoose logging when network is ready
+    // Network status check
+    void checkNetworkReady();  // Check when network is ready
     
     // System startup logging control
     void setStartupMode(bool startup);

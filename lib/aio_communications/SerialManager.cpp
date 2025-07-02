@@ -310,26 +310,26 @@ int32_t SerialManager::getIMUBaudRate() const
 
 void SerialManager::printSerialStatus()
 {
-    Serial.print("\r\n\n=== Serial Manager Status ===");
-    Serial.printf("\r\nInitialized: %s", isInitialized ? "YES" : "NO");
-    Serial.printf("\r\nGPS1 Bridged: %s", isGPS1Bridged() ? "YES" : "NO");
-    Serial.printf("\r\nGPS2 Bridged: %s", isGPS2Bridged() ? "YES" : "NO");
+    LOG_INFO(EventSource::SYSTEM, "=== Serial Manager Status ===");
+    LOG_INFO(EventSource::SYSTEM, "Initialized: %s", isInitialized ? "YES" : "NO");
+    LOG_INFO(EventSource::SYSTEM, "GPS1 Bridged: %s", isGPS1Bridged() ? "YES" : "NO");
+    LOG_INFO(EventSource::SYSTEM, "GPS2 Bridged: %s", isGPS2Bridged() ? "YES" : "NO");
 
     // Device detection moved to NAVProcessor
 
     printSerialConfiguration();
-    Serial.print("\r\n=============================\r\n");
+    LOG_INFO(EventSource::SYSTEM, "=============================");
 }
 
 void SerialManager::printSerialConfiguration()
 {
-    Serial.print("\r\n\n--- Serial Configuration ---");
-    Serial.printf("\r\nSerialGPS1 (Serial5): %i baud", BAUD_GPS);
-    Serial.printf("\r\nSerialGPS2 (Serial8): %i baud", BAUD_GPS);
-    Serial.printf("\r\nSerialRTK (Serial3): %i baud", BAUD_RTK);
-    Serial.printf("\r\nSerialRS232 (Serial7): %i baud", BAUD_RS232);
-    Serial.printf("\r\nSerialESP32 (Serial2): %i baud", BAUD_ESP32);
-    Serial.printf("\r\nSerialIMU (Serial4): %i baud", BAUD_IMU);
+    LOG_INFO(EventSource::SYSTEM, "--- Serial Configuration ---");
+    LOG_INFO(EventSource::SYSTEM, "SerialGPS1 (Serial5): %i baud", BAUD_GPS);
+    LOG_INFO(EventSource::SYSTEM, "SerialGPS2 (Serial8): %i baud", BAUD_GPS);
+    LOG_INFO(EventSource::SYSTEM, "SerialRTK (Serial3): %i baud", BAUD_RTK);
+    LOG_INFO(EventSource::SYSTEM, "SerialRS232 (Serial7): %i baud", BAUD_RS232);
+    LOG_INFO(EventSource::SYSTEM, "SerialESP32 (Serial2): %i baud", BAUD_ESP32);
+    LOG_INFO(EventSource::SYSTEM, "SerialIMU (Serial4): %i baud", BAUD_IMU);
 }
 
 bool SerialManager::getInitializationStatus() const

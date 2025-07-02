@@ -1,7 +1,8 @@
 // main.cpp - Updated section with motor driver testing
 #include "Arduino.h"
-#include "mongoose_glue.h"
-#include "NetworkBase.h"
+#include <QNEthernet.h>
+#include "QNetworkBase.h"
+#include "AsyncUDPHandler.h"
 #include "ConfigManager.h"
 #include "HardwareManager.h"
 #include "SerialManager.h"
@@ -23,93 +24,117 @@
 #include "SubnetManager.h"
 #include "EventLogger.h"
 #include "CommandHandler.h"
+#include "PGNProcessor.h"
+#include "RTCMProcessor.h"
+#include "WebManager.h"
+#include "Version.h"
+#include "OTAHandler.h"
 
-// ConfigManager pointer definition (same pattern as machinePTR)
-// This is the ONLY definition - all other files use extern declaration
-ConfigManager *configPTR = nullptr;
+// Flash ID for OTA verification - must match FLASH_ID in FlashTxx.h
+const char* flash_id = "fw_teensy41";
 
-// Define the global pointers (only declared as extern in headers)
-HardwareManager *hardwarePTR = nullptr;
-SerialManager *serialPTR = nullptr;
-I2CManager *i2cPTR = nullptr;
-CANManager *canPTR = nullptr;
-GNSSProcessor *gnssPTR = nullptr;
-IMUProcessor *imuPTR = nullptr;
-NAVProcessor *navPTR = nullptr;
-ADProcessor *adPTR = nullptr;
-PWMProcessor *pwmPTR = nullptr;
-MotorDriverInterface *motorPTR = nullptr;
+// Global objects (no more pointers)
+ConfigManager configManager;
+HardwareManager hardwareManager;
+SerialManager serialManager;
+I2CManager i2cManager;
+CANManager canManager;
+GNSSProcessor gnssProcessor;
+IMUProcessor imuProcessor;
+ADProcessor adProcessor;
+PWMProcessor pwmProcessor;
+LEDManager ledManager;
+WebManager webManager;
+MotorDriverInterface *motorPTR = nullptr; // Motor driver still uses factory pattern
 
 void setup()
 {
   delay(5000); // delay for time to start monitor
   Serial.begin(115200);
 
-  Serial.print("\r\n\n=== Teensy 4.1 AiO-NG-v6 New Dawn ===");
+  Serial.print("\r\n\n=== Teensy 4.1 AiO-NG-v6 New Dawn v");
+  Serial.print(FIRMWARE_VERSION);
+  Serial.print(" ===");
   Serial.print("\r\nInitializing subsystems...");
 
   // Network and communication setup FIRST
-  storedCfgSetup();
-  ethernet_init();
-  mongoose_init();
-  udpSetup();
-
+  QNetworkBase::init();
+  
+  // Wait for network speed to stabilize (some switches negotiate in steps)
+  Serial.print("\r\n- Waiting for network speed negotiation...");
+  uint32_t startWait = millis();
+  int lastSpeed = 0;
+  
+  // Wait up to 10 seconds for link speed to stabilize
+  while (millis() - startWait < 10000) {
+    int currentSpeed = Ethernet.linkSpeed();
+    if (currentSpeed != lastSpeed) {
+      Serial.printf("\r\n  Link speed changed: %d Mbps", currentSpeed);
+      lastSpeed = currentSpeed;
+      startWait = millis(); // Reset timer on speed change
+    }
+    
+    // If we've been stable at 100Mbps for 2 seconds, we're good
+    if (currentSpeed == 100 && millis() - startWait > 2000) {
+      Serial.print("\r\n  Link stable at 100 Mbps");
+      break;
+    }
+    
+    delay(100);
+  }
+  
+  // Additional delay for network stack to stabilize
+  Serial.print("\r\n- Waiting for network stack to stabilize...");
+  delay(2000);
+  
+  // Verify we have an IP address
+  IPAddress localIP = Ethernet.localIP();
+  if (localIP == IPAddress(0, 0, 0, 0)) {
+    Serial.print("\r\n- ERROR: No IP address assigned!");
+  } else {
+    Serial.printf("\r\n- IP ready: %d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+    Serial.printf("\r\n- Final link speed: %d Mbps", Ethernet.linkSpeed());
+  }
+  
+  // Network stack is ready but don't initialize AsyncUDP yet
   Serial.print("\r\n- Network stack initialized");
   
-  // Initialize global CAN buses AFTER mongoose
+  // Initialize global CAN buses
   initializeGlobalCANBuses();
 
-  // Initialize ConfigManager (already implemented)
-  configPTR = new ConfigManager();
+  // ConfigManager is already constructed
   Serial.print("\r\n- ConfigManager initialized");
 
   // Initialize EventLogger early so other modules can use it
   EventLogger::init();
   Serial.print("\r\n- EventLogger initialized (startup mode)");
   delay(10);  // Small delay to ensure EventLogger is fully initialized
+  
+  // Initialize PGNProcessor early (needed by many modules)
+  PGNProcessor::init();
+  LOG_INFO(EventSource::SYSTEM, "PGNProcessor initialized");
+  
+  // Initialize RTCMProcessor
+  RTCMProcessor::init();
+  LOG_INFO(EventSource::SYSTEM, "RTCMProcessor initialized");
 
   // Initialize HardwareManager
-  hardwarePTR = new HardwareManager();
-  if (hardwarePTR->initializeHardware())
+  if (hardwareManager.initializeHardware())
   {
     LOG_INFO(EventSource::SYSTEM, "HardwareManager initialized");
     
     // Quick buzzer beep to indicate hardware is ready
-    hardwarePTR->enableBuzzer();
+    hardwareManager.enableBuzzer();
     delay(100);
-    hardwarePTR->disableBuzzer();
+    hardwareManager.disableBuzzer();
   }
   else
   {
     LOG_ERROR(EventSource::SYSTEM, "HardwareManager FAILED");
   }
 
-  // Initialize I2CManager
-  i2cPTR = new I2CManager();
-  if (i2cPTR->initializeI2C())
-  {
-    LOG_INFO(EventSource::SYSTEM, "I2CManager initialized");
-  }
-  else
-  {
-    LOG_ERROR(EventSource::SYSTEM, "I2CManager FAILED");
-  }
-
-  // Initialize LED Manager
-  ledPTR = new LEDManager();
-  if (ledPTR->init()) 
-  {
-    LOG_INFO(EventSource::SYSTEM, "LEDManager initialized");
-    ledPTR->setBrightness(configPTR->getLEDBrightness());
-  }
-  else
-  {
-    LOG_ERROR(EventSource::SYSTEM, "LEDManager FAILED");
-  }
-
-  // Initialize CANManager
-  canPTR = new CANManager();
-  if (canPTR->init())
+  // Initialize CANManager first (more critical than I2C)
+  if (canManager.init())
   {
     LOG_INFO(EventSource::SYSTEM, "CANManager initialized");
   }
@@ -119,8 +144,7 @@ void setup()
   }
 
   // Initialize SerialManager
-  serialPTR = new SerialManager();
-  if (serialPTR->initializeSerial())
+  if (serialManager.initializeSerial())
   {
     LOG_INFO(EventSource::SYSTEM, "SerialManager initialized");
   }
@@ -130,8 +154,7 @@ void setup()
   }
 
   // Initialize GNSSProcessor
-  gnssPTR = new GNSSProcessor();
-  if (gnssPTR->setup(false, true)) // Disable debug, enable noise filter
+  if (gnssProcessor.setup(false, true)) // Disable debug, enable noise filter
   {
     LOG_INFO(EventSource::SYSTEM, "GNSSProcessor initialized");
   }
@@ -140,12 +163,35 @@ void setup()
     LOG_ERROR(EventSource::SYSTEM, "GNSSProcessor FAILED");
   }
 
+  // Add a delay before I2C to let network/interrupts stabilize
+  delay(100);
+  
+  // Initialize I2CManager later in sequence after critical systems
+  if (i2cManager.initializeI2C())
+  {
+    LOG_INFO(EventSource::SYSTEM, "I2CManager initialized");
+  }
+  else
+  {
+    LOG_ERROR(EventSource::SYSTEM, "I2CManager FAILED");
+  }
+
+  // Initialize LED Manager (needs I2C)
+  if (ledManager.init()) 
+  {
+    LOG_INFO(EventSource::SYSTEM, "LEDManager initialized");
+    ledManager.setBrightness(configManager.getLEDBrightness());
+  }
+  else
+  {
+    LOG_ERROR(EventSource::SYSTEM, "LEDManager FAILED");
+  }
+
   // Initialize IMUProcessor
-  imuPTR = new IMUProcessor();
-  if (imuPTR->initialize())
+  if (imuProcessor.initialize())
   {
     LOG_INFO(EventSource::SYSTEM, "IMUProcessor initialized");
-    imuPTR->registerPGNCallbacks();
+    imuProcessor.registerPGNCallbacks();
   }
   else
   {
@@ -153,13 +199,12 @@ void setup()
   }
 
   // Initialize ADProcessor
-  adPTR = ADProcessor::getInstance();
-  if (adPTR->init())
+  if (adProcessor.init())
   {
     LOG_INFO(EventSource::SYSTEM, "ADProcessor initialized");
-    adPTR->setWASOffset(1553);  // 2.5V center with 10k/10k voltage divider
-    adPTR->setWASCountsPerDegree(30.0f);
-    adPTR->process();
+    adProcessor.setWASOffset(1553);  // 2.5V center with 10k/10k voltage divider
+    adProcessor.setWASCountsPerDegree(30.0f);
+    adProcessor.process();
   }
   else
   {
@@ -167,15 +212,14 @@ void setup()
   }
   
   // Initialize PWMProcessor
-  pwmPTR = PWMProcessor::getInstance();
-  if (pwmPTR->init())
+  if (pwmProcessor.init())
   {
     LOG_INFO(EventSource::SYSTEM, "PWMProcessor initialized");
-    pwmPTR->setSpeedPulseHz(10.0f);
-    pwmPTR->setSpeedPulseDuty(0.5f);
-    pwmPTR->enableSpeedPulse(true);
-    pwmPTR->setPulsesPerMeter(130.0f);  // ISO 11786 standard
-    pwmPTR->setSpeedKmh(10.0f);
+    pwmProcessor.setSpeedPulseHz(10.0f);
+    pwmProcessor.setSpeedPulseDuty(0.5f);
+    pwmProcessor.enableSpeedPulse(true);
+    pwmProcessor.setPulsesPerMeter(130.0f);  // ISO 11786 standard
+    pwmProcessor.setSpeedKmh(10.0f);
   }
   else
   {
@@ -184,12 +228,11 @@ void setup()
 
   // Initialize NAVProcessor
   NAVProcessor::init();
-  navPTR = navPTR->getInstance();
   LOG_INFO(EventSource::SYSTEM, "NAVProcessor initialized");
 
   // Initialize Motor Driver
-  MotorDriverType detectedType = MotorDriverFactory::detectMotorType(canPTR);
-  motorPTR = MotorDriverFactory::createMotorDriver(detectedType, hardwarePTR, canPTR);
+  MotorDriverType detectedType = MotorDriverFactory::detectMotorType(&canManager);
+  motorPTR = MotorDriverFactory::createMotorDriver(detectedType, &hardwareManager, &canManager);
   
   if (motorPTR && motorPTR->init()) {
     LOG_INFO(EventSource::SYSTEM, "Motor driver initialized");
@@ -197,8 +240,13 @@ void setup()
     LOG_ERROR(EventSource::SYSTEM, "Motor driver FAILED");
   }
 
+  // NOW initialize AsyncUDP after ALL hardware is up
+  LOG_INFO(EventSource::SYSTEM, "All hardware initialized, starting AsyncUDP");
+  AsyncUDPHandler::init();
+  LOG_INFO(EventSource::SYSTEM, "AsyncUDP handlers ready");
+
   // Initialize AutosteerProcessor
-  autosteerPTR = AutosteerProcessor::getInstance();
+  AutosteerProcessor* autosteerPTR = AutosteerProcessor::getInstance();
   if (autosteerPTR->init()) {
     LOG_INFO(EventSource::SYSTEM, "AutosteerProcessor initialized");
   } else {
@@ -206,7 +254,8 @@ void setup()
   }
 
   // Initialize MachineProcessor
-  if (MachineProcessor::init()) {
+  MachineProcessor* machinePTR = MachineProcessor::getInstance();
+  if (machinePTR->initialize()) {
     LOG_INFO(EventSource::SYSTEM, "MachineProcessor initialized");
   } else {
     LOG_ERROR(EventSource::SYSTEM, "MachineProcessor FAILED");
@@ -222,10 +271,15 @@ void setup()
   // Initialize CommandHandler
   CommandHandler::init();
   CommandHandler* cmdHandler = CommandHandler::getInstance();
-  cmdHandler->setConfigManager(configPTR);
-  cmdHandler->setMachineProcessor(MachineProcessor::getInstance());
+  cmdHandler->setMachineProcessor(machinePTR);
   LOG_INFO(EventSource::SYSTEM, "CommandHandler initialized");
 
+  // Initialize WebManager
+  if (webManager.begin()) {
+    LOG_INFO(EventSource::SYSTEM, "WebManager initialized");
+  } else {
+    LOG_ERROR(EventSource::SYSTEM, "WebManager FAILED");
+  }
 
   // Exit startup mode - start enforcing configured log levels
   EventLogger::getInstance()->setStartupMode(false);
@@ -235,7 +289,19 @@ void setup()
 
 void loop()
 {
-  mongoose_poll();
+  // Check for OTA update apply
+  OTAHandler::applyUpdate();
+  
+  // Process Ethernet events - REQUIRED for QNEthernet!
+  Ethernet.loop();
+  
+  QNetworkBase::poll();
+  
+  // Poll AsyncUDP for network diagnostics
+  AsyncUDPHandler::poll();
+  
+  // AsyncUDP handles all UDP packet reception via callbacks
+  // The poll() call above is just for diagnostics and status monitoring
   
   // Check network status and display system ready message when appropriate
   static uint32_t lastNetworkCheck = 0;
@@ -248,28 +314,16 @@ void loop()
   CommandHandler::getInstance()->process();
   
   // Process IMU data
-  if (imuPTR)
-  {
-    imuPTR->process();
-  }
+  imuProcessor.process();
   
   // Process A/D inputs
-  if (adPTR)
-  {
-    adPTR->process();
-  }
+  adProcessor.process();
 
   // Process NAV messages
-  if (navPTR)
-  {
-    navPTR->process();
-  }
+  NAVProcessor::getInstance()->process();
 
   // Poll CAN messages (like NG-V6 does)
-  if (canPTR)
-  {
-    canPTR->pollForDevices();
-  }
+  canManager.pollForDevices();
   
   // Process motor driver (must be called regularly for CAN motors)
   if (motorPTR)
@@ -278,24 +332,21 @@ void loop()
   }
   
   // Process autosteer
-  if (autosteerPTR)
-  {
-    autosteerPTR->process();
-  }
+  AutosteerProcessor::getInstance()->process();
   
   // Process machine
-  if (machinePTR)
-  {
-    machinePTR->process();
-  }
+  MachineProcessor::getInstance()->process();
   
   // Update LEDs
   static uint32_t lastLEDUpdate = 0;
-  if (ledPTR && millis() - lastLEDUpdate > 100)  // Update every 100ms
+  if (millis() - lastLEDUpdate > 100)  // Update every 100ms
   {
     lastLEDUpdate = millis();
-    ledPTR->updateAll();
+    ledManager.updateAll();
   }
+  
+  // Update SSE clients with WAS data if enabled
+  webManager.updateWASClients();
   
 
 
@@ -310,12 +361,12 @@ void loop()
   {
     lastSpeedUpdate = millis();
     
-    if (pwmPTR && pwmPTR->isSpeedPulseEnabled() && gnssPTR)
+    if (pwmProcessor.isSpeedPulseEnabled())
     {
       float speedKmh = 0.0f;
       
       // Use actual GPS speed
-      const auto &gpsData = gnssPTR->getData();
+      const auto &gpsData = gnssProcessor.getData();
       if (gpsData.hasVelocity)
       {
         // Convert knots to km/h
@@ -323,7 +374,7 @@ void loop()
       }
       
       // Set the speed
-      pwmPTR->setSpeedKmh(speedKmh);
+      pwmProcessor.setSpeedKmh(speedKmh);
     }
   }
 
@@ -332,14 +383,14 @@ void loop()
   while (SerialGPS1.available())
   {
     char c = SerialGPS1.read();
-    gnssPTR->processNMEAChar(c);
+    gnssProcessor.processNMEAChar(c);
   }
   
   // Process GPS2 data if available (for F9P dual RELPOSNED)
   if (SerialGPS2.available())
   {
     uint8_t b = SerialGPS2.read();
-    gnssPTR->processUBXByte(b);
+    gnssProcessor.processUBXByte(b);
   }
 
 }

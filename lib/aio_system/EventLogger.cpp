@@ -1,31 +1,20 @@
 #include "EventLogger.h"
 #include "EEPROMLayout.h"
 #include "EEPROM.h"
-#include "mongoose.h"
+#include "QNetworkBase.h"
+#include <QNEthernet.h>
+#include <QNEthernetUDP.h>
 #include <cstdio>
 #include <cstring>
 
-// Forward declaration of NetConfigStruct from NetworkBase
-struct NetConfigStruct {
-    uint8_t currentIP[5];
-    uint8_t gatewayIP[5];
-    uint8_t broadcastIP[5];
-};
+// External function for sending UDP
+extern void sendUDPbytes(uint8_t* data, int length);
 
-// External declarations from NetworkBase
-extern struct mg_mgr g_mgr;
-extern struct mg_connection *sendAgio;
-extern NetConfigStruct netConfig;
+// Static UDP instance for syslog
+static EthernetUDP udpSyslog;
 
-// Mongoose logging - mg_log_set is a macro, we need the actual variable
-extern int mg_log_level;
-
-// Network states from mongoose
-#define MG_TCPIP_STATE_DOWN 0   // Interface is down
-#define MG_TCPIP_STATE_UP 1     // Interface is up
-#define MG_TCPIP_STATE_REQ 2    // Interface is up, DHCP REQUESTING state
-#define MG_TCPIP_STATE_IP 3     // Interface is up and has an IP assigned
-#define MG_TCPIP_STATE_READY 4  // Interface has fully come up, ready to work
+// QNEthernet namespace
+using namespace qindesign::network;
 
 // Static instance pointer
 EventLogger* EventLogger::instance = nullptr;
@@ -35,8 +24,14 @@ EventLogger* EventLogger::instance = nullptr;
 EventLogger::EventLogger() {
     loadConfig();
     
-    // Set initial Mongoose log level for startup debugging
-    mg_log_level = 3;  // Debug level during startup
+    // Initialize token buckets
+    uint32_t now = millis();
+    for (int i = 0; i < 8; i++) {
+        buckets[i].tokens = maxMessagesPerSecond[i];
+        buckets[i].lastRefillTime = now;
+    }
+    
+    // QNEthernet doesn't need explicit log level management
 }
 
 EventLogger::~EventLogger() {
@@ -126,23 +121,20 @@ void EventLogger::outputUDP(EventSeverity severity, EventSource source, const ch
              message);
     
     // Send via UDP broadcast to syslog port
-    extern struct mg_connection *sendAgio;
-    extern NetConfigStruct netConfig;
-    
-    if (sendAgio && g_mgr.ifp->state == MG_TCPIP_STATE_READY) {
-        // Create a new connection for syslog (port 514)
-        char syslogURL[32];
-        uint16_t port = (config.syslogPort[0] << 8) | config.syslogPort[1];
-        snprintf(syslogURL, sizeof(syslogURL), "udp://%d.%d.%d.255:%d",
-                 netConfig.currentIP[0], netConfig.currentIP[1], 
-                 netConfig.currentIP[2], port);
+    if (QNetworkBase::isConnected()) {
+        // Get current IP for broadcast address
+        IPAddress currentIP = QNetworkBase::getIP();
         
-        struct mg_connection *syslogConn = mg_connect(&g_mgr, syslogURL, NULL, NULL);
-        if (syslogConn) {
-            mg_send(syslogConn, syslogMsg, strlen(syslogMsg));
-            mg_iobuf_del(&syslogConn->send, 0, syslogConn->send.len);
-            syslogConn->is_closing = 1;  // Close after send
-        }
+        // Create broadcast address (xxx.xxx.xxx.255)
+        IPAddress broadcastIP(currentIP[0], currentIP[1], currentIP[2], 255);
+        
+        // Get syslog port from config
+        uint16_t port = (config.syslogPort[0] << 8) | config.syslogPort[1];
+        
+        // Send using QNEthernet UDP
+        udpSyslog.beginPacket(broadcastIP, port);
+        udpSyslog.write((const uint8_t*)syslogMsg, strlen(syslogMsg));
+        udpSyslog.endPacket();
     }
 }
 
@@ -165,12 +157,26 @@ bool EventLogger::checkRateLimit(EventSeverity severity) {
     uint8_t sevIndex = static_cast<uint8_t>(severity);
     uint32_t now = millis();
     
-    if (rateLimit[sevIndex] == 0) {
-        return true;  // No rate limit for this level
+    // Get the bucket for this severity level
+    TokenBucket& bucket = buckets[sevIndex];
+    uint8_t maxPerSecond = maxMessagesPerSecond[sevIndex];
+    
+    // Calculate time elapsed since last refill
+    uint32_t elapsed = now - bucket.lastRefillTime;
+    if (elapsed > RATE_WINDOW_MS) {
+        // More than 1 second passed, reset bucket
+        bucket.tokens = maxPerSecond;
+        bucket.lastRefillTime = now;
+    } else if (elapsed > 0) {
+        // Refill tokens based on time elapsed
+        float tokensToAdd = (float)elapsed * maxPerSecond / RATE_WINDOW_MS;
+        bucket.tokens = min(bucket.tokens + tokensToAdd, (float)maxPerSecond);
+        bucket.lastRefillTime = now;
     }
     
-    if (now - lastLogTime[sevIndex] >= rateLimit[sevIndex]) {
-        lastLogTime[sevIndex] = now;
+    // Check if we have a token available
+    if (bucket.tokens >= 1.0f) {
+        bucket.tokens -= 1.0f;
         return true;
     }
     
@@ -251,29 +257,16 @@ void EventLogger::printConfig() {
                   config.enableUDP ? "ENABLED" : "DISABLED",
                   severityNames[config.udpLevel],
                   (config.syslogPort[0] << 8) | config.syslogPort[1]);
-    Serial.printf("Mongoose Logging: Level %d\r\n", mongooseLogLevel);
+    // QNEthernet handles its own logging internally
     Serial.printf("Total Events Logged: %lu\r\n", eventCounter);
     Serial.println("=====================================");
 }
 
-void EventLogger::setMongooseLogLevel(int level) {
-    if (level < 0 || level > 4) {
-        LOG_WARNING(EventSource::SYSTEM, "Invalid Mongoose log level %d, must be 0-4", level);
-        return;
-    }
-    
-    mongooseLogLevel = level;
-    mg_log_level = level;
-    
-    LOG_INFO(EventSource::SYSTEM, "Set Mongoose log level to %d", level);
-}
+// QNEthernet doesn't need explicit log level management - removed setMongooseLogLevel
 
 void EventLogger::checkNetworkReady() {
-    // Check if network interface exists
-    if (!g_mgr.ifp) return;
-    
-    // Check current network state
-    bool networkReady = (g_mgr.ifp->state == MG_TCPIP_STATE_READY);
+    // Check current network state using QNEthernet
+    bool networkReady = QNetworkBase::isConnected() && Ethernet.linkStatus();
     
     // Track network state changes for stability
     if (!networkReady && networkWasReady) {
@@ -286,16 +279,10 @@ void EventLogger::checkNetworkReady() {
             networkWasReady = true;
             networkReadyTime = millis();
             
-            // First time network is ready - reduce Mongoose logging
-            if (!mongooseLogReduced) {
-                mongooseLogReduced = true;
-                setMongooseLogLevel(2);  // Reduce to info level once network is ready
-                LOG_INFO(EventSource::NETWORK, "Network ready, reducing Mongoose log level to 2");
-                
-                // Log the assigned IP address
-                uint8_t* ip = netConfig.currentIP;
-                LOG_INFO(EventSource::NETWORK, "IP Address: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-            }
+            // Log the assigned IP address
+            IPAddress ip = QNetworkBase::getIP();
+            LOG_INFO(EventSource::NETWORK, "Network ready - IP Address: %d.%d.%d.%d", 
+                     ip[0], ip[1], ip[2], ip[3]);
         }
     }
     
@@ -303,24 +290,20 @@ void EventLogger::checkNetworkReady() {
     if (!systemReadyShown && networkWasReady && networkReady && (millis() - networkReadyTime > 3000)) {
         systemReadyShown = true;
         
-        // Temporarily increase Mongoose log level to reduce interference
-        int savedMongooseLevel = mongooseLogLevel;
-        setMongooseLogLevel(1);  // Reduce Mongoose logging temporarily
-        
         // Display the complete boxed message as separate lines to avoid rate limiting
         // Use Serial.print directly for the visual box to ensure it displays properly
         Serial.println("\r\n**************************************************");
-        Serial.printf("*** System ready - UDP syslog active at %s level ***\r\n", 
-                      getLevelName(getEffectiveLogLevel()));
+        if (config.enableUDP) {
+            Serial.printf("*** System ready - UDP syslog active at %s level ***\r\n", 
+                          getLevelName(getEffectiveLogLevel()));
+        } else {
+            Serial.println("*** System ready - UDP syslog disabled ***");
+        }
         Serial.println("*** Press '?' for menu, 'L' for logging control ***");
         Serial.println("**************************************************\r\n");
         
         // Send a syslog-friendly message with menu instructions
         LOG_WARNING(EventSource::SYSTEM, "* System ready - Press '?' for menu, 'L' for logging control *");
-        
-        // Restore Mongoose log level after a brief delay
-        delay(50);
-        setMongooseLogLevel(savedMongooseLevel);
     }
 }
 

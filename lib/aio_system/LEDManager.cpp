@@ -1,15 +1,19 @@
 // LEDManager.cpp - Implementation of front panel LED control
 #include "LEDManager.h"
 #include <Wire.h>
+#include <QNEthernet.h>
+#include "QNetworkBase.h"
 #include "EventLogger.h"
 #include "GNSSProcessor.h"
 #include "IMUProcessor.h"
 #include "NAVProcessor.h"
 
-// External pointers needed for status checks
-extern GNSSProcessor* gnssPTR;
-extern IMUProcessor* imuPTR;
-extern NAVProcessor* navPTR;
+// QNEthernet namespace
+using namespace qindesign::network;
+
+// External processor instances needed for status checks
+extern GNSSProcessor gnssProcessor;
+extern IMUProcessor imuProcessor;
 
 // Global pointer
 LEDManager* ledPTR = nullptr;
@@ -72,6 +76,10 @@ bool LEDManager::init() {
     }
     
     LOG_INFO(EventSource::SYSTEM, "LED Manager initialized (brightness=%d%%)", brightness);
+    
+    // Test ethernet link status
+    LOG_INFO(EventSource::SYSTEM, "Initial Ethernet link status: %s", 
+             Ethernet.linkStatus() ? "UP" : "DOWN");
     
     // Direct test - try to turn off channel 0 completely
     LOG_DEBUG(EventSource::SYSTEM, "LED Direct test: turning off channel 0");
@@ -296,24 +304,39 @@ void LEDManager::testLEDs() {
 
 void LEDManager::updateAll() {
     // Power/Ethernet LED
-    // TODO: Add proper ethernet link detection when NetworkBase is updated
-    bool ethernetUp = true;  // For now assume ethernet is up
-    setPowerState(ethernetUp, navPTR && navPTR->hasAgIOConnection());
+    // Use the cached link state from our callback instead of polling
+    bool ethernetUp = QNetworkBase::isConnected();
+    // Check AgIO connection through NAVProcessor singleton
+    NAVProcessor* navInstance = NAVProcessor::getInstance();
+    bool hasAgIO = navInstance && navInstance->hasAgIOConnection();
     
-    // GPS LED
-    if (gnssPTR) {
-        setGPSState(gnssPTR->getData().fixQuality, gnssPTR->hasGPS());
+    // Debug logging to track state
+    static bool lastEthernet = false;
+    static bool lastAgIO = false;
+    static uint32_t lastDebugTime = 0;
+    
+    if (ethernetUp != lastEthernet || hasAgIO != lastAgIO || millis() - lastDebugTime > 5000) {
+        LOG_INFO(EventSource::SYSTEM, "PWR_ETH LED: Ethernet=%s AgIO=%s", 
+                 ethernetUp ? "UP" : "DOWN", hasAgIO ? "Connected" : "Disconnected");
+        lastEthernet = ethernetUp;
+        lastAgIO = hasAgIO;
+        lastDebugTime = millis();
     }
     
+    setPowerState(ethernetUp, hasAgIO);
+    
+    // GPS LED
+    setGPSState(gnssProcessor.getData().fixQuality, gnssProcessor.hasGPS());
+    
     // IMU/INS LED
-    if (imuPTR && imuPTR->getIMUType() != IMUType::NONE) {
+    if (imuProcessor.getIMUType() != IMUType::NONE) {
         // Separate IMU detected (BNO08x or TM171)
         setIMUState(true,
-                   imuPTR->isIMUInitialized(),
-                   imuPTR->hasValidData());
-    } else if (gnssPTR && gnssPTR->getData().hasINS) {
+                   imuProcessor.isIMUInitialized(),
+                   imuProcessor.hasValidData());
+    } else if (gnssProcessor.getData().hasINS) {
         // UM981 INS system
-        const auto& gpsData = gnssPTR->getData();
+        const auto& gpsData = gnssProcessor.getData();
         bool insDetected = true;
         bool insInitialized = gpsData.insAlignmentStatus != 0;
         bool insValid = gpsData.insAlignmentStatus == 3; // Solution good

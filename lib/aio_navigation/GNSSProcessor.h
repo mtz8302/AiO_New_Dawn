@@ -186,7 +186,7 @@ public:
     static void handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len);
 };
 
-// Global pointer following established pattern
-extern GNSSProcessor *gnssPTR;
+// Global instance following established pattern
+extern GNSSProcessor gnssProcessor;
 
 #endif // GNSS_PROCESSOR_H

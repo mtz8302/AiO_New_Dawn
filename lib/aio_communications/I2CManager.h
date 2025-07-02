@@ -79,7 +79,7 @@ public:
     bool isWire2Initialized() const { return wire2Info.initialized; }
 };
 
-// Global pointer following established pattern
-extern I2CManager* i2cPTR;
+// Global instance following established pattern
+extern I2CManager i2cManager;
 
 #endif // I2C_MANAGER_H

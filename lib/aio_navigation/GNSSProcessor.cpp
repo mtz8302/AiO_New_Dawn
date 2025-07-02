@@ -3,6 +3,7 @@
 #include "calc_crc32.h"
 #include "PGNUtils.h"
 #include "EventLogger.h"
+#include "QNetworkBase.h"
 #include <string.h>
 #include <math.h>
 
@@ -45,8 +46,8 @@ bool GNSSProcessor::init()
     // Register with PGNProcessor to receive broadcast messages
     if (PGNProcessor::instance)
     {
-        // Register using GPS_SOURCE_ID (120) to receive broadcast PGNs like 200 and 202
-        bool success = PGNProcessor::instance->registerCallback(GPS_SOURCE_ID, handleBroadcastPGN, "GPS Handler");
+        // Register for broadcast PGNs (200 and 202)
+        bool success = PGNProcessor::instance->registerBroadcastCallback(handleBroadcastPGN, "GPS Handler");
         if (!success)
         {
             LOG_ERROR(EventSource::GNSS, "Failed to register PGN callback");
@@ -1022,11 +1023,7 @@ bool GNSSProcessor::parseINSPVAXA()
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 
 // External network config
-extern struct NetConfigStruct {
-    uint8_t currentIP[5];
-    uint8_t gatewayIP[5];
-    uint8_t broadcastIP[5];
-} netConfig;
+extern struct NetworkConfig netConfig;
 
 // Static instance pointer for callback access
 static GNSSProcessor* gnssInstance = nullptr;

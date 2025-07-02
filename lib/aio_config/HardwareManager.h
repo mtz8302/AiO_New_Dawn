@@ -67,7 +67,7 @@ public:
     bool getInitializationStatus() const;
 };
 
-// Global pointer (following the same pattern as configPTR)
-extern HardwareManager *hardwarePTR;
+// Global instance (following the same pattern as configManager)
+extern HardwareManager hardwareManager;
 
 #endif // HARDWAREMANAGER_H_

@@ -1,0 +1,21 @@
+{
+  "name": "FlasherX",
+  "version": "1.0.0",
+  "description": "OTA flash programming library for Teensy",
+  "keywords": "ota, flash, teensy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joepasquariello/FlasherX"
+  },
+  "authors": [
+    {
+      "name": "Joe Pasquariello",
+      "maintainer": true
+    }
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/joepasquariello/FlasherX",
+  "dependencies": {},
+  "frameworks": "arduino",
+  "platforms": "teensy"
+}

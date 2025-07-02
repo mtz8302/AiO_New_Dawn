@@ -5,6 +5,7 @@
 #include "GNSSProcessor.h"
 #include "IMUProcessor.h"
 #include "elapsedMillis.h"
+#include "QNetworkBase.h"
 
 enum class NavMessageType {
     NONE,
@@ -61,13 +62,13 @@ public:
     uint32_t getLastMessageTime() const { return lastMessageTime; }
     NavMessageType getCurrentMessageType();
     
-    // AgIO connection status (based on recent message sending)
+    // AgIO connection status (requires both ethernet link AND recent communication)
     bool hasAgIOConnection() const { 
-        return (millis() - lastMessageTime) < 5000;
+        return QNetworkBase::isConnected() && (millis() - lastMessageTime) < 5000;
     }
 };
 
-// Global pointer declaration
-extern NAVProcessor* navPTR;
+// Global instance declaration
+extern NAVProcessor navProcessor;
 
 #endif // NAV_PROCESSOR_H

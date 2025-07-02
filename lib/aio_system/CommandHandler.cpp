@@ -29,6 +29,11 @@ void CommandHandler::process() {
     
     char cmd = Serial.read();
     
+    // Ignore line ending characters (CR and LF)
+    if (cmd == '\r' || cmd == '\n') {
+        return;
+    }
+    
     // Handle state-specific commands
     switch (currentState) {
         case CommandState::MAIN_MENU:
@@ -39,14 +44,11 @@ void CommandHandler::process() {
             handleLoggingMenu(cmd);
             break;
             
-        case CommandState::CONFIG_MENU:
-            handleConfigMenu(cmd);
-            break;
+        // CONFIG_MENU removed per Phase 6 simplification
     }
 }
 
 void CommandHandler::handleMainMenu(char cmd) {
-    Serial.printf("\r\n[CMD] Main menu received: '%c' (0x%02X)", cmd, cmd);  // Debug
     switch (cmd) {
         case 'l':
         case 'L':
@@ -54,26 +56,7 @@ void CommandHandler::handleMainMenu(char cmd) {
             showLoggingMenu();
             break;
             
-        case 'd':
-        case 'D':
-            Serial.print("\r\n\n*** Running Section Diagnostics ***");
-            if (machinePtr) {
-                machinePtr->runSectionDiagnostics();
-            } else {
-                Serial.print("\r\nERROR: MachineProcessor not initialized!");
-            }
-            break;
-            
-            
-        case 'c':
-        case 'C':
-            if (configPtr) {
-                currentState = CommandState::CONFIG_MENU;
-                showConfigMenu();
-            } else {
-                Serial.print("\r\nConfiguration not available");
-            }
-            break;
+        // D and C options removed per Phase 6 simplification
             
         case '?':
         case 'h':
@@ -158,19 +141,8 @@ void CommandHandler::handleLoggingMenu(char cmd) {
             Serial.print("\r\nEvent counter reset");
             break;
             
-        case 'm':  // Mongoose log level
-        case 'M':
-            Serial.print("\r\nEnter Mongoose log level (0-4): ");
-            while (!Serial.available()) { delay(10); }
-            {
-                char level = Serial.read();
-                if (level >= '0' && level <= '4') {
-                    loggerPtr->setMongooseLogLevel(level - '0');
-                } else {
-                    Serial.print("\r\nInvalid level");
-                }
-            }
-            break;
+        // QNEthernet doesn't need explicit log level management
+        // Removed Mongoose log level option
             
         case 'q':  // Quit to main menu
         case 'Q':
@@ -192,30 +164,9 @@ void CommandHandler::handleLoggingMenu(char cmd) {
 }
 
 
-void CommandHandler::handleConfigMenu(char cmd) {
-    // Placeholder for future config menu
-    switch (cmd) {
-        case 'q':
-        case 'Q':
-        case 27:  // ESC
-            currentState = CommandState::MAIN_MENU;
-            Serial.print("\r\nReturned to main menu");
-            break;
-            
-        default:
-            Serial.print("\r\nConfig menu not yet implemented");
-            currentState = CommandState::MAIN_MENU;
-            break;
-    }
-}
-
 void CommandHandler::showMainMenu() {
     Serial.print("\r\n\n=== Main Menu ===");
     Serial.print("\r\nL - Logging configuration");
-    Serial.print("\r\nD - Run section diagnostics");
-    if (configPtr) {
-        Serial.print("\r\nC - Configuration menu");
-    }
     Serial.print("\r\n? - Show this menu");
     Serial.print("\r\n=================");
 }
@@ -227,7 +178,7 @@ void CommandHandler::showLoggingMenu() {
     Serial.print("\r\n2 - Toggle UDP syslog");
     Serial.print("\r\n3/4 - Decrease/Increase serial level");
     Serial.print("\r\n5/6 - Decrease/Increase UDP level");
-    Serial.print("\r\nM - Set Mongoose log level (0-4)");
+    // QNEthernet handles its own logging internally
     Serial.print("\r\nT - Generate test messages");
     Serial.print("\r\nS - Show statistics");
     Serial.print("\r\nR - Reset event counter");
@@ -236,10 +187,3 @@ void CommandHandler::showLoggingMenu() {
     Serial.print("\r\n============================");
 }
 
-
-void CommandHandler::showConfigMenu() {
-    Serial.print("\r\n\n=== Configuration Menu ===");
-    Serial.print("\r\n(Not yet implemented)");
-    Serial.print("\r\nQ - Return to main menu");
-    Serial.print("\r\n==========================");
-}

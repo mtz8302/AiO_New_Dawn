@@ -5,6 +5,6 @@
 class ConfigManager;
 
 // External declaration only - actual definition is in main.cpp
-extern ConfigManager *configPTR;
+extern ConfigManager configManager;
 
 #endif // CONFIGGLOBALS_H_
