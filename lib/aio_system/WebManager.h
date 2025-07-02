@@ -10,6 +10,7 @@
 // Forward declarations to avoid including AsyncWebServer in header
 class AsyncWebServer;
 class AsyncWebServerRequest;
+class AsyncEventSource;
 
 class WebManager {
 public:
@@ -21,15 +22,24 @@ public:
     
     // No need for handleClient() - AsyncWebServer handles everything async
     
+    // SSE support for real-time data
+    void updateWASClients();
+    
 private:
     AsyncWebServer* server;
+    AsyncEventSource* wasEvents;
     bool isRunning;
     WebLanguage currentLanguage;
+    
+    // For WAS data updates
+    float lastWASAngle;
+    uint32_t lastWASUpdate;
     
     void setupRoutes();
     void setupEventLoggerAPI();
     void setupNetworkAPI();
     void setupOTARoutes();
+    void setupSSERoutes();
     void handleRoot(AsyncWebServerRequest* request);
     void handleApiStatus(AsyncWebServerRequest* request);
     void handleEventLoggerPage(AsyncWebServerRequest* request);

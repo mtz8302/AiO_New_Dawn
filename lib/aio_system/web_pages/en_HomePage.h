@@ -28,6 +28,7 @@ const char EN_HOME_PAGE[] PROGMEM = R"rawliteral(
         <h2>Tools</h2>
         <ul>
             <li><a href='/api/status'>System Status (JSON)</a></li>
+            <li><a href='/was-demo'>WAS Live Data Demo</a></li>
             <li><a href='/restart'>Restart System</a></li>
             <li><a href='/ota'>OTA Update</a></li>
         </ul>

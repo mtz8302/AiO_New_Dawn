@@ -20,6 +20,7 @@ enum class WebLanguage : uint8_t {
 #include "en_EventLoggerPage.h"
 #include "en_NetworkPage.h"
 #include "en_OTAPage.h"
+#include "en_WASDemoPage.h"
 #include "de_HomePage.h"
 #include "de_EventLoggerPage.h"
 // Add more languages as needed:
@@ -55,6 +56,11 @@ public:
     static const char* getOTAPage(WebLanguage lang) {
         // Only English version for now
         return EN_OTA_PAGE;
+    }
+    
+    static const char* getWASDemoPage(WebLanguage lang) {
+        // Only English version for now
+        return EN_WASDEMO_PAGE;
     }
     
     // Add getters for each page type as you implement them

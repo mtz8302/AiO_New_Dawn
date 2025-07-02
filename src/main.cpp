@@ -345,6 +345,9 @@ void loop()
     ledManager.updateAll();
   }
   
+  // Update SSE clients with WAS data if enabled
+  webManager.updateWASClients();
+  
 
 
 

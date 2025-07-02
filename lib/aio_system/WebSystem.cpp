@@ -10,10 +10,12 @@
 #include "QNetworkBase.h"
 #include <QNEthernet.h>
 #include <AsyncWebServer_Teensy41.h>
+#include <AsyncEventSource_Teensy41.h>
 #include <ArduinoJson.h>
 #include "EventLogger.h"
 #include "Version.h"
 #include "FXUtil.h"
+#include "ADProcessor.h"
 
 // For network config
 extern NetworkConfig netConfig;
@@ -28,7 +30,9 @@ using namespace qindesign::network;
 // WebManager Implementation
 //=============================================================================
 
-WebManager::WebManager() : server(nullptr), isRunning(false), currentLanguage(WebLanguage::ENGLISH) {
+WebManager::WebManager() : server(nullptr), wasEvents(nullptr), isRunning(false), 
+                           currentLanguage(WebLanguage::ENGLISH),
+                           lastWASAngle(0.0f), lastWASUpdate(0) {
     // TODO: Load language preference from config
 }
 
@@ -64,6 +68,13 @@ bool WebManager::begin(uint16_t port) {
 
 void WebManager::stop() {
     if (server && isRunning) {
+        // Clean up event sources first
+        if (wasEvents) {
+            wasEvents->close();
+            delete wasEvents;
+            wasEvents = nullptr;
+        }
+        
         server->end();
         delete server;
         server = nullptr;
@@ -100,6 +111,13 @@ void WebManager::setupRoutes() {
         handleOTAPage(request);
     });
     
+    // WAS Demo page
+    server->on("/was-demo", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        String html = FPSTR(WebPageSelector::getWASDemoPage(currentLanguage));
+        html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
+        request->send(200, "text/html", html);
+    });
+    
     // Language selection
     server->on("/lang/en", HTTP_GET, [this](AsyncWebServerRequest* request) {
         currentLanguage = WebLanguage::ENGLISH;
@@ -121,6 +139,9 @@ void WebManager::setupRoutes() {
     
     // Setup OTA routes
     setupOTARoutes();
+    
+    // Setup SSE routes - let's try v1.7.0
+    setupSSERoutes();
     
     // Restart API endpoint
     server->on("/api/restart", HTTP_POST, [](AsyncWebServerRequest* request) {
@@ -416,6 +437,67 @@ void WebManager::handleNotFound(AsyncWebServerRequest* request) {
     message += (request->method() == HTTP_GET) ? "GET" : "POST";
     
     request->send(404, "text/plain", message);
+}
+
+void WebManager::setupSSERoutes() {
+    if (!server) return;
+    
+    // Create AsyncEventSource for WAS data
+    wasEvents = new AsyncEventSource("/events/was");
+    
+    // Add event handler
+    wasEvents->onConnect([this](AsyncEventSourceClient* client) {
+        IPAddress clientIP = client->client()->remoteIP();
+        LOG_INFO(EventSource::NETWORK, "SSE client connected from %d.%d.%d.%d", 
+                 clientIP[0], clientIP[1], clientIP[2], clientIP[3]);
+        
+        // Send initial data immediately
+        ADProcessor* adProc = ADProcessor::getInstance();
+        float currentAngle = adProc ? adProc->getWASAngle() : 0.0f;
+        
+        String json = "{\"angle\":" + String(currentAngle, 1) + 
+                     ",\"ts\":" + String(millis()) + "}";
+        client->send(json.c_str(), "was-data");
+    });
+    
+    // Attach event source to server
+    server->addHandler(wasEvents);
+    
+    LOG_INFO(EventSource::NETWORK, "SSE routes initialized for WAS data");
+}
+
+void WebManager::updateWASClients() {
+    // Only process if we have connected clients
+    if (!wasEvents || wasEvents->count() == 0) {
+        return;
+    }
+    
+    // Rate limit updates to 10Hz (100ms)
+    uint32_t now = millis();
+    if (now - lastWASUpdate < 100) {
+        return;
+    }
+    
+    // Get current WAS angle from ADProcessor
+    ADProcessor* adProc = ADProcessor::getInstance();
+    float currentAngle = adProc ? adProc->getWASAngle() : 0.0f;
+    
+    // Only send if angle changed significantly (0.1 degree threshold)
+    if (abs(currentAngle - lastWASAngle) > 0.1f) {
+        String json = "{\"angle\":" + String(currentAngle, 1) + 
+                     ",\"ts\":" + String(millis()) + "}";
+        wasEvents->send(json.c_str(), "was-data");
+        
+        lastWASAngle = currentAngle;
+        lastWASUpdate = now;
+        
+        // Log every 10th update to avoid spam
+        static int updateCount = 0;
+        if (++updateCount % 10 == 0) {
+            LOG_DEBUG(EventSource::NETWORK, "SSE sent WAS angle: %.1f to %d clients", 
+                     currentAngle, wasEvents->count());
+        }
+    }
 }
 
 //=============================================================================
