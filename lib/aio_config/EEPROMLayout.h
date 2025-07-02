@@ -14,5 +14,6 @@
 #define KWAS_CONFIG_ADDR     600    // KWAS configuration (600-699)
 #define INS_CONFIG_ADDR      700    // INS configuration (700-799)
 #define EVENT_CONFIG_ADDR    800    // EventLogger configuration (800-899)
+#define WEB_CONFIG_ADDR      900    // Web interface configuration (900-999)
 
 #endif // EEPROM_LAYOUT_H

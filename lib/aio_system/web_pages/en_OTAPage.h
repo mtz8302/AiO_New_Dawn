@@ -83,8 +83,7 @@ const char EN_OTA_PAGE[] PROGMEM = R"rawliteral(
         </div>
         
         <div class='warning' style='background-color: #ffeeee; border: 1px solid #ff0000; padding: 10px; margin: 20px 0;'>
-            <strong>⚠️ Warning:</strong> Incorrect firmware can brick your device. 
-            Only upload firmware built for Teensy 4.1.
+            Incorrect firmware can brick your device. Only upload firmware built for Teensy 4.1.
         </div>
         
         <form onsubmit='return uploadFile()'>

@@ -17,6 +17,8 @@
 #include "FXUtil.h"
 #include "ADProcessor.h"
 #include "web_pages/WebPages.h"
+#include <EEPROM.h>
+#include "EEPROMLayout.h"
 
 // For network config
 extern NetworkConfig netConfig;
@@ -34,7 +36,11 @@ using namespace qindesign::network;
 WebManager::WebManager() : server(nullptr), wasEvents(nullptr), isRunning(false), 
                            currentLanguage(WebLanguage::ENGLISH),
                            lastWASAngle(0.0f), lastWASUpdate(0) {
-    // TODO: Load language preference from config
+    // Load language preference from EEPROM
+    uint8_t savedLang = EEPROM.read(WEB_CONFIG_ADDR);
+    if (savedLang == 0 || savedLang == 1) {
+        currentLanguage = static_cast<WebLanguage>(savedLang);
+    }
 }
 
 WebManager::~WebManager() {
@@ -123,13 +129,15 @@ void WebManager::setupRoutes() {
     // Language selection
     server->on("/lang/en", HTTP_GET, [this](AsyncWebServerRequest* request) {
         currentLanguage = WebLanguage::ENGLISH;
-        // TODO: Save language preference to EEPROM
+        // Save language preference to EEPROM
+        EEPROM.write(WEB_CONFIG_ADDR, static_cast<uint8_t>(currentLanguage));
         request->redirect("/");
     });
     
     server->on("/lang/de", HTTP_GET, [this](AsyncWebServerRequest* request) {
         currentLanguage = WebLanguage::GERMAN;
-        // TODO: Save language preference to EEPROM
+        // Save language preference to EEPROM
+        EEPROM.write(WEB_CONFIG_ADDR, static_cast<uint8_t>(currentLanguage));
         request->redirect("/");
     });
     
@@ -250,18 +258,6 @@ void WebManager::setupEventLoggerAPI() {
         }
     );
     
-    // GET recent log entries - placeholder for now
-    server->on("/api/eventlogger/logs", HTTP_GET, [](AsyncWebServerRequest* request) {
-        JsonDocument doc;
-        JsonArray logs = doc["logs"].to<JsonArray>();
-        
-        // TODO: Implement log retrieval when EventLogger supports it
-        // For now, return empty array
-        
-        String response;
-        serializeJsonPretty(doc, response);
-        request->send(200, "application/json", response);
-    });
 }
 
 void WebManager::handleEventLoggerPage(AsyncWebServerRequest* request) {
