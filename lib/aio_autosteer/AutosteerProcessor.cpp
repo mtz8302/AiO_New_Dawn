@@ -53,6 +53,18 @@ bool AutosteerProcessor::init() {
     instance = this;
     autosteerPTR = this;  // Also set global pointer
     
+    // Load steer config from EEPROM
+    steerConfig.InvertWAS = configManager.getInvertWAS();
+    steerConfig.MotorDriveDirection = configManager.getMotorDriveDirection();
+    steerConfig.CytronDriver = configManager.getCytronDriver();
+    steerConfig.SteerSwitch = configManager.getSteerSwitch();
+    steerConfig.SteerButton = configManager.getSteerButton();
+    steerConfig.PressureSensor = configManager.getPressureSensor();
+    steerConfig.PulseCountMax = configManager.getPulseCountMax();
+    steerConfig.MinSpeed = configManager.getMinSpeed();
+    LOG_DEBUG(EventSource::AUTOSTEER, "Loaded steer config from EEPROM: Pressure=%s, PulseMax=%d", 
+              steerConfig.PressureSensor ? "Yes" : "No", steerConfig.PulseCountMax);
+    
     // Initialize button pin
     pinMode(2, INPUT_PULLUP);
     LOG_DEBUG(EventSource::AUTOSTEER, "Button pin 2 configured as INPUT_PULLUP");
@@ -153,6 +165,24 @@ void AutosteerProcessor::process() {
         LOG_INFO(EventSource::AUTOSTEER, "Work switch %s", 
                  currentWorkState ? "ON (sections active)" : "OFF (sections inactive)");
         lastWorkState = currentWorkState;
+    }
+    
+    // Check pressure sensor kickout if enabled
+    static bool lastPressureSensorState = false;
+    if (steerConfig.PressureSensor != lastPressureSensorState) {
+        LOG_INFO(EventSource::AUTOSTEER, "Pressure sensor kickout %s", 
+                 steerConfig.PressureSensor ? "ENABLED" : "DISABLED");
+        lastPressureSensorState = steerConfig.PressureSensor;
+    }
+    
+    if (steerConfig.PressureSensor && steerState == 0) {
+        float pressure = adProcessor.getPressureReading();
+        if (pressure >= steerConfig.PulseCountMax) {
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Pressure %.1f exceeded limit %d", 
+                        pressure, steerConfig.PulseCountMax);
+            emergencyStop();
+            return;  // Skip the rest of this cycle
+        }
     }
     
     // Check Keya motor slip if steering is active
@@ -298,13 +328,27 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     LOG_DEBUG(EventSource::AUTOSTEER, "MinSpeed: %d", steerConfig.MinSpeed);
     
     // Log all settings at INFO level in a single message so users see everything
-    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Cytron=%s", 
+    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Cytron=%s Pressure=%s(max=%d)", 
              steerConfig.InvertWAS ? "Inv" : "Norm",
              steerConfig.MotorDriveDirection ? "Rev" : "Norm",
              steerConfig.MinSpeed,
              steerConfig.SteerSwitch ? "On" : "Off",
              steerConfig.ShaftEncoder ? "Yes" : "No",
-             steerConfig.CytronDriver ? "Yes" : "No");
+             steerConfig.CytronDriver ? "Yes" : "No",
+             steerConfig.PressureSensor ? "Yes" : "No",
+             steerConfig.PulseCountMax);
+    
+    // Save config to EEPROM
+    configManager.setInvertWAS(steerConfig.InvertWAS);
+    configManager.setMotorDriveDirection(steerConfig.MotorDriveDirection);
+    configManager.setCytronDriver(steerConfig.CytronDriver);
+    configManager.setSteerSwitch(steerConfig.SteerSwitch);
+    configManager.setSteerButton(steerConfig.SteerButton);
+    configManager.setPressureSensor(steerConfig.PressureSensor);
+    configManager.setPulseCountMax(steerConfig.PulseCountMax);
+    configManager.setMinSpeed(steerConfig.MinSpeed);
+    configManager.saveSteerConfig();
+    LOG_INFO(EventSource::AUTOSTEER, "Steer config saved to EEPROM");
 }
 
 void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, size_t len) {

@@ -9,6 +9,7 @@ ADProcessor::ADProcessor() :
     wasOffset(0),
     wasCountsPerDegree(1.0f),
     kickoutAnalogRaw(0),
+    pressureReading(0.0f),
     motorCurrentRaw(0),
     debounceDelay(50),  // 50ms default debounce
     lastProcessTime(0)
@@ -73,6 +74,12 @@ void ADProcessor::process()
     kickoutAnalogRaw = analogRead(AD_KICKOUT_A_PIN);
     motorCurrentRaw = analogRead(AD_CURRENT_PIN);
     
+    // Update pressure sensor reading with filtering
+    // Scale 12-bit ADC (0-4095) to match NG-V6 behavior
+    float sensorSample = (float)kickoutAnalogRaw;
+    sensorSample *= 0.15f;  // Scale down to try matching old AIO
+    sensorSample = min(sensorSample, 255.0f);  // Limit to 1 byte (0-255)
+    pressureReading = pressureReading * 0.8f + sensorSample * 0.2f;  // 80/20 filter
     
     lastProcessTime = millis();
 }

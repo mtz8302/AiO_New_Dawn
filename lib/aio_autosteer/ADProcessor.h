@@ -43,6 +43,7 @@ public:
     
     // Kickout sensor readings
     uint16_t getKickoutAnalog() const { return kickoutAnalogRaw; }
+    float getPressureReading() const { return pressureReading; }
     uint16_t getMotorCurrent() const { return motorCurrentRaw; }
     
     // Configuration
@@ -87,6 +88,7 @@ private:
     
     // Kickout sensor data
     uint16_t kickoutAnalogRaw;
+    float pressureReading;  // Filtered pressure sensor reading
     uint16_t motorCurrentRaw;
     
     // Configuration
