@@ -22,7 +22,7 @@ public:
                     MotorDriverType::DRV8701,
                     hwMgr->getPWM1Pin(),       // PWM pin
                     hwMgr->getPWM2Pin(),       // Direction pin  
-                    hwMgr->getSleepPin(),      // Enable pin (SLEEP_PIN on DRV8701)
+                    hwMgr->getSleepPin(),      // Enable pin (SLEEP_PIN on DRV8701, also LOCK output)
                     hwMgr->getCurrentPin()     // Current sense pin
                 );
                 

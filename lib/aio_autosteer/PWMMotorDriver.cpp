@@ -2,6 +2,7 @@
 #include "PWMMotorDriver.h"
 #include <Arduino.h>
 #include "EventLogger.h"
+#include "HardwareManager.h"
 
 PWMMotorDriver::PWMMotorDriver(MotorDriverType type, uint8_t pwm, uint8_t dir, 
                                uint8_t enable, uint8_t current) 
@@ -35,7 +36,14 @@ bool PWMMotorDriver::init() {
     
     if (enablePin != 255) {
         pinMode(enablePin, OUTPUT);
-        digitalWrite(enablePin, LOW);  // Start disabled
+        // Send wake-up pulse for DRV8701 nSLEEP
+        digitalWrite(enablePin, LOW);   // Pull low
+        delay(1);                       // Hold for 1ms
+        digitalWrite(enablePin, HIGH);  // Rising edge wakes the driver
+        LOG_DEBUG(EventSource::AUTOSTEER, "Sent wake-up pulse on nSLEEP pin %d", enablePin);
+        
+        // Leave it high (awake) but motor disabled via PWM=0
+        digitalWrite(enablePin, HIGH);  // Keep driver awake
     }
     
     if (hasCurrentSense) {
@@ -65,7 +73,17 @@ void PWMMotorDriver::enable(bool en) {
     status.enabled = en;
     
     if (enablePin != 255) {
+        // Pin 4 serves dual purpose: motor nSLEEP and LOCK output
+        // For DRV8701: HIGH = awake/enabled, LOW = sleep/disabled
+        // This also controls the LOCK output through the same MOSFET
         digitalWrite(enablePin, en ? HIGH : LOW);
+        
+        static bool lastState = false;
+        if (en != lastState) {
+            LOG_INFO(EventSource::AUTOSTEER, "Motor driver %s (nSLEEP/LOCK pin %d = %s)", 
+                     en ? "ENABLED" : "DISABLED", enablePin, en ? "HIGH" : "LOW");
+            lastState = en;
+        }
     }
     
     if (!en) {

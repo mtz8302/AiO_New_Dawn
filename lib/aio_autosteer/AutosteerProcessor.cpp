@@ -7,6 +7,7 @@
 #include "LEDManager.h"
 #include "EventLogger.h"
 #include "QNetworkBase.h"
+#include "HardwareManager.h"
 #include <cmath>  // For sin() function
 
 // External network function
@@ -55,6 +56,7 @@ bool AutosteerProcessor::init() {
     
     // Load steer config from EEPROM
     steerConfig.InvertWAS = configManager.getInvertWAS();
+    steerConfig.IsRelayActiveHigh = configManager.getIsRelayActiveHigh();
     steerConfig.MotorDriveDirection = configManager.getMotorDriveDirection();
     steerConfig.CytronDriver = configManager.getCytronDriver();
     steerConfig.SteerSwitch = configManager.getSteerSwitch();
@@ -62,12 +64,16 @@ bool AutosteerProcessor::init() {
     steerConfig.PressureSensor = configManager.getPressureSensor();
     steerConfig.PulseCountMax = configManager.getPulseCountMax();
     steerConfig.MinSpeed = configManager.getMinSpeed();
-    LOG_DEBUG(EventSource::AUTOSTEER, "Loaded steer config from EEPROM: Pressure=%s, PulseMax=%d", 
-              steerConfig.PressureSensor ? "Yes" : "No", steerConfig.PulseCountMax);
+    LOG_DEBUG(EventSource::AUTOSTEER, "Loaded steer config from EEPROM: Pressure=%s, PulseMax=%d, RelayActive=%s", 
+              steerConfig.PressureSensor ? "Yes" : "No", steerConfig.PulseCountMax,
+              steerConfig.IsRelayActiveHigh ? "HIGH" : "LOW");
     
     // Initialize button pin
     pinMode(2, INPUT_PULLUP);
     LOG_DEBUG(EventSource::AUTOSTEER, "Button pin 2 configured as INPUT_PULLUP");
+    
+    // Note: LOCK output (pin 4) is controlled by the motor driver as SLEEP/Enable pin
+    // When motor is enabled, LOCK output is active (dual-purpose pin)
     
     // Initialize PID controller with default values
     pid.setKp(5.0f);  // Default proportional gain
@@ -198,6 +204,8 @@ void AutosteerProcessor::process() {
     
     // Update motor control
     updateMotorControl();
+    
+    // Note: LOCK output is handled by motor driver enable pin (dual-purpose)
     
     // Send PGN 253 status to AgOpenGPS
     sendPGN253();
@@ -340,6 +348,7 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     
     // Save config to EEPROM
     configManager.setInvertWAS(steerConfig.InvertWAS);
+    configManager.setIsRelayActiveHigh(steerConfig.IsRelayActiveHigh);
     configManager.setMotorDriveDirection(steerConfig.MotorDriveDirection);
     configManager.setCytronDriver(steerConfig.CytronDriver);
     configManager.setSteerSwitch(steerConfig.SteerSwitch);
@@ -764,3 +773,4 @@ void AutosteerProcessor::emergencyStop() {
     // Start kickout cooldown
     kickoutTime = millis();
 }
+
