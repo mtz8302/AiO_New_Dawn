@@ -23,6 +23,7 @@ const char DE_HOME_PAGE[] PROGMEM = R"rawliteral(
         <ul>
             <li><a href='/eventlogger'>Ereignisprotokoll-Einstellungen</a></li>
             <li><a href='/network'>Netzwerkeinstellungen</a></li>
+            <li><a href='/device'>Geräteeinstellungen</a></li>
         </ul>
         
         <h2>Werkzeuge</h2>

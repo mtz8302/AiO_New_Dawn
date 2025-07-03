@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include "EventLogger.h"
+#include "ConfigManager.h"
 
 // External processor instances from main.cpp
 extern GNSSProcessor gnssProcessor;
@@ -273,6 +274,22 @@ void NAVProcessor::sendMessage(const char* message) {
 }
 
 void NAVProcessor::process() {
+    // Check if UDP passthrough is enabled - if so, don't send PANDA/PAOGI
+    extern ConfigManager configManager;
+    bool passthroughEnabled = configManager.getGPSPassThrough();
+    
+    // Debug log periodically
+    static uint32_t lastDebugLog = 0;
+    if (millis() - lastDebugLog > 5000) {
+        lastDebugLog = millis();
+        LOG_DEBUG(EventSource::GNSS, "NAVProcessor: UDP passthrough is %s", 
+                  passthroughEnabled ? "ENABLED" : "DISABLED");
+    }
+    
+    if (passthroughEnabled) {
+        return;  // UDP passthrough is enabled, skip PANDA/PAOGI messages
+    }
+    
     // For single antenna systems, we need at least position data
     // For dual/INS systems, we can send messages even without full fix (for alignment)
     const auto& gnssData = gnssProcessor.getData();

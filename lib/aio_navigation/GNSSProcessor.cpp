@@ -4,6 +4,7 @@
 #include "PGNUtils.h"
 #include "EventLogger.h"
 #include "QNetworkBase.h"
+#include "ConfigManager.h"
 #include <string.h>
 #include <math.h>
 
@@ -16,7 +17,8 @@ GNSSProcessor::GNSSProcessor() : bufferIndex(0),
                                  fieldCount(0),
                                  enableNoiseFilter(true),
                                  enableDebug(false),
-                                 ubxParser(nullptr)
+                                 ubxParser(nullptr),
+                                 udpPassthroughEnabled(false)
 {
 
     // Initialize data structures
@@ -42,6 +44,12 @@ GNSSProcessor::~GNSSProcessor()
 bool GNSSProcessor::init()
 {
     resetParser();
+    
+    // Load UDP passthrough setting from ConfigManager
+    extern ConfigManager configManager;
+    udpPassthroughEnabled = configManager.getGPSPassThrough();
+    LOG_INFO(EventSource::GNSS, "UDP Passthrough %s (from EEPROM)", 
+             udpPassthroughEnabled ? "enabled" : "disabled");
     
     // Register with PGNProcessor to receive broadcast messages
     if (PGNProcessor::instance)
@@ -145,6 +153,10 @@ bool GNSSProcessor::processNMEAChar(char c)
                     {
                         if (validateChecksum())
                         {
+                            // Send complete NMEA sentence via UDP if passthrough is enabled
+                            if (udpPassthroughEnabled && bufferIndex > 0) {
+                                sendNMEAViaUDP();
+                            }
                             return processMessage();
                         }
                         else
@@ -167,6 +179,10 @@ bool GNSSProcessor::processNMEAChar(char c)
                     receivedChecksum |= hexToInt(c);
                     if (validateChecksum())
                     {
+                        // Send complete NMEA sentence via UDP if passthrough is enabled
+                        if (udpPassthroughEnabled && bufferIndex > 0) {
+                            sendNMEAViaUDP();
+                        }
                         return processMessage();
                     }
                     else
@@ -1089,4 +1105,43 @@ void GNSSProcessor::sendGPSData()
         
     // Future implementation will send full GPS data packet
     // Format is defined in PGN.md - Main Antenna section
+}
+
+void GNSSProcessor::sendNMEAViaUDP()
+{
+    // Send raw NMEA sentence directly to AgIO when passthrough is enabled
+    // This bypasses PANDA/PAOGI formatting and sends the original GPS data
+    
+    if (!udpPassthroughEnabled || bufferIndex == 0)
+        return;
+    
+    // Build complete sentence with checksum and CRLF
+    uint8_t sentence[310];  // 300 for parseBuffer + 10 extra for checksum and CRLF
+    
+    // Copy the sentence data
+    memcpy(sentence, parseBuffer, bufferIndex);
+    int len = bufferIndex;
+    
+    // Add asterisk if not present
+    if (sentence[len-1] != '*') {
+        sentence[len++] = '*';
+    }
+    
+    // Add checksum (2 hex digits)
+    uint8_t checksum = calculatedChecksum;
+    sentence[len++] = "0123456789ABCDEF"[(checksum >> 4) & 0x0F];
+    sentence[len++] = "0123456789ABCDEF"[checksum & 0x0F];
+    
+    // Add CRLF
+    sentence[len++] = '\r';
+    sentence[len++] = '\n';
+    
+    // Send via UDP
+    sendUDPbytes(sentence, len);
+    
+    // Debug logging
+    if (enableDebug) {
+        sentence[len-2] = '\0';  // Null terminate for logging (remove CRLF)
+        LOG_DEBUG(EventSource::GNSS, "UDP Passthrough: %s", sentence);
+    }
 }

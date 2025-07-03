@@ -82,6 +82,9 @@ public:
         uint8_t messageTypeMask;
     };
 
+    // UDP passthrough control
+    void setUDPPassthrough(bool enabled) { udpPassthroughEnabled = enabled; }
+    bool isUDPPassthroughEnabled() const { return udpPassthroughEnabled; }
 
 private:
     // NMEA parsing state machine
@@ -115,6 +118,9 @@ private:
     
     // UBX parser for GPS2 RELPOSNED
     UBX_Parser* ubxParser;
+    
+    // UDP passthrough
+    bool udpPassthroughEnabled;
 
     // Internal parsing methods
     void resetParser();
@@ -130,6 +136,9 @@ private:
     bool parseKSXT();
     bool parseINSPVAA();
     bool parseINSPVAXA();
+    
+    // UDP passthrough
+    void sendNMEAViaUDP();
 
     // Field parsing utilities
     double parseLatitude(const char *lat, const char *ns);

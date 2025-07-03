@@ -19,6 +19,8 @@
 #include "web_pages/WebPages.h"
 #include <EEPROM.h>
 #include "EEPROMLayout.h"
+#include "ConfigManager.h"
+#include "GNSSProcessor.h"
 
 // For network config
 extern NetworkConfig netConfig;
@@ -125,6 +127,10 @@ void WebManager::setupRoutes() {
         request->send(200, "text/html", html);
     });
     
+    // Device Settings page
+    server->on("/device", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleDeviceSettingsPage(request);
+    });
     
     // Language selection
     server->on("/lang/en", HTTP_GET, [this](AsyncWebServerRequest* request) {
@@ -152,6 +158,9 @@ void WebManager::setupRoutes() {
     
     // Setup SSE routes - let's try v1.7.0
     setupSSERoutes();
+    
+    // Setup Device Settings API routes
+    setupDeviceSettingsAPI();
     
     // Restart API endpoint
     server->on("/api/restart", HTTP_POST, [](AsyncWebServerRequest* request) {
@@ -423,6 +432,80 @@ void WebManager::setupOTARoutes() {
         // Upload handler - called for each chunk of data
         [](AsyncWebServerRequest* request, String filename, size_t index, uint8_t* data, size_t len, bool final) {
             OTAHandler::handleOTAUpload(request, filename, index, data, len, final);
+        }
+    );
+}
+
+void WebManager::handleDeviceSettingsPage(AsyncWebServerRequest* request) {
+    String html = FPSTR(WebPageSelector::getDeviceSettingsPage(currentLanguage));
+    html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
+    
+    request->send(200, "text/html", html);
+}
+
+void WebManager::setupDeviceSettingsAPI() {
+    if (!server) return;
+    
+    // GET current device settings
+    server->on("/api/device/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
+        JsonDocument doc;
+        
+        // Get current UDP passthrough setting from ConfigManager
+        extern ConfigManager configManager;
+        doc["udpPassthrough"] = configManager.getGPSPassThrough();
+        
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    });
+    
+    // POST to update device settings
+    server->on("/api/device/settings", HTTP_POST,
+        [](AsyncWebServerRequest* request) {
+            // Response sent in onBody handler
+        },
+        nullptr,
+        [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            // Parse JSON body
+            if (index == 0) {
+                JsonDocument doc;
+                DeserializationError error = deserializeJson(doc, data, len);
+                
+                if (error) {
+                    JsonDocument response;
+                    response["success"] = false;
+                    response["error"] = "Invalid JSON";
+                    String jsonStr;
+                    serializeJson(response, jsonStr);
+                    request->send(400, "application/json", jsonStr);
+                    return;
+                }
+                
+                // Update UDP passthrough setting
+                bool udpPassthrough = doc["udpPassthrough"] | false;
+                
+                // Update ConfigManager and save to EEPROM
+                extern ConfigManager configManager;
+                configManager.setGPSPassThrough(udpPassthrough);
+                configManager.saveGPSConfig();  // Save to EEPROM
+                
+                // Apply the setting to GNSSProcessor
+                extern GNSSProcessor* gnssProcessorPtr;  // Defined in main.cpp
+                if (gnssProcessorPtr) {
+                    gnssProcessorPtr->setUDPPassthrough(udpPassthrough);
+                }
+                
+                // Log the change
+                LOG_INFO(EventSource::CONFIG, "UDP Passthrough %s via web interface", 
+                         udpPassthrough ? "enabled" : "disabled");
+                
+                // Send success response
+                JsonDocument response;
+                response["success"] = true;
+                String jsonStr;
+                serializeJson(response, jsonStr);
+                request->send(200, "application/json", jsonStr);
+            }
         }
     );
 }

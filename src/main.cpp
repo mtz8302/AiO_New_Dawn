@@ -40,6 +40,7 @@ SerialManager serialManager;
 I2CManager i2cManager;
 CANManager canManager;
 GNSSProcessor gnssProcessor;
+GNSSProcessor* gnssProcessorPtr = &gnssProcessor;  // Global pointer for external access
 IMUProcessor imuProcessor;
 ADProcessor adProcessor;
 PWMProcessor pwmProcessor;

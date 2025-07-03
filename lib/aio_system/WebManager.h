@@ -40,11 +40,13 @@ private:
     void setupNetworkAPI();
     void setupOTARoutes();
     void setupSSERoutes();
+    void setupDeviceSettingsAPI();
     void handleRoot(AsyncWebServerRequest* request);
     void handleApiStatus(AsyncWebServerRequest* request);
     void handleEventLoggerPage(AsyncWebServerRequest* request);
     void handleNetworkPage(AsyncWebServerRequest* request);
     void handleOTAPage(AsyncWebServerRequest* request);
+    void handleDeviceSettingsPage(AsyncWebServerRequest* request);
     void handleNotFound(AsyncWebServerRequest* request);
     
     // Helper to build select options for log levels
