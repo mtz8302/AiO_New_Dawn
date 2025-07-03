@@ -66,7 +66,7 @@ AiO New Dawn is a modular agricultural control system built on the Teensy 4.1 pl
 - Routes corrections between network/serial sources and GPS receivers
 
 **IMUProcessor** (`lib/aio_navigation/`)
-- Interfaces with BNO08x IMU for heading and roll data
+- Interfaces with BNO08x & TM172 IMU's for heading and roll data
 - Processes IMU data and forwards to AgOpenGPS via PGN
 
 **NAVProcessor** (`lib/aio_navigation/`)
@@ -125,6 +125,10 @@ AiO New Dawn is a modular agricultural control system built on the Teensy 4.1 pl
 
 **BNO_RVC** (`lib/aio_navigation/`)
 - Interfaces with BNO08x IMU in RVC (Robot Vacuum Cleaner) mode
+- Simplified binary protocol for heading and motion data
+
+**TM172AiOParser** (`lib/aio_navigation/`)
+- Interfaces with TM171 IMU
 - Simplified binary protocol for heading and motion data
 
 ## Data Flow
