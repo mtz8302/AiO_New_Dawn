@@ -146,6 +146,14 @@ void AutosteerProcessor::process() {
     }
     lastButtonReading = buttonReading;
     
+    // Check for work switch changes and log them
+    static bool lastWorkState = false;
+    bool currentWorkState = adProcessor.isWorkSwitchOn();
+    if (currentWorkState != lastWorkState) {
+        LOG_INFO(EventSource::AUTOSTEER, "Work switch %s", 
+                 currentWorkState ? "ON (sections active)" : "OFF (sections inactive)");
+        lastWorkState = currentWorkState;
+    }
     
     // Check Keya motor slip if steering is active
     if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN && 
@@ -497,7 +505,7 @@ void AutosteerProcessor::sendPGN253() {
     uint8_t switchByte = 0;
     switchByte |= (0 << 2);        // No remote/kickout for now
     switchByte |= (steerState << 1);  // Steer state in bit 1
-    switchByte |= 1;               // No work switch, so set bit 0
+    switchByte |= !adProcessor.isWorkSwitchOn();  // Work switch state (inverted) in bit 0
     
     uint8_t pgn253[] = {
         0x80, 0x81,                    // Header
