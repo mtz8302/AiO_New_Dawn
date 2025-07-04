@@ -154,13 +154,55 @@ void WheelAngleFusion::updateEncoderAngle() {
 }
 
 void WheelAngleFusion::updateGPSAngle() {
-    // TODO: Calculate GPS angle from heading rate and speed
-    // For now, just placeholder
-    gpsAngle = 0.0f;
-    gpsAngleValid = false;
+    // Get vehicle speed from GNSS
+    if (gnssProcessor) {
+        const auto& gpsData = gnssProcessor->getData();
+        if (gpsData.hasVelocity) {
+            // Convert knots to m/s
+            vehicleSpeed = gpsData.speedKnots * 0.514444f;
+        } else {
+            vehicleSpeed = 0.0f;
+        }
+        
+        // Store heading for rate calculation
+        float currentHeading = gpsData.headingTrue;
+        
+        // Calculate heading rate from GPS heading changes
+        if (!config.useIMUHeadingRate) {
+            uint32_t now = millis();
+            if (lastGPSTime > 0 && now - lastGPSTime < 500) {
+                float dt = (now - lastGPSTime) / 1000.0f;
+                float headingDelta = currentHeading - lastHeading;
+                
+                // Handle wrap-around at 0/360 degrees
+                if (headingDelta > 180.0f) headingDelta -= 360.0f;
+                if (headingDelta < -180.0f) headingDelta += 360.0f;
+                
+                headingRate = headingDelta / dt;
+            }
+            lastHeading = currentHeading;
+            lastGPSTime = now;
+        }
+    }
+    
+    // Get heading rate from IMU if available and configured
+    if (config.useIMUHeadingRate && imuProcessor) {
+        const auto& imuData = imuProcessor->getCurrentData();
+        if (imuData.isValid) {
+            headingRate = imuData.yawRate;
+        }
+    }
+    
+    // Calculate GPS angle using Ackermann geometry
+    gpsAngle = calculateGPSAngleFromHeadingRate(headingRate, vehicleSpeed);
+    
+    // GPS angle is valid if we have sufficient speed and reasonable heading rate
+    gpsAngleValid = (vehicleSpeed >= config.minSpeedForGPS) && 
+                    (abs(headingRate) < config.maxHeadingRate);
     
     if (gpsAngleValid) {
-        LOG_DEBUG(EventSource::AUTOSTEER, "GPS angle: %.2f°", gpsAngle);
+        LOG_DEBUG(EventSource::AUTOSTEER, "GPS angle: %.2f° (speed: %.1f m/s, rate: %.1f°/s)", 
+                  gpsAngle, vehicleSpeed, headingRate);
     }
 }
 
