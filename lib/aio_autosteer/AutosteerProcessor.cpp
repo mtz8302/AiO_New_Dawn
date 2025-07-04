@@ -50,6 +50,18 @@ AutosteerProcessor* AutosteerProcessor::getInstance() {
 }
 
 bool AutosteerProcessor::init() {
+    // Check if already initialized to prevent duplicate PGN registrations
+    static bool initialized = false;
+    if (initialized) {
+        LOG_DEBUG(EventSource::AUTOSTEER, "AutosteerProcessor already initialized, updating VWAS only");
+        
+        // Just update VWAS if needed
+        if (configManager.getINSUseFusion() && !wheelAngleFusionPtr) {
+            initializeFusion();
+        }
+        return true;
+    }
+    
     LOG_INFO(EventSource::AUTOSTEER, "Initializing AutosteerProcessor");
     
     // Make sure instance is set
@@ -70,39 +82,9 @@ bool AutosteerProcessor::init() {
               steerConfig.PressureSensor ? "Yes" : "No", steerConfig.PulseCountMax,
               steerConfig.IsRelayActiveHigh ? "HIGH" : "LOW");
     
-    // Initialize wheel angle fusion if enabled
+    // Initialize Virtual WAS if enabled
     if (configManager.getINSUseFusion()) {
-        LOG_INFO(EventSource::AUTOSTEER, "Sensor fusion enabled - initializing WheelAngleFusion");
-        
-        // Create fusion instance if not already created
-        if (!wheelAngleFusionPtr) {
-            wheelAngleFusionPtr = new WheelAngleFusion();
-        }
-        
-        // Initialize with sensor interfaces
-        // Note: We need the Keya driver, GNSS, and IMU processors
-        KeyaCANDriver* keyaDriver = nullptr;
-        if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN) {
-            keyaDriver = static_cast<KeyaCANDriver*>(motorPTR);
-        }
-        
-        extern GNSSProcessor* gnssProcessorPtr;
-        extern IMUProcessor imuProcessor;  // Global instance, not pointer
-        
-        if (wheelAngleFusionPtr->init(keyaDriver, gnssProcessorPtr, &imuProcessor)) {
-            LOG_INFO(EventSource::AUTOSTEER, "WheelAngleFusion initialized successfully");
-            
-            // Load fusion config from saved values
-            WheelAngleFusion::Config fusionConfig = wheelAngleFusionPtr->getConfig();
-            fusionConfig.wheelbase = 2.5f;  // TODO: Load from config
-            fusionConfig.countsPerDegree = 100.0f;  // TODO: Load from calibration
-            wheelAngleFusionPtr->setConfig(fusionConfig);
-        } else {
-            LOG_ERROR(EventSource::AUTOSTEER, "Failed to initialize WheelAngleFusion");
-            configManager.setINSUseFusion(false);  // Disable fusion
-            delete wheelAngleFusionPtr;
-            wheelAngleFusionPtr = nullptr;
-        }
+        initializeFusion();
     }
     
     // Initialize button pin
@@ -140,7 +122,42 @@ bool AutosteerProcessor::init() {
     }
     
     LOG_INFO(EventSource::AUTOSTEER, "AutosteerProcessor initialized successfully");
+    initialized = true;  // Mark as initialized to prevent duplicate PGN registrations
     return true;
+}
+
+void AutosteerProcessor::initializeFusion() {
+    LOG_INFO(EventSource::AUTOSTEER, "Virtual WAS enabled - initializing VWAS system");
+    
+    // Create fusion instance if not already created
+    if (!wheelAngleFusionPtr) {
+        wheelAngleFusionPtr = new WheelAngleFusion();
+    }
+    
+    // Initialize with sensor interfaces
+    // Note: We need the Keya driver, GNSS, and IMU processors
+    KeyaCANDriver* keyaDriver = nullptr;
+    if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN) {
+        keyaDriver = static_cast<KeyaCANDriver*>(motorPTR);
+    }
+    
+    extern GNSSProcessor* gnssProcessorPtr;
+    extern IMUProcessor imuProcessor;  // Global instance, not pointer
+    
+    if (wheelAngleFusionPtr->init(keyaDriver, gnssProcessorPtr, &imuProcessor)) {
+        LOG_INFO(EventSource::AUTOSTEER, "Virtual WAS (VWAS) initialized successfully");
+        
+        // Load fusion config from saved values
+        WheelAngleFusion::Config fusionConfig = wheelAngleFusionPtr->getConfig();
+        fusionConfig.wheelbase = 2.5f;  // TODO: Load from config
+        fusionConfig.countsPerDegree = 100.0f;  // TODO: Load from calibration
+        wheelAngleFusionPtr->setConfig(fusionConfig);
+    } else {
+        LOG_ERROR(EventSource::AUTOSTEER, "Failed to initialize Virtual WAS");
+        configManager.setINSUseFusion(false);  // Disable VWAS
+        delete wheelAngleFusionPtr;
+        wheelAngleFusionPtr = nullptr;
+    }
 }
 
 void AutosteerProcessor::process() {
@@ -164,7 +181,7 @@ void AutosteerProcessor::process() {
     }
     previousLinkState = currentLinkState;
     
-    // Update wheel angle fusion if enabled
+    // Update Virtual WAS if enabled
     if (wheelAngleFusionPtr && configManager.getINSUseFusion()) {
         float dt = LOOP_TIME / 1000.0f;  // Convert to seconds
         wheelAngleFusionPtr->update(dt);
@@ -634,11 +651,11 @@ void AutosteerProcessor::sendPGN253() {
 }
 
 void AutosteerProcessor::updateMotorControl() {
-    // Get current steering angle - use fusion if enabled and available
+    // Get current steering angle - use VWAS if enabled and available
     if (configManager.getINSUseFusion() && wheelAngleFusionPtr && wheelAngleFusionPtr->isHealthy()) {
         currentAngle = wheelAngleFusionPtr->getFusedAngle();
     } else {
-        // Fall back to traditional WAS
+        // Fall back to physical WAS
         currentAngle = adProcessor.getWASAngle();
     }
     

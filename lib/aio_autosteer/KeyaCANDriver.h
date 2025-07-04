@@ -172,6 +172,10 @@ public:
         static uint16_t lastPosition = 0;
         static bool firstCall = true;
         
+        if (!heartbeatValid) {
+            return 0;  // No valid data yet
+        }
+        
         if (firstCall) {
             firstCall = false;
             lastPosition = motorPosition;

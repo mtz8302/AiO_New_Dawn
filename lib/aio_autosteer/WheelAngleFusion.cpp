@@ -48,7 +48,7 @@ WheelAngleFusion::WheelAngleFusion() :
 }
 
 bool WheelAngleFusion::init(KeyaCANDriver* keya, GNSSProcessor* gnss, IMUProcessor* imu) {
-    LOG_INFO(EventSource::AUTOSTEER, "Initializing WheelAngleFusion");
+    LOG_INFO(EventSource::AUTOSTEER, "Initializing Virtual WAS (VWAS)");
     
     // Store sensor interfaces
     keyaDriver = keya;
@@ -57,12 +57,12 @@ bool WheelAngleFusion::init(KeyaCANDriver* keya, GNSSProcessor* gnss, IMUProcess
     
     // Validate interfaces
     if (!keyaDriver) {
-        LOG_ERROR(EventSource::AUTOSTEER, "WheelAngleFusion: No Keya driver provided");
+        LOG_ERROR(EventSource::AUTOSTEER, "VWAS: No Keya driver provided");
         return false;
     }
     
     if (!gnssProcessor && !imuProcessor) {
-        LOG_ERROR(EventSource::AUTOSTEER, "WheelAngleFusion: No heading rate source (GPS or IMU)");
+        LOG_ERROR(EventSource::AUTOSTEER, "VWAS: No heading rate source (GPS or IMU)");
         return false;
     }
     
@@ -72,7 +72,7 @@ bool WheelAngleFusion::init(KeyaCANDriver* keya, GNSSProcessor* gnss, IMUProcess
     }
     varianceBuffer = new float[config.varianceBufferSize];
     if (!varianceBuffer) {
-        LOG_ERROR(EventSource::AUTOSTEER, "WheelAngleFusion: Failed to allocate variance buffer");
+        LOG_ERROR(EventSource::AUTOSTEER, "VWAS: Failed to allocate variance buffer");
         return false;
     }
     
@@ -83,6 +83,9 @@ bool WheelAngleFusion::init(KeyaCANDriver* keya, GNSSProcessor* gnss, IMUProcess
     
     // Initialize Kalman filter state
     fusedAngle = 0.0f;
+    predictedAngle = 0.0f;
+    encoderAngle = 0.0f;
+    gpsAngle = 0.0f;
     uncertainty = config.initialUncertainty;
     
     // Initialize timing
@@ -90,7 +93,7 @@ bool WheelAngleFusion::init(KeyaCANDriver* keya, GNSSProcessor* gnss, IMUProcess
     lastGPSTime = millis();
     driftStartTime = millis();
     
-    LOG_INFO(EventSource::AUTOSTEER, "WheelAngleFusion initialized successfully");
+    LOG_INFO(EventSource::AUTOSTEER, "Virtual WAS initialized successfully");
     LOG_INFO(EventSource::AUTOSTEER, "  Wheelbase: %.2f m", config.wheelbase);
     LOG_INFO(EventSource::AUTOSTEER, "  Counts/degree: %.1f", config.countsPerDegree);
     LOG_INFO(EventSource::AUTOSTEER, "  Min GPS speed: %.1f m/s", config.minSpeedForGPS);
@@ -140,10 +143,8 @@ void WheelAngleFusion::updateEncoderAngle() {
     float centeredAngle = encoderAngle - encoderOffset;
     
     // Constrain to reasonable limits
-    if (centeredAngle > config.maxSteeringAngle) {
-        centeredAngle = config.maxSteeringAngle;
-    } else if (centeredAngle < -config.maxSteeringAngle) {
-        centeredAngle = -config.maxSteeringAngle;
+    if (abs(centeredAngle) > config.maxSteeringAngle) {
+        centeredAngle = constrain(centeredAngle, -config.maxSteeringAngle, config.maxSteeringAngle);
     }
     
     encoderAngle = centeredAngle;
@@ -331,6 +332,11 @@ bool WheelAngleFusion::isHealthy() const {
         return false;  // No updates for 1 second
     }
     
+    // Check if we've had at least one GPS update
+    if (lastGPSTime == 0 || !gpsAngleValid) {
+        return false;  // No valid GPS data yet
+    }
+    
     // Check if uncertainty is reasonable
     if (uncertainty > 50.0f) {
         return false;  // Too uncertain
@@ -339,6 +345,11 @@ bool WheelAngleFusion::isHealthy() const {
     // Check if angle is reasonable
     if (abs(fusedAngle) > config.maxSteeringAngle * 1.5f) {
         return false;  // Angle out of bounds
+    }
+    
+    // Check if we have minimum speed for reliable fusion
+    if (vehicleSpeed < config.minSpeedForGPS) {
+        return false;  // Too slow for reliable GPS angle
     }
     
     return true;

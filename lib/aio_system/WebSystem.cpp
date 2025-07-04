@@ -21,6 +21,7 @@
 #include "EEPROMLayout.h"
 #include "ConfigManager.h"
 #include "GNSSProcessor.h"
+#include "AutosteerProcessor.h"
 
 // For network config
 extern NetworkConfig netConfig;
@@ -466,9 +467,10 @@ void WebManager::setupDeviceSettingsAPI() {
     server->on("/api/device/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
         JsonDocument doc;
         
-        // Get current UDP passthrough setting from ConfigManager
+        // Get current settings from ConfigManager
         extern ConfigManager configManager;
         doc["udpPassthrough"] = configManager.getGPSPassThrough();
+        doc["sensorFusion"] = configManager.getINSUseFusion();
         
         String response;
         serializeJson(doc, response);
@@ -499,21 +501,33 @@ void WebManager::setupDeviceSettingsAPI() {
                 
                 // Update UDP passthrough setting
                 bool udpPassthrough = doc["udpPassthrough"] | false;
+                bool sensorFusion = doc["sensorFusion"] | false;
                 
                 // Update ConfigManager and save to EEPROM
                 extern ConfigManager configManager;
                 configManager.setGPSPassThrough(udpPassthrough);
-                configManager.saveGPSConfig();  // Save to EEPROM
+                configManager.setINSUseFusion(sensorFusion);
+                configManager.saveGPSConfig();  // Save GPS settings
+                configManager.saveINSConfig();  // Save INS/fusion settings
                 
-                // Apply the setting to GNSSProcessor
+                // Apply the UDP setting to GNSSProcessor
                 extern GNSSProcessor* gnssProcessorPtr;  // Defined in main.cpp
                 if (gnssProcessorPtr) {
                     gnssProcessorPtr->setUDPPassthrough(udpPassthrough);
                 }
                 
-                // Log the change
+                // Apply VWAS setting to AutosteerProcessor
+                extern AutosteerProcessor* autosteerPTR;
+                if (autosteerPTR && sensorFusion) {
+                    // Re-initialize autosteer to setup VWAS if just enabled
+                    autosteerPTR->init();
+                }
+                
+                // Log the changes
                 LOG_INFO(EventSource::CONFIG, "UDP Passthrough %s via web interface", 
                          udpPassthrough ? "enabled" : "disabled");
+                LOG_INFO(EventSource::CONFIG, "Virtual WAS (VWAS) %s via web interface", 
+                         sensorFusion ? "enabled" : "disabled");
                 
                 // Send success response
                 JsonDocument response;

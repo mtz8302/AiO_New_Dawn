@@ -1,4 +1,4 @@
-// WheelAngleFusion.h - Sensor fusion for wheel angle estimation without WAS
+// WheelAngleFusion.h - Virtual WAS (VWAS) using sensor fusion
 #ifndef WHEEL_ANGLE_FUSION_H
 #define WHEEL_ANGLE_FUSION_H
 
@@ -14,12 +14,13 @@ class GNSSProcessor;
 class IMUProcessor;
 
 /**
- * WheelAngleFusion - Implements sensor fusion for wheel angle estimation
+ * WheelAngleFusion - Virtual Wheel Angle Sensor (VWAS)
  * 
- * Combines multiple sensor inputs to estimate steering angle without a 
- * traditional Wheel Angle Sensor (WAS). Uses an adaptive Kalman filter
- * to fuse motor encoder data with GPS/INS heading rate.
+ * Creates a virtual WAS by combining multiple sensor inputs to estimate 
+ * steering angle. Uses an adaptive Kalman filter to fuse motor encoder 
+ * data with GPS/INS heading rate.
  * 
+ * This provides a software-based wheel angle sensor using existing hardware.
  * Based on proven algorithm from AOG_Teensy_UM98X project.
  */
 class WheelAngleFusion {
