@@ -160,55 +160,66 @@ const char EN_WASDEMO_PAGE[] PROGMEM = R"rawliteral(
             </div>
         </div>
         
-        <button type='button' onclick='window.location.href = \'/\''>Back to Home</button>
+        <button type='button' onclick='window.location="/"'>Back to Home</button>
     </div>
     
     <script>
-        var eventSource = null;
+        var pollInterval = null;
         var updateCount = 0;
         var lastCountTime = Date.now();
+        var isConnected = false;
+        
+        function updateWASData() {
+            fetch('/api/was/angle')
+                .then(response => response.json())
+                .then(data => {
+                    if (!isConnected) {
+                        isConnected = true;
+                        document.getElementById('connectionStatus').textContent = 'Connected';
+                        document.getElementById('connectionStatus').className = 'connection-status connected';
+                    }
+                    
+                    var angle = data.angle;
+                    
+                    // Update numeric display
+                    document.getElementById('angleValue').textContent = angle.toFixed(1);
+                    
+                    // Calculate position (map -45 to 45 into 0% to 100%)
+                    var percent = ((angle + 45) / 90) * 100;
+                    percent = Math.max(0, Math.min(100, percent));
+                    
+                    // Update indicator position
+                    document.getElementById('indicator').style.left = percent + '%';
+                    
+                    // Update stats
+                    updateCount++;
+                    var now = Date.now();
+                    if (now - lastCountTime >= 1000) {
+                        document.getElementById('updateRate').textContent = updateCount + ' Hz';
+                        updateCount = 0;
+                        lastCountTime = now;
+                    }
+                })
+                .catch(error => {
+                    if (isConnected) {
+                        isConnected = false;
+                        document.getElementById('connectionStatus').textContent = 'Connection Error';
+                        document.getElementById('connectionStatus').className = 'connection-status disconnected';
+                    }
+                });
+        }
         
         window.onload = function() {
-            eventSource = new EventSource('/events/was');
+            // Start polling at 10Hz (100ms)
+            pollInterval = setInterval(updateWASData, 100);
             
-            eventSource.addEventListener('was-data', function(e) {
-                var data = JSON.parse(e.data);
-                var angle = data.angle;
-                
-                // Update numeric display
-                document.getElementById('angleValue').textContent = angle.toFixed(1);
-                
-                // Calculate position (map -45 to 45 into 0% to 100%)
-                var percent = ((angle + 45) / 90) * 100;
-                percent = Math.max(0, Math.min(100, percent));
-                
-                // Update indicator position
-                document.getElementById('indicator').style.left = percent + '%';
-                
-                // Update stats
-                updateCount++;
-                var now = Date.now();
-                if (now - lastCountTime >= 1000) {
-                    document.getElementById('updateRate').textContent = updateCount + ' Hz';
-                    updateCount = 0;
-                    lastCountTime = now;
-                }
-            });
-            
-            eventSource.onopen = function() {
-                document.getElementById('connectionStatus').textContent = 'Connected';
-                document.getElementById('connectionStatus').className = 'connection-status connected';
-            };
-            
-            eventSource.onerror = function() {
-                document.getElementById('connectionStatus').textContent = 'Connection Error';
-                document.getElementById('connectionStatus').className = 'connection-status disconnected';
-            };
+            // Initial update
+            updateWASData();
         };
         
         window.onbeforeunload = function() {
-            if (eventSource) {
-                eventSource.close();
+            if (pollInterval) {
+                clearInterval(pollInterval);
             }
         };
     </script>

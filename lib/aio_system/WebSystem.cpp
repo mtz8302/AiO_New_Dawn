@@ -37,7 +37,7 @@ using namespace qindesign::network;
 
 WebManager::WebManager() : server(nullptr), wasEvents(nullptr), isRunning(false), 
                            currentLanguage(WebLanguage::ENGLISH),
-                           lastWASAngle(0.0f), lastWASUpdate(0) {
+                           lastWASAngle(0.0f), lastWASUpdate(0), systemReady(false) {
     // Load language preference from EEPROM
     uint8_t savedLang = EEPROM.read(WEB_CONFIG_ADDR);
     if (savedLang == 0 || savedLang == 1) {
@@ -127,6 +127,19 @@ void WebManager::setupRoutes() {
         request->send(200, "text/html", html);
     });
     
+    // WAS data endpoint (polling-based instead of SSE)
+    server->on("/api/was/angle", HTTP_GET, [](AsyncWebServerRequest* request) {
+        ADProcessor* adProc = ADProcessor::getInstance();
+        if (!adProc) {
+            request->send(503, "application/json", "{\"error\":\"ADProcessor not available\"}");
+            return;
+        }
+        
+        float angle = adProc->getWASAngle();
+        String json = "{\"angle\":" + String(angle, 1) + ",\"ts\":" + String(millis()) + "}";
+        request->send(200, "application/json", json);
+    });
+    
     // Device Settings page
     server->on("/device", HTTP_GET, [this](AsyncWebServerRequest* request) {
         handleDeviceSettingsPage(request);
@@ -157,7 +170,10 @@ void WebManager::setupRoutes() {
     setupOTARoutes();
     
     // Setup SSE routes - let's try v1.7.0
-    setupSSERoutes();
+    // DISABLED: SSE causing hard reboots with AsyncWebServer_Teensy41 v1.7.0
+    // TODO: Investigate alternative implementation or library update
+    // delay(10);
+    // setupSSERoutes();
     
     // Setup Device Settings API routes
     setupDeviceSettingsAPI();
@@ -525,20 +541,24 @@ void WebManager::setupSSERoutes() {
     
     // Create AsyncEventSource for WAS data
     wasEvents = new AsyncEventSource("/events/was");
+    if (!wasEvents) {
+        LOG_ERROR(EventSource::NETWORK, "Failed to create AsyncEventSource");
+        return;
+    }
     
-    // Add event handler
+    // Add event handler with error checking
     wasEvents->onConnect([this](AsyncEventSourceClient* client) {
+        if (!client || !client->client()) {
+            LOG_ERROR(EventSource::NETWORK, "Invalid SSE client");
+            return;
+        }
+        
         IPAddress clientIP = client->client()->remoteIP();
         LOG_INFO(EventSource::NETWORK, "SSE client connected from %d.%d.%d.%d", 
                  clientIP[0], clientIP[1], clientIP[2], clientIP[3]);
         
-        // Send initial data immediately
-        ADProcessor* adProc = ADProcessor::getInstance();
-        float currentAngle = adProc ? adProc->getWASAngle() : 0.0f;
-        
-        String json = "{\"angle\":" + String(currentAngle, 1) + 
-                     ",\"ts\":" + String(millis()) + "}";
-        client->send(json.c_str(), "was-data");
+        // Don't send initial data here - let updateWASClients handle it
+        // This avoids potential race conditions during connection
     });
     
     // Attach event source to server
@@ -548,8 +568,18 @@ void WebManager::setupSSERoutes() {
 }
 
 void WebManager::updateWASClients() {
-    // Only process if we have connected clients
-    if (!wasEvents || wasEvents->count() == 0) {
+    // Don't process until system is ready
+    if (!systemReady) {
+        return;
+    }
+    
+    // Only process if we have event source
+    if (!wasEvents) {
+        return;
+    }
+    
+    // Check if we have connected clients
+    if (wasEvents->count() == 0) {
         return;
     }
     
@@ -559,9 +589,14 @@ void WebManager::updateWASClients() {
         return;
     }
     
-    // Get current WAS angle from ADProcessor
+    // Get current WAS angle from ADProcessor with error checking
     ADProcessor* adProc = ADProcessor::getInstance();
-    float currentAngle = adProc ? adProc->getWASAngle() : 0.0f;
+    if (!adProc) {
+        LOG_ERROR(EventSource::NETWORK, "ADProcessor not available for WAS data");
+        return;
+    }
+    
+    float currentAngle = adProc->getWASAngle();
     
     // Only send if angle changed significantly (0.1 degree threshold)
     if (abs(currentAngle - lastWASAngle) > 0.1f) {

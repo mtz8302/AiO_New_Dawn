@@ -285,6 +285,9 @@ void setup()
   // Exit startup mode - start enforcing configured log levels
   EventLogger::getInstance()->setStartupMode(false);
   
+  // Mark web manager as ready for SSE updates
+  webManager.setSystemReady();
+  
   LOG_INFO(EventSource::SYSTEM, "=== System Ready ===");
 }
 
