@@ -118,11 +118,39 @@ void WheelAngleFusion::update(float dt) {
 }
 
 void WheelAngleFusion::updateEncoderAngle() {
-    // TODO: Get motor position from KeyaCANDriver
-    // For now, just placeholder
-    encoderAngle = 0.0f;
+    if (!keyaDriver) {
+        encoderAngle = 0.0f;
+        return;
+    }
     
-    LOG_DEBUG(EventSource::AUTOSTEER, "Encoder angle: %.2f°", encoderAngle);
+    // Get position delta from motor
+    int32_t deltaPosition = keyaDriver->getPositionDelta();
+    
+    // Convert delta to degrees
+    float deltaAngle = (float)deltaPosition / config.countsPerDegree;
+    
+    // Update encoder angle (accumulate changes)
+    encoderAngle += deltaAngle;
+    
+    // Apply centering offset
+    float centeredAngle = encoderAngle - encoderOffset;
+    
+    // Constrain to reasonable limits
+    if (centeredAngle > config.maxSteeringAngle) {
+        centeredAngle = config.maxSteeringAngle;
+    } else if (centeredAngle < -config.maxSteeringAngle) {
+        centeredAngle = -config.maxSteeringAngle;
+    }
+    
+    encoderAngle = centeredAngle;
+    
+    // Log significant changes
+    static float lastLoggedAngle = 0.0f;
+    if (abs(encoderAngle - lastLoggedAngle) > 1.0f) {
+        LOG_DEBUG(EventSource::AUTOSTEER, "Encoder angle: %.2f° (delta: %d counts)", 
+                  encoderAngle, deltaPosition);
+        lastLoggedAngle = encoderAngle;
+    }
 }
 
 void WheelAngleFusion::updateGPSAngle() {
@@ -260,8 +288,21 @@ void WheelAngleFusion::stopCalibration() {
 }
 
 void WheelAngleFusion::setEncoderCenter() {
-    // TODO: Get current encoder position and set as center
-    LOG_INFO(EventSource::AUTOSTEER, "Encoder center position set");
+    if (!keyaDriver) {
+        LOG_ERROR(EventSource::AUTOSTEER, "Cannot set encoder center - no Keya driver");
+        return;
+    }
+    
+    // Get current position and reset accumulated angle
+    uint16_t currentPos = keyaDriver->getMotorPosition();
+    encoderOffset = encoderAngle;  // Store current angle as offset
+    encoderAngle = 0.0f;           // Reset to zero
+    
+    // Reset the delta tracking in the driver
+    keyaDriver->getPositionDelta(); // Call to reset internal tracking
+    
+    LOG_INFO(EventSource::AUTOSTEER, "Encoder center set at position %u (offset: %.2f°)", 
+             currentPos, encoderOffset);
 }
 
 void WheelAngleFusion::reset() {
