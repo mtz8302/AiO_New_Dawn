@@ -165,27 +165,72 @@ void WheelAngleFusion::updateGPSAngle() {
 }
 
 void WheelAngleFusion::updateKalmanFilter(float dt) {
-    // Prediction step
-    // TODO: Implement prediction using encoder delta
-    predictedAngle = fusedAngle;
-    float predictedUncertainty = uncertainty + config.processNoise;
+    // Prediction step using encoder angle
+    // The encoder provides our best estimate of angle change
+    predictedAngle = encoderAngle;
     
-    // Update step
-    if (gpsAngleValid) {
-        // Calculate Kalman gain with adaptive measurement noise
+    // Increase uncertainty over time (process noise)
+    // Q represents how much we trust the encoder over time
+    float predictedUncertainty = uncertainty + config.processNoise * dt;
+    
+    // Update step - fuse with GPS angle if available
+    if (gpsAngleValid && vehicleSpeed >= config.minSpeedForGPS) {
+        // Calculate adaptive measurement noise
+        // R represents how much we trust the GPS measurement
         float adaptiveR = config.measurementNoise * measurementVariance;
+        
+        // Calculate Kalman gain
+        // K determines how much we trust the new measurement vs prediction
         kalmanGain = predictedUncertainty / (predictedUncertainty + adaptiveR);
         
+        // Calculate innovation (measurement residual)
+        float innovation = gpsAngle - predictedAngle;
+        
+        // Sanity check innovation - large values indicate potential GPS error
+        if (abs(innovation) > 30.0f) {
+            LOG_WARNING(EventSource::AUTOSTEER, "Large innovation: %.1f° - GPS may be unreliable", 
+                        innovation);
+            // Reduce Kalman gain for large innovations
+            kalmanGain *= 0.1f;
+        }
+        
         // Update estimate
-        fusedAngle = predictedAngle + kalmanGain * (gpsAngle - predictedAngle);
+        fusedAngle = predictedAngle + kalmanGain * innovation;
+        
+        // Update uncertainty
         uncertainty = (1.0f - kalmanGain) * predictedUncertainty;
         
-        LOG_DEBUG(EventSource::AUTOSTEER, "Kalman update: K=%.3f, fused=%.2f°", 
-                  kalmanGain, fusedAngle);
+        // Apply encoder drift correction based on GPS
+        if (config.enableDriftCompensation && abs(innovation) < 5.0f) {
+            // Small, consistent differences indicate encoder drift
+            encoderDrift = encoderDrift * 0.99f + innovation * 0.01f;
+        }
+        
+        LOG_DEBUG(EventSource::AUTOSTEER, "Kalman: enc=%.1f° gps=%.1f° fused=%.1f° K=%.3f innov=%.1f°", 
+                  encoderAngle, gpsAngle, fusedAngle, kalmanGain, innovation);
     } else {
-        // No GPS update, just use prediction
+        // No GPS update, just use encoder prediction
         fusedAngle = predictedAngle;
         uncertainty = predictedUncertainty;
+        
+        // Apply drift compensation if we have it
+        if (config.enableDriftCompensation && abs(encoderDrift) > 0.01f) {
+            fusedAngle -= encoderDrift * dt;
+        }
+    }
+    
+    // Constrain final angle to reasonable limits
+    if (fusedAngle > config.maxSteeringAngle) {
+        fusedAngle = config.maxSteeringAngle;
+    } else if (fusedAngle < -config.maxSteeringAngle) {
+        fusedAngle = -config.maxSteeringAngle;
+    }
+    
+    // Constrain uncertainty to reasonable bounds
+    if (uncertainty > 100.0f) {
+        uncertainty = 100.0f;
+    } else if (uncertainty < 0.001f) {
+        uncertainty = 0.001f;
     }
 }
 

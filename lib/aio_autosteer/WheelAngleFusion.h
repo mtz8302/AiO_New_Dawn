@@ -5,6 +5,9 @@
 #include <Arduino.h>
 #include "EventLogger.h"
 
+// Math constants are already defined in Arduino.h
+// DEG_TO_RAD and RAD_TO_DEG
+
 // Forward declarations
 class KeyaCANDriver;
 class GNSSProcessor;
