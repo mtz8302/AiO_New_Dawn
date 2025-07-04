@@ -8,6 +8,10 @@
 // Global instance pointer
 WheelAngleFusion* wheelAngleFusionPtr = nullptr;
 
+// External sensor instances
+extern GNSSProcessor* gnssProcessorPtr;
+extern IMUProcessor imuProcessor;
+
 WheelAngleFusion::WheelAngleFusion() :
     keyaDriver(nullptr),
     gnssProcessor(nullptr),
