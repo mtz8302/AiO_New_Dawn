@@ -24,6 +24,7 @@ public:
     
     // SSE support for real-time data
     void updateWASClients();
+    void setSystemReady() { systemReady = true; }
     
 private:
     AsyncWebServer* server;
@@ -34,6 +35,7 @@ private:
     // For WAS data updates
     float lastWASAngle;
     uint32_t lastWASUpdate;
+    bool systemReady;
     
     void setupRoutes();
     void setupEventLoggerAPI();

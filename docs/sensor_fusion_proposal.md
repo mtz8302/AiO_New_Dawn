@@ -212,6 +212,7 @@ public:
 |------------|--------|-------------------|
 | Minimum speed requirement | No angle estimate when stopped | Use last known angle, detect stationary state |
 | GPS outages (tunnels, trees) | Temporary degraded accuracy | Fall back to IMU+encoder, limit integration time |
+| Orbital valve non-linearity | Variable motor/wheel ratio | Multi-point calibration, real-time learning, load compensation |
 | Calibration drift | Growing angle offset | Auto-calibration during straight sections |
 | Initial setup complexity | User frustration | Guided calibration wizard with visual feedback |
 | Encoder resolution | Angle quantization noise | Interpolation, recommend high-resolution encoders |

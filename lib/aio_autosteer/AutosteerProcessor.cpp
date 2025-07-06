@@ -8,6 +8,7 @@
 #include "EventLogger.h"
 #include "QNetworkBase.h"
 #include "HardwareManager.h"
+#include "WheelAngleFusion.h"
 #include <cmath>  // For sin() function
 
 // External network function
@@ -18,6 +19,7 @@ extern ConfigManager configManager;
 extern LEDManager ledManager;
 extern ADProcessor adProcessor;
 extern MotorDriverInterface* motorPTR;
+extern WheelAngleFusion* wheelAngleFusionPtr;
 
 // External network config
 extern struct NetworkConfig netConfig;
@@ -48,6 +50,18 @@ AutosteerProcessor* AutosteerProcessor::getInstance() {
 }
 
 bool AutosteerProcessor::init() {
+    // Check if already initialized to prevent duplicate PGN registrations
+    static bool initialized = false;
+    if (initialized) {
+        LOG_DEBUG(EventSource::AUTOSTEER, "AutosteerProcessor already initialized, updating VWAS only");
+        
+        // Just update VWAS if needed
+        if (configManager.getINSUseFusion() && !wheelAngleFusionPtr) {
+            initializeFusion();
+        }
+        return true;
+    }
+    
     LOG_INFO(EventSource::AUTOSTEER, "Initializing AutosteerProcessor");
     
     // Make sure instance is set
@@ -67,6 +81,11 @@ bool AutosteerProcessor::init() {
     LOG_DEBUG(EventSource::AUTOSTEER, "Loaded steer config from EEPROM: Pressure=%s, PulseMax=%d, RelayActive=%s", 
               steerConfig.PressureSensor ? "Yes" : "No", steerConfig.PulseCountMax,
               steerConfig.IsRelayActiveHigh ? "HIGH" : "LOW");
+    
+    // Initialize Virtual WAS if enabled
+    if (configManager.getINSUseFusion()) {
+        initializeFusion();
+    }
     
     // Initialize button pin
     pinMode(2, INPUT_PULLUP);
@@ -103,7 +122,42 @@ bool AutosteerProcessor::init() {
     }
     
     LOG_INFO(EventSource::AUTOSTEER, "AutosteerProcessor initialized successfully");
+    initialized = true;  // Mark as initialized to prevent duplicate PGN registrations
     return true;
+}
+
+void AutosteerProcessor::initializeFusion() {
+    LOG_INFO(EventSource::AUTOSTEER, "Virtual WAS enabled - initializing VWAS system");
+    
+    // Create fusion instance if not already created
+    if (!wheelAngleFusionPtr) {
+        wheelAngleFusionPtr = new WheelAngleFusion();
+    }
+    
+    // Initialize with sensor interfaces
+    // Note: We need the Keya driver, GNSS, and IMU processors
+    KeyaCANDriver* keyaDriver = nullptr;
+    if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN) {
+        keyaDriver = static_cast<KeyaCANDriver*>(motorPTR);
+    }
+    
+    extern GNSSProcessor* gnssProcessorPtr;
+    extern IMUProcessor imuProcessor;  // Global instance, not pointer
+    
+    if (wheelAngleFusionPtr->init(keyaDriver, gnssProcessorPtr, &imuProcessor)) {
+        LOG_INFO(EventSource::AUTOSTEER, "Virtual WAS (VWAS) initialized successfully");
+        
+        // Load fusion config from saved values
+        WheelAngleFusion::Config fusionConfig = wheelAngleFusionPtr->getConfig();
+        fusionConfig.wheelbase = 2.5f;  // TODO: Load from config
+        fusionConfig.countsPerDegree = 100.0f;  // TODO: Load from calibration
+        wheelAngleFusionPtr->setConfig(fusionConfig);
+    } else {
+        LOG_ERROR(EventSource::AUTOSTEER, "Failed to initialize Virtual WAS");
+        configManager.setINSUseFusion(false);  // Disable VWAS
+        delete wheelAngleFusionPtr;
+        wheelAngleFusionPtr = nullptr;
+    }
 }
 
 void AutosteerProcessor::process() {
@@ -126,6 +180,12 @@ void AutosteerProcessor::process() {
         linkWasDown = true;  // Set flag for handleSteerData
     }
     previousLinkState = currentLinkState;
+    
+    // Update Virtual WAS if enabled
+    if (wheelAngleFusionPtr && configManager.getINSUseFusion()) {
+        float dt = LOOP_TIME / 1000.0f;  // Convert to seconds
+        wheelAngleFusionPtr->update(dt);
+    }
     
     // Read button state with debouncing
     static uint32_t lastButtonPrint = 0;
@@ -555,6 +615,9 @@ void AutosteerProcessor::sendPGN253() {
     // Bit 0: work switch (inverted)
     // Bit 1: steer switch (inverted steerState)
     // Bit 2: remote/kickout input
+    // Bit 3: unused
+    // Bit 4: unused
+    // Bit 5: fusion active (1 = fusion, 0 = WAS)
     uint8_t switchByte = 0;
     switchByte |= (0 << 2);        // No remote/kickout for now
     switchByte |= (steerState << 1);  // Steer state in bit 1
@@ -588,8 +651,13 @@ void AutosteerProcessor::sendPGN253() {
 }
 
 void AutosteerProcessor::updateMotorControl() {
-    // Get current WAS angle
-    currentAngle = adProcessor.getWASAngle();
+    // Get current steering angle - use VWAS if enabled and available
+    if (configManager.getINSUseFusion() && wheelAngleFusionPtr && wheelAngleFusionPtr->isHealthy()) {
+        currentAngle = wheelAngleFusionPtr->getFusedAngle();
+    } else {
+        // Fall back to physical WAS
+        currentAngle = adProcessor.getWASAngle();
+    }
     
     // Check if steering should be active
     bool shouldBeActive = shouldSteerBeActive();

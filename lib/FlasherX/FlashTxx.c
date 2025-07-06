@@ -42,17 +42,15 @@ int firmware_buffer_init( uint32_t *buffer_addr, uint32_t *buffer_size )
   return( NO_BUFFER_TYPE );
   #endif
 
-  // buffer will begin at first sector ABOVE code and below FLASH_RESERVE
-  // start at bottom of FLASH_RESERVE and work down until non-erased flash found
-  *buffer_addr = FLASH_BASE_ADDR + FLASH_SIZE - FLASH_RESERVE - 4;
-  while (*buffer_addr > 0 && *((uint32_t *)*buffer_addr) == 0xFFFFFFFF)
-    *buffer_addr -= 4;
-  *buffer_addr += 4; // first address above code
-
-  // increase buffer_addr to next sector boundary (if not on a sector boundary)
-  if ((*buffer_addr % FLASH_SECTOR_SIZE) > 0)
-    *buffer_addr += FLASH_SECTOR_SIZE - (*buffer_addr % FLASH_SECTOR_SIZE);
-  *buffer_size = FLASH_BASE_ADDR - *buffer_addr + FLASH_SIZE - FLASH_RESERVE;
+  // Simple approach: allocate 2MB buffer starting at 4MB mark
+  // This gives plenty of room for firmware growth (up to 4MB) and OTA buffer (2MB)
+  *buffer_addr = FLASH_BASE_ADDR + 0x400000;  // 4MB mark (0x60400000)
+  *buffer_size = 0x200000;                     // 2MB buffer size
+  
+  // Ensure we don't exceed flash bounds
+  if (*buffer_addr + *buffer_size > FLASH_BASE_ADDR + FLASH_SIZE - FLASH_RESERVE) {
+    *buffer_size = FLASH_BASE_ADDR + FLASH_SIZE - FLASH_RESERVE - *buffer_addr;
+  }
 
   return( FLASH_BUFFER_TYPE );
 }

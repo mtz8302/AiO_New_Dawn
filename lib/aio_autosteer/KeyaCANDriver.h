@@ -165,6 +165,29 @@ public:
     bool hasRPMFeedback() const { return heartbeatValid; }
     uint16_t getMotorErrorCode() const { return motorErrorCode; }
     
+    // Position feedback methods for sensor fusion
+    uint16_t getMotorPosition() const { return motorPosition; }
+    int32_t getPositionDelta() {
+        // Calculate delta since last call
+        static uint16_t lastPosition = 0;
+        static bool firstCall = true;
+        
+        if (!heartbeatValid) {
+            return 0;  // No valid data yet
+        }
+        
+        if (firstCall) {
+            firstCall = false;
+            lastPosition = motorPosition;
+            return 0;
+        }
+        
+        // Handle 16-bit rollover
+        int32_t delta = (int16_t)(motorPosition - lastPosition);
+        lastPosition = motorPosition;
+        return delta;
+    }
+    
     // Check for motor slip (counter-based like working example)
     bool checkMotorSlip() {
         // Static counter persists between calls

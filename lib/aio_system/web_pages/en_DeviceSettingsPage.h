@@ -16,7 +16,8 @@ const char EN_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
     <script>
         function saveSettings() {
             const settings = {
-                udpPassthrough: document.getElementById('udpPassthrough').checked
+                udpPassthrough: document.getElementById('udpPassthrough').checked,
+                sensorFusion: document.getElementById('sensorFusion').checked
             };
             
             fetch('/api/device/settings', {
@@ -47,6 +48,7 @@ const char EN_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('udpPassthrough').checked = data.udpPassthrough || false;
+                    document.getElementById('sensorFusion').checked = data.sensorFusion || false;
                 })
                 .catch((error) => {
                     console.error('Error loading settings:', error);
@@ -73,6 +75,18 @@ const char EN_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                 </label>
                 <div class='help-text' style='margin-left: 25px; margin-top: 5px;'>
                     Enable direct UDP passthrough of NMEA sentences from GPS1 to AgIO.
+                </div>
+            </div>
+            
+            <h2>Steering Configuration</h2>
+            
+            <div class='form-group'>
+                <label class='checkbox-container' style='display: inline-flex; align-items: center;'>
+                    <input type='checkbox' id='sensorFusion' name='sensorFusion' style='margin-right: 10px;'>
+                    <span class='checkbox-label' style='white-space: nowrap;'>Enable Virtual WAS (VWAS)</span>
+                </label>
+                <div class='help-text' style='margin-left: 25px; margin-top: 5px;'>
+                    Use Keya motor encoder and GPS/IMU to create a virtual wheel angle sensor. Requires Keya CAN motor and vehicle movement.
                 </div>
             </div>
             

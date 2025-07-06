@@ -21,6 +21,7 @@
 #include "EEPROMLayout.h"
 #include "ConfigManager.h"
 #include "GNSSProcessor.h"
+#include "AutosteerProcessor.h"
 
 // For network config
 extern NetworkConfig netConfig;
@@ -37,7 +38,7 @@ using namespace qindesign::network;
 
 WebManager::WebManager() : server(nullptr), wasEvents(nullptr), isRunning(false), 
                            currentLanguage(WebLanguage::ENGLISH),
-                           lastWASAngle(0.0f), lastWASUpdate(0) {
+                           lastWASAngle(0.0f), lastWASUpdate(0), systemReady(false) {
     // Load language preference from EEPROM
     uint8_t savedLang = EEPROM.read(WEB_CONFIG_ADDR);
     if (savedLang == 0 || savedLang == 1) {
@@ -127,6 +128,19 @@ void WebManager::setupRoutes() {
         request->send(200, "text/html", html);
     });
     
+    // WAS data endpoint (polling-based instead of SSE)
+    server->on("/api/was/angle", HTTP_GET, [](AsyncWebServerRequest* request) {
+        ADProcessor* adProc = ADProcessor::getInstance();
+        if (!adProc) {
+            request->send(503, "application/json", "{\"error\":\"ADProcessor not available\"}");
+            return;
+        }
+        
+        float angle = adProc->getWASAngle();
+        String json = "{\"angle\":" + String(angle, 1) + ",\"ts\":" + String(millis()) + "}";
+        request->send(200, "application/json", json);
+    });
+    
     // Device Settings page
     server->on("/device", HTTP_GET, [this](AsyncWebServerRequest* request) {
         handleDeviceSettingsPage(request);
@@ -157,7 +171,10 @@ void WebManager::setupRoutes() {
     setupOTARoutes();
     
     // Setup SSE routes - let's try v1.7.0
-    setupSSERoutes();
+    // DISABLED: SSE causing hard reboots with AsyncWebServer_Teensy41 v1.7.0
+    // TODO: Investigate alternative implementation or library update
+    // delay(10);
+    // setupSSERoutes();
     
     // Setup Device Settings API routes
     setupDeviceSettingsAPI();
@@ -191,7 +208,11 @@ void WebManager::handleRoot(AsyncWebServerRequest* request) {
     html.replace("%LINK_SPEED%", linkSpeed);
     html.replace("%FIRMWARE_VERSION%", FIRMWARE_VERSION);
     
-    request->send(200, "text/html", html);
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::handleApiStatus(AsyncWebServerRequest* request) {
@@ -292,7 +313,11 @@ void WebManager::handleEventLoggerPage(AsyncWebServerRequest* request) {
     uint16_t udpPort = (config.syslogPort[0] << 8) | config.syslogPort[1];
     html.replace("%SYSLOG_PORT%", String(udpPort));
     
-    request->send(200, "text/html", html);
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 String WebManager::buildLevelOptions(uint8_t selectedLevel) {
@@ -325,7 +350,11 @@ void WebManager::handleNetworkPage(AsyncWebServerRequest* request) {
     html.replace("%IP_ADDRESS%", ipStr);
     html.replace("%LINK_SPEED%", linkSpeed);  // Add this replacement too
     
-    request->send(200, "text/html", html);
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::setupNetworkAPI() {
@@ -416,7 +445,11 @@ void WebManager::handleOTAPage(AsyncWebServerRequest* request) {
     html.replace("%FIRMWARE_VERSION%", FIRMWARE_VERSION);
     html.replace("%BOARD_TYPE%", TEENSY_BOARD_TYPE);
     
-    request->send(200, "text/html", html);
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::setupOTARoutes() {
@@ -440,7 +473,11 @@ void WebManager::handleDeviceSettingsPage(AsyncWebServerRequest* request) {
     String html = FPSTR(WebPageSelector::getDeviceSettingsPage(currentLanguage));
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     
-    request->send(200, "text/html", html);
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::setupDeviceSettingsAPI() {
@@ -450,9 +487,10 @@ void WebManager::setupDeviceSettingsAPI() {
     server->on("/api/device/settings", HTTP_GET, [](AsyncWebServerRequest* request) {
         JsonDocument doc;
         
-        // Get current UDP passthrough setting from ConfigManager
+        // Get current settings from ConfigManager
         extern ConfigManager configManager;
         doc["udpPassthrough"] = configManager.getGPSPassThrough();
+        doc["sensorFusion"] = configManager.getINSUseFusion();
         
         String response;
         serializeJson(doc, response);
@@ -483,21 +521,33 @@ void WebManager::setupDeviceSettingsAPI() {
                 
                 // Update UDP passthrough setting
                 bool udpPassthrough = doc["udpPassthrough"] | false;
+                bool sensorFusion = doc["sensorFusion"] | false;
                 
                 // Update ConfigManager and save to EEPROM
                 extern ConfigManager configManager;
                 configManager.setGPSPassThrough(udpPassthrough);
-                configManager.saveGPSConfig();  // Save to EEPROM
+                configManager.setINSUseFusion(sensorFusion);
+                configManager.saveGPSConfig();  // Save GPS settings
+                configManager.saveINSConfig();  // Save INS/fusion settings
                 
-                // Apply the setting to GNSSProcessor
+                // Apply the UDP setting to GNSSProcessor
                 extern GNSSProcessor* gnssProcessorPtr;  // Defined in main.cpp
                 if (gnssProcessorPtr) {
                     gnssProcessorPtr->setUDPPassthrough(udpPassthrough);
                 }
                 
-                // Log the change
+                // Apply VWAS setting to AutosteerProcessor
+                extern AutosteerProcessor* autosteerPTR;
+                if (autosteerPTR && sensorFusion) {
+                    // Re-initialize autosteer to setup VWAS if just enabled
+                    autosteerPTR->init();
+                }
+                
+                // Log the changes
                 LOG_INFO(EventSource::CONFIG, "UDP Passthrough %s via web interface", 
                          udpPassthrough ? "enabled" : "disabled");
+                LOG_INFO(EventSource::CONFIG, "Virtual WAS (VWAS) %s via web interface", 
+                         sensorFusion ? "enabled" : "disabled");
                 
                 // Send success response
                 JsonDocument response;
@@ -517,7 +567,11 @@ void WebManager::handleNotFound(AsyncWebServerRequest* request) {
     message += "\nMethod: ";
     message += (request->method() == HTTP_GET) ? "GET" : "POST";
     
-    request->send(404, "text/plain", message);
+    AsyncWebServerResponse* response = request->beginResponse(404, "text/plain; charset=UTF-8", message);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::setupSSERoutes() {
@@ -525,20 +579,24 @@ void WebManager::setupSSERoutes() {
     
     // Create AsyncEventSource for WAS data
     wasEvents = new AsyncEventSource("/events/was");
+    if (!wasEvents) {
+        LOG_ERROR(EventSource::NETWORK, "Failed to create AsyncEventSource");
+        return;
+    }
     
-    // Add event handler
+    // Add event handler with error checking
     wasEvents->onConnect([this](AsyncEventSourceClient* client) {
+        if (!client || !client->client()) {
+            LOG_ERROR(EventSource::NETWORK, "Invalid SSE client");
+            return;
+        }
+        
         IPAddress clientIP = client->client()->remoteIP();
         LOG_INFO(EventSource::NETWORK, "SSE client connected from %d.%d.%d.%d", 
                  clientIP[0], clientIP[1], clientIP[2], clientIP[3]);
         
-        // Send initial data immediately
-        ADProcessor* adProc = ADProcessor::getInstance();
-        float currentAngle = adProc ? adProc->getWASAngle() : 0.0f;
-        
-        String json = "{\"angle\":" + String(currentAngle, 1) + 
-                     ",\"ts\":" + String(millis()) + "}";
-        client->send(json.c_str(), "was-data");
+        // Don't send initial data here - let updateWASClients handle it
+        // This avoids potential race conditions during connection
     });
     
     // Attach event source to server
@@ -548,8 +606,18 @@ void WebManager::setupSSERoutes() {
 }
 
 void WebManager::updateWASClients() {
-    // Only process if we have connected clients
-    if (!wasEvents || wasEvents->count() == 0) {
+    // Don't process until system is ready
+    if (!systemReady) {
+        return;
+    }
+    
+    // Only process if we have event source
+    if (!wasEvents) {
+        return;
+    }
+    
+    // Check if we have connected clients
+    if (wasEvents->count() == 0) {
         return;
     }
     
@@ -559,9 +627,14 @@ void WebManager::updateWASClients() {
         return;
     }
     
-    // Get current WAS angle from ADProcessor
+    // Get current WAS angle from ADProcessor with error checking
     ADProcessor* adProc = ADProcessor::getInstance();
-    float currentAngle = adProc ? adProc->getWASAngle() : 0.0f;
+    if (!adProc) {
+        LOG_ERROR(EventSource::NETWORK, "ADProcessor not available for WAS data");
+        return;
+    }
+    
+    float currentAngle = adProc->getWASAngle();
     
     // Only send if angle changed significantly (0.1 degree threshold)
     if (abs(currentAngle - lastWASAngle) > 0.1f) {
