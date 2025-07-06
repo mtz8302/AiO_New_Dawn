@@ -194,8 +194,12 @@ const char EN_WASDEMO_PAGE[] PROGMEM = R"rawliteral(
                     // Update stats
                     updateCount++;
                     var now = Date.now();
-                    if (now - lastCountTime >= 1000) {
-                        document.getElementById('updateRate').textContent = updateCount + ' Hz';
+                    var elapsed = now - lastCountTime;
+                    
+                    // Update Hz display every second
+                    if (elapsed >= 1000) {
+                        var rate = Math.round((updateCount * 1000) / elapsed);
+                        document.getElementById('updateRate').textContent = rate + ' Hz';
                         updateCount = 0;
                         lastCountTime = now;
                     }
@@ -210,6 +214,14 @@ const char EN_WASDEMO_PAGE[] PROGMEM = R"rawliteral(
         }
         
         window.onload = function() {
+            // Initialize connection status
+            document.getElementById('connectionStatus').textContent = 'Connecting...';
+            document.getElementById('connectionStatus').className = 'connection-status';
+            
+            // Reset counters
+            updateCount = 0;
+            lastCountTime = Date.now();
+            
             // Start polling at 10Hz (100ms)
             pollInterval = setInterval(updateWASData, 100);
             

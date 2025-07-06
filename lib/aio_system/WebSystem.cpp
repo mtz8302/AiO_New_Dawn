@@ -208,7 +208,11 @@ void WebManager::handleRoot(AsyncWebServerRequest* request) {
     html.replace("%LINK_SPEED%", linkSpeed);
     html.replace("%FIRMWARE_VERSION%", FIRMWARE_VERSION);
     
-    request->send(200, "text/html", html);
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::handleApiStatus(AsyncWebServerRequest* request) {
@@ -309,7 +313,11 @@ void WebManager::handleEventLoggerPage(AsyncWebServerRequest* request) {
     uint16_t udpPort = (config.syslogPort[0] << 8) | config.syslogPort[1];
     html.replace("%SYSLOG_PORT%", String(udpPort));
     
-    request->send(200, "text/html", html);
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 String WebManager::buildLevelOptions(uint8_t selectedLevel) {
@@ -342,7 +350,11 @@ void WebManager::handleNetworkPage(AsyncWebServerRequest* request) {
     html.replace("%IP_ADDRESS%", ipStr);
     html.replace("%LINK_SPEED%", linkSpeed);  // Add this replacement too
     
-    request->send(200, "text/html", html);
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::setupNetworkAPI() {
@@ -433,7 +445,11 @@ void WebManager::handleOTAPage(AsyncWebServerRequest* request) {
     html.replace("%FIRMWARE_VERSION%", FIRMWARE_VERSION);
     html.replace("%BOARD_TYPE%", TEENSY_BOARD_TYPE);
     
-    request->send(200, "text/html", html);
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::setupOTARoutes() {
@@ -457,7 +473,11 @@ void WebManager::handleDeviceSettingsPage(AsyncWebServerRequest* request) {
     String html = FPSTR(WebPageSelector::getDeviceSettingsPage(currentLanguage));
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     
-    request->send(200, "text/html", html);
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::setupDeviceSettingsAPI() {
@@ -547,7 +567,11 @@ void WebManager::handleNotFound(AsyncWebServerRequest* request) {
     message += "\nMethod: ";
     message += (request->method() == HTTP_GET) ? "GET" : "POST";
     
-    request->send(404, "text/plain", message);
+    AsyncWebServerResponse* response = request->beginResponse(404, "text/plain; charset=UTF-8", message);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::setupSSERoutes() {
