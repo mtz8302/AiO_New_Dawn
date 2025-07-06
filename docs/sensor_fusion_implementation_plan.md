@@ -87,22 +87,51 @@ This plan breaks down the sensor fusion implementation into small, testable incr
 
 ## Phase 2: Calibration & Tuning (Week 3-4)
 
-### Step 2.1: Motor-to-Wheel Calibration
-**Goal**: Calibrate motor counts to steering degrees
+### Step 2.1: Orbital Valve Compensation
+**Goal**: Handle non-linear relationship between motor and wheel angle
 
-1. Add calibration mode
-   - Manual calibration routine
-   - Store motor counts at full left/right
-   - Calculate counts per degree
-   - Save to EEPROM
+**CRITICAL**: Orbital valves are the primary steering system in most tractors and have significant non-linearity that MUST be addressed for acceptable accuracy.
+
+1. Multi-point calibration system
+   - Collect motor position vs actual angle at multiple points (-40° to +40° in 4° steps)
+   - Build interpolation tables for different load conditions (low/medium/high)
+   - Track steering rate effects on the ratio
+   - Implement smooth curve fitting between points
+   - Save calibration curves to EEPROM
    
-2. Web interface for calibration
-   - Add calibration page
-   - Real-time angle display
-   - Save/load calibration values
+2. Load detection system
+   - Monitor motor current for load estimation
+   - Track position change rate vs wheel angle change rate
+   - Use vehicle speed as additional load indicator
+   - Build load-dependent compensation curves
    
-**Test**: Run calibration, verify accurate angle reporting
-**Commit**: "feat: add motor-to-wheel calibration routine"
+3. Real-time learning and adaptation
+   - Continuously update calibration during operation with GPS available
+   - Use exponential smoothing for gradual adaptation
+   - Detect and compensate for temperature effects
+   - Track long-term valve wear patterns
+   - Only learn from high-confidence GPS data (straight sections, good fix)
+   
+4. Web interface for calibration
+   - Add calibration wizard page
+   - Real-time angle display with motor position
+   - Visual curve editor with interpolation preview
+   - Load condition indicators
+   - Import/export calibration data
+   - Compare current vs learned curves
+   
+**Test**: 
+- Collect data under various loads (empty field, heavy implement, slopes)
+- Compare linear vs compensated accuracy
+- Verify learning improves accuracy over time
+- Test with different hydraulic temperatures
+
+**Expected Results**:
+- Improve accuracy from ±2° (linear) to ±0.5° (compensated)
+- Consistent performance across all load conditions
+- Reduced need for manual recalibration
+
+**Commit**: "feat: add orbital valve compensation with multi-point calibration"
 
 ### Step 2.2: Wheelbase Calibration
 **Goal**: Determine vehicle wheelbase for GPS angle calculation
@@ -328,9 +357,12 @@ This plan breaks down the sensor fusion implementation into small, testable incr
 - Basic operation at >1 m/s
 
 ### Phase 2 Complete:
-- Calibration procedures documented
-- Angle accuracy <1° RMS
-- Stable operation for 30 minutes
+- Orbital valve compensation working with 3-level load detection
+- Multi-point calibration implemented (21+ points per load level)
+- Real-time learning adapting to changing conditions
+- Angle accuracy ±0.5° RMS across all conditions (improved from ±2°)
+- Stable operation under varying loads and temperatures
+- Web-based calibration wizard functional
 
 ### Phase 3 Complete:
 - Adapts to GPS quality changes
