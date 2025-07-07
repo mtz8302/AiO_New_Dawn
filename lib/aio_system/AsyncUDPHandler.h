@@ -12,6 +12,13 @@ public:
     static void init();
     static void sendUDPPacket(uint8_t* data, int length);
     static void poll();  // Periodic network status check
+    
+    // DHCP Server control
+    static void enableDHCPServer(bool enable);
+    static bool isDHCPServerEnabled();
+    
+private:
+    static bool dhcpServerEnabled;
 };
 
 #endif // ASYNCUDPHANDLER_H

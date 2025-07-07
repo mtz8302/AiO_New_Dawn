@@ -8,16 +8,20 @@
 #include "PGNProcessor.h"
 #include "RTCMProcessor.h"
 #include "EventLogger.h"
+#include "DHCPLite.h"
 
 using namespace qindesign::network;
 
 // Static member definitions
 static AsyncUDP udpPGN;   // For PGN traffic on port 9999 (both listen and send)
 static AsyncUDP udpRTCM;  // For RTCM traffic on port 8888
+static AsyncUDP udpDHCP;  // For DHCP server on port 67
+bool AsyncUDPHandler::dhcpServerEnabled = false;
 
 // Forward declarations
 static void handlePGNPacket(AsyncUDPPacket& packet);
 static void handleRTCMPacket(AsyncUDPPacket& packet);
+static void handleDHCPPacket(AsyncUDPPacket& packet);
 
 // External network configuration
 extern struct NetworkConfig netConfig;
@@ -64,6 +68,12 @@ void AsyncUDPHandler::init() {
     } else {
         LOG_ERROR(EventSource::NETWORK, "Failed to start AsyncUDP on port 2233");
     }
+    
+    // Add delay between UDP listeners
+    delay(100);
+    
+    // Enable DHCP server by default
+    enableDHCPServer(true);
     
     LOG_INFO(EventSource::NETWORK, "AsyncUDP initialization complete");
 }
@@ -145,3 +155,60 @@ void AsyncUDPHandler::poll() {
         }
     }
 }
+
+void AsyncUDPHandler::enableDHCPServer(bool enable) {
+    if (enable && !dhcpServerEnabled) {
+        // Start DHCP server on port 67
+        if (udpDHCP.listen(DHCP_SERVER_PORT)) {
+            LOG_INFO(EventSource::NETWORK, "DHCP server started on port 67");
+            LOG_INFO(EventSource::NETWORK, "DHCP range: 192.168.5.1 - 192.168.5.125");
+            
+            udpDHCP.onPacket([](AsyncUDPPacket packet) {
+                handleDHCPPacket(packet);
+            });
+            
+            dhcpServerEnabled = true;
+        } else {
+            LOG_ERROR(EventSource::NETWORK, "Failed to start DHCP server on port 67");
+        }
+    } else if (!enable && dhcpServerEnabled) {
+        // Stop DHCP server
+        udpDHCP.close();
+        dhcpServerEnabled = false;
+        LOG_INFO(EventSource::NETWORK, "DHCP server stopped");
+    }
+}
+
+bool AsyncUDPHandler::isDHCPServerEnabled() {
+    return dhcpServerEnabled;
+}
+
+static void handleDHCPPacket(AsyncUDPPacket& packet) {
+    if (packet.length() < sizeof(RIP_MSG)) {
+        return;  // Packet too small
+    }
+    
+    // Get our server IP
+    IPAddress serverIP = Ethernet.localIP();
+    byte serverIPBytes[4] = {serverIP[0], serverIP[1], serverIP[2], serverIP[3]};
+    
+    // Process DHCP request
+    RIP_MSG* dhcpMsg = (RIP_MSG*)packet.data();
+    int replySize = DHCPreply(dhcpMsg, packet.length(), serverIPBytes, NULL);
+    
+    if (replySize > 0) {
+        // Send DHCP reply to broadcast address on client port
+        IPAddress broadcastIP(255, 255, 255, 255);
+        udpDHCP.writeTo((uint8_t*)dhcpMsg, replySize, broadcastIP, DHCP_CLIENT_PORT);
+        
+        // Log DHCP activity
+        static uint32_t lastDHCPLog = 0;
+        if (millis() - lastDHCPLog > 1000) {  // Rate limit logging
+            lastDHCPLog = millis();
+            IPAddress remoteIP = packet.remoteIP();
+            LOG_DEBUG(EventSource::NETWORK, "DHCP request processed from %d.%d.%d.%d", 
+                      remoteIP[0], remoteIP[1], remoteIP[2], remoteIP[3]);
+        }
+    }
+}
+

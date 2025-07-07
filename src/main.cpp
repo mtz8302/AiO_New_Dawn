@@ -288,6 +288,18 @@ void setup()
   // Mark web manager as ready for SSE updates
   webManager.setSystemReady();
   
+  // Display access information
+  localIP = Ethernet.localIP();  // Reuse existing variable
+  Serial.println("\r\n");
+  Serial.println("========================================");
+  Serial.println("=== AiO New Dawn - System Ready ===");
+  Serial.println("========================================");
+  Serial.printf("IP Address: %d.%d.%d.%d\r\n", localIP[0], localIP[1], localIP[2], localIP[3]);
+  Serial.println("Web Interface: http://192.168.5.126");
+  Serial.println("DHCP Server: Enabled");
+  Serial.println("========================================");
+  Serial.println();
+  
   LOG_INFO(EventSource::SYSTEM, "=== System Ready ===");
 }
 
