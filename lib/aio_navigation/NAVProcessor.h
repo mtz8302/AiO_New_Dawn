@@ -26,8 +26,8 @@ private:
     elapsedMillis timeSinceLastMessage;
     static constexpr uint32_t MESSAGE_INTERVAL_MS = 100; // 10Hz
     
-    // Last message time for connection tracking
-    uint32_t lastMessageTime;
+    // Track when we last sent GPS data to AgIO
+    uint32_t lastGPSMessageTime;
     
     // Private constructor for singleton
     NAVProcessor();
@@ -59,12 +59,12 @@ public:
     
     // Status and debugging
     void printStatus();
-    uint32_t getLastMessageTime() const { return lastMessageTime; }
+    uint32_t getLastGPSMessageTime() const { return lastGPSMessageTime; }
     NavMessageType getCurrentMessageType();
     
-    // AgIO connection status (requires both ethernet link AND recent communication)
-    bool hasAgIOConnection() const { 
-        return QNetworkBase::isConnected() && (millis() - lastMessageTime) < 5000;
+    // GPS data flow status - are we sending GPS data to AgIO?
+    bool hasGPSDataFlow() const {
+        return (millis() - lastGPSMessageTime) < 5000;
     }
 };
 

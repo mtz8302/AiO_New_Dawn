@@ -19,7 +19,7 @@ NAVProcessor::NAVProcessor() {
     instance = this;
     
     // Initialize timing
-    lastMessageTime = 0;
+    lastGPSMessageTime = 0;
     
     // Clear message buffer
     memset(messageBuffer, 0, BUFFER_SIZE);
@@ -354,7 +354,7 @@ void NAVProcessor::process() {
                   msgType == NavMessageType::PANDA ? "PANDA" : "PAOGI");
     }
     
-    lastMessageTime = millis();
+    lastGPSMessageTime = millis();
 }
 
 void NAVProcessor::setMessageRate(uint32_t intervalMs) {
@@ -380,9 +380,9 @@ void NAVProcessor::printStatus() {
     
     LOG_INFO(EventSource::GNSS, "Message rate: %d Hz", 1000 / MESSAGE_INTERVAL_MS);
     
-    if (lastMessageTime > 0) {
-        LOG_INFO(EventSource::GNSS, "Time since last message: %lu ms", 
-            millis() - lastMessageTime);
+    if (lastGPSMessageTime > 0) {
+        LOG_INFO(EventSource::GNSS, "Time since last GPS message: %lu ms", 
+            millis() - lastGPSMessageTime);
     }
     
     // Show data sources

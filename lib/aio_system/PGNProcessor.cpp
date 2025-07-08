@@ -50,6 +50,9 @@ void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& 
 
         uint8_t pgn = data[3];
         
+        // Update last received time for ANY valid PGN
+        lastPGNReceivedTime = millis();
+        
         // Debug: show registered callbacks for this PGN
         if (pgn == 200) {
             for (size_t i = 0; i < registrationCount; i++) {

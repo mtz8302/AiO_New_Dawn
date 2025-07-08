@@ -36,6 +36,9 @@ private:
     PGNCallback broadcastCallbacks[MAX_BROADCAST_CALLBACKS];
     const char* broadcastNames[MAX_BROADCAST_CALLBACKS];
     size_t broadcastCount = 0;
+    
+    // Track last time ANY PGN was received from AgIO
+    uint32_t lastPGNReceivedTime = 0;
 
 public:
     PGNProcessor();
@@ -60,6 +63,14 @@ public:
     
     // Broadcast callback registration (for PGN 200, 202)
     bool registerBroadcastCallback(PGNCallback callback, const char* name);
+    
+    // Get last time any PGN was received
+    uint32_t getLastPGNReceivedTime() const { return lastPGNReceivedTime; }
+    
+    // Check if we're receiving PGNs from AgIO
+    bool isReceivingFromAgIO() const { 
+        return (millis() - lastPGNReceivedTime) < 5000; 
+    }
 };
 
 #endif // PGNProcessor_H_

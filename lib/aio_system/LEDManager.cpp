@@ -7,6 +7,7 @@
 #include "GNSSProcessor.h"
 #include "IMUProcessor.h"
 #include "NAVProcessor.h"
+#include "PGNProcessor.h"
 
 // QNEthernet namespace
 using namespace qindesign::network;
@@ -306,9 +307,8 @@ void LEDManager::updateAll() {
     // Power/Ethernet LED
     // Use the cached link state from our callback instead of polling
     bool ethernetUp = QNetworkBase::isConnected();
-    // Check AgIO connection through NAVProcessor singleton
-    NAVProcessor* navInstance = NAVProcessor::getInstance();
-    bool hasAgIO = navInstance && navInstance->hasAgIOConnection();
+    // Check AgIO connection through PGNProcessor - receiving ANY PGN means AgIO is connected
+    bool hasAgIO = PGNProcessor::instance && PGNProcessor::instance->isReceivingFromAgIO();
     
     // Debug logging to track state
     static bool lastEthernet = false;
@@ -316,8 +316,15 @@ void LEDManager::updateAll() {
     static uint32_t lastDebugTime = 0;
     
     if (ethernetUp != lastEthernet || hasAgIO != lastAgIO || millis() - lastDebugTime > 5000) {
-        LOG_INFO(EventSource::SYSTEM, "PWR_ETH LED: Ethernet=%s AgIO=%s", 
+        LOG_INFO(EventSource::SYSTEM, "Connection Status: Ethernet=%s, AgIO=%s (PGN traffic)", 
                  ethernetUp ? "UP" : "DOWN", hasAgIO ? "Connected" : "Disconnected");
+        
+        // Also log GPS data flow status
+        NAVProcessor* navInstance = NAVProcessor::getInstance();
+        bool hasGPSFlow = navInstance && navInstance->hasGPSDataFlow();
+        LOG_INFO(EventSource::SYSTEM, "GPS Data Flow: %s", 
+                 hasGPSFlow ? "Active (sending to AgIO)" : "Inactive (no GPS or no fix)");
+        
         lastEthernet = ethernetUp;
         lastAgIO = hasAgIO;
         lastDebugTime = millis();
