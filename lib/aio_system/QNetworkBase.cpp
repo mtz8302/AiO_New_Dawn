@@ -58,7 +58,7 @@ void QNetworkBase::init() {
     // Set MAC address (required for Teensy)
     uint8_t mac[6];
     Ethernet.macAddress(mac);  // Get the built-in MAC
-    Serial.printf("\r\n- MAC Address: %02X:%02X:%02X:%02X:%02X:%02X", 
+    Serial.printf("\r\n- MAC Address: %02X:%02X:%02X:%02X:%02X:%02X\r\n", 
                   mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     
     // Load saved network config or use defaults
@@ -74,23 +74,23 @@ void QNetworkBase::init() {
     
     // Start Ethernet with static IP
     if (!Ethernet.begin(ip, subnet, gateway)) {
-        Serial.print("\r\n- ERROR: Failed to start Ethernet!");
+        Serial.print("\r\n- ERROR: Failed to start Ethernet!\r\n");
         return;
     }
     
     // Wait for link
     Serial.print("\r\n- Waiting for Ethernet link...");
     if (!Ethernet.waitForLink(5000)) {  // 5 second timeout
-        Serial.print("\r\n- WARNING: Link timeout, continuing anyway");
+        Serial.print("\r\n- WARNING: Link timeout, continuing anyway\r\n");
     }
     
     if (Ethernet.linkStatus()) {
-        Serial.print(" Link UP!");
-        Serial.printf("\r\n- IP Address: %d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-        Serial.printf("\r\n- Link Speed: %d Mbps", Ethernet.linkSpeed());
-        Serial.printf("\r\n- Link Full Duplex: %s", Ethernet.linkIsFullDuplex() ? "Yes" : "No");
+        Serial.print("\r\n- Link UP!");
+        Serial.printf("\r\n- IP Address: %d.%d.%d.%d\r\n", ip[0], ip[1], ip[2], ip[3]);
+        Serial.printf("\r\n- Link Speed: %d Mbps\r\n", Ethernet.linkSpeed());
+        Serial.printf("\r\n- Link Full Duplex: %s\r\n", Ethernet.linkIsFullDuplex() ? "Yes" : "No");
     } else {
-        Serial.print("\r\n- ERROR: No Ethernet link detected!");
+        Serial.print("\r\n- ERROR: No Ethernet link detected!\r\n");
     }
 }
 

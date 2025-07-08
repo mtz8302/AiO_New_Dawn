@@ -55,8 +55,8 @@ void setup()
 
   Serial.print("\r\n\n=== Teensy 4.1 AiO-NG-v6 New Dawn v");
   Serial.print(FIRMWARE_VERSION);
-  Serial.print(" ===");
-  Serial.print("\r\nInitializing subsystems...");
+  Serial.print(" ===\r\n");
+  Serial.print("Initializing subsystems...");
 
   // Network and communication setup FIRST
   QNetworkBase::init();
@@ -70,14 +70,14 @@ void setup()
   while (millis() - startWait < 10000) {
     int currentSpeed = Ethernet.linkSpeed();
     if (currentSpeed != lastSpeed) {
-      Serial.printf("\r\n  Link speed changed: %d Mbps", currentSpeed);
+      Serial.printf("\r\n  Link speed changed: %d Mbps\r\n", currentSpeed);
       lastSpeed = currentSpeed;
       startWait = millis(); // Reset timer on speed change
     }
     
     // If we've been stable at 100Mbps for 2 seconds, we're good
     if (currentSpeed == 100 && millis() - startWait > 2000) {
-      Serial.print("\r\n  Link stable at 100 Mbps");
+      Serial.print("\r\n  Link stable at 100 Mbps\r\n");
       break;
     }
     
@@ -91,24 +91,24 @@ void setup()
   // Verify we have an IP address
   IPAddress localIP = Ethernet.localIP();
   if (localIP == IPAddress(0, 0, 0, 0)) {
-    Serial.print("\r\n- ERROR: No IP address assigned!");
+    Serial.print("\r\n- ERROR: No IP address assigned!\r\n");
   } else {
-    Serial.printf("\r\n- IP ready: %d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
-    Serial.printf("\r\n- Final link speed: %d Mbps", Ethernet.linkSpeed());
+    Serial.printf("\r\n- IP ready: %d.%d.%d.%d\r\n", localIP[0], localIP[1], localIP[2], localIP[3]);
+    Serial.printf("\r\n- Final link speed: %d Mbps\r\n", Ethernet.linkSpeed());
   }
   
   // Network stack is ready but don't initialize AsyncUDP yet
-  Serial.print("\r\n- Network stack initialized");
+  Serial.print("\r\n- Network stack initialized\r\n");
   
   // Initialize global CAN buses
   initializeGlobalCANBuses();
 
   // ConfigManager is already constructed
-  Serial.print("\r\n- ConfigManager initialized");
+  Serial.print("\r\n- ConfigManager initialized\r\n");
 
   // Initialize EventLogger early so other modules can use it
   EventLogger::init();
-  Serial.print("\r\n- EventLogger initialized (startup mode)");
+  Serial.print("\r\n- EventLogger initialized (startup mode)\r\n");
   delay(10);  // Small delay to ensure EventLogger is fully initialized
   
   // Initialize PGNProcessor early (needed by many modules)

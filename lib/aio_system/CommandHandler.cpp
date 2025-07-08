@@ -76,19 +76,19 @@ void CommandHandler::handleLoggingMenu(char cmd) {
     switch (cmd) {
         case '1':  // Toggle serial output
             loggerPtr->enableSerial(!config.enableSerial);
-            Serial.printf("\r\nSerial logging %s", config.enableSerial ? "ENABLED" : "DISABLED");
+            Serial.printf("\r\nSerial logging %s\r\n", config.enableSerial ? "ENABLED" : "DISABLED");
             break;
             
         case '2':  // Toggle UDP syslog
             loggerPtr->enableUDP(!config.enableUDP);
-            Serial.printf("\r\nUDP syslog %s", config.enableUDP ? "ENABLED" : "DISABLED");
+            Serial.printf("\r\nUDP syslog %s\r\n", config.enableUDP ? "ENABLED" : "DISABLED");
             break;
             
         case '3':  // Increase serial level
             if (config.serialLevel > 0) {
                 config.serialLevel--;
                 loggerPtr->setSerialLevel(static_cast<EventSeverity>(config.serialLevel));
-                Serial.printf("\r\nSerial level: %s", loggerPtr->severityToString(static_cast<EventSeverity>(config.serialLevel)));
+                Serial.printf("\r\nSerial level: %s\r\n", loggerPtr->severityToString(static_cast<EventSeverity>(config.serialLevel)));
             }
             break;
             
@@ -96,7 +96,7 @@ void CommandHandler::handleLoggingMenu(char cmd) {
             if (config.serialLevel < 7) {
                 config.serialLevel++;
                 loggerPtr->setSerialLevel(static_cast<EventSeverity>(config.serialLevel));
-                Serial.printf("\r\nSerial level: %s", loggerPtr->severityToString(static_cast<EventSeverity>(config.serialLevel)));
+                Serial.printf("\r\nSerial level: %s\r\n", loggerPtr->severityToString(static_cast<EventSeverity>(config.serialLevel)));
             }
             break;
             
@@ -104,7 +104,7 @@ void CommandHandler::handleLoggingMenu(char cmd) {
             if (config.udpLevel > 0) {
                 config.udpLevel--;
                 loggerPtr->setUDPLevel(static_cast<EventSeverity>(config.udpLevel));
-                Serial.printf("\r\nUDP level: %s", loggerPtr->severityToString(static_cast<EventSeverity>(config.udpLevel)));
+                Serial.printf("\r\nUDP level: %s\r\n", loggerPtr->severityToString(static_cast<EventSeverity>(config.udpLevel)));
             }
             break;
             
@@ -112,13 +112,13 @@ void CommandHandler::handleLoggingMenu(char cmd) {
             if (config.udpLevel < 7) {
                 config.udpLevel++;
                 loggerPtr->setUDPLevel(static_cast<EventSeverity>(config.udpLevel));
-                Serial.printf("\r\nUDP level: %s", loggerPtr->severityToString(static_cast<EventSeverity>(config.udpLevel)));
+                Serial.printf("\r\nUDP level: %s\r\n", loggerPtr->severityToString(static_cast<EventSeverity>(config.udpLevel)));
             }
             break;
             
         case 't':  // Test log messages
         case 'T':
-            Serial.print("\r\nGenerating test log messages...");
+            LOG_INFO(EventSource::USER, "Generating test log messages...");
             LOG_DEBUG(EventSource::USER, "Test DEBUG message");
             LOG_INFO(EventSource::USER, "Test INFO message");
             LOG_NOTICE(EventSource::USER, "Test NOTICE message");
@@ -132,13 +132,13 @@ void CommandHandler::handleLoggingMenu(char cmd) {
         case 's':  // Show statistics
         case 'S':
             Serial.printf("\r\n\nEvent Statistics:");
-            Serial.printf("\r\nTotal events logged: %lu", loggerPtr->getEventCount());
+            Serial.printf("\r\nTotal events logged: %lu\r\n", loggerPtr->getEventCount());
             break;
             
         case 'r':  // Reset counter
         case 'R':
             loggerPtr->resetEventCount();
-            Serial.print("\r\nEvent counter reset");
+            Serial.print("Event counter reset\r\n");
             break;
             
         // QNEthernet doesn't need explicit log level management
@@ -148,7 +148,7 @@ void CommandHandler::handleLoggingMenu(char cmd) {
         case 'Q':
         case 27:   // ESC key
             currentState = CommandState::MAIN_MENU;
-            Serial.print("\r\nReturned to main menu");
+            Serial.print("Returned to main menu\r\n");
             break;
             
         case '?':
@@ -158,22 +158,22 @@ void CommandHandler::handleLoggingMenu(char cmd) {
             break;
             
         default:
-            Serial.printf("\r\nUnknown command: '%c'", cmd);
+            Serial.printf("\r\nUnknown command: '%c'\r\n", cmd);
             break;
     }
 }
 
 
 void CommandHandler::showMainMenu() {
-    Serial.print("\r\n\n=== Main Menu ===");
+    Serial.print("\r\n=== Main Menu ===");
     Serial.print("\r\nL - Logging configuration");
     Serial.print("\r\n? - Show this menu");
-    Serial.print("\r\n=================");
+    Serial.print("\r\n=================\r\n");
 }
 
 void CommandHandler::showLoggingMenu() {
     loggerPtr->printConfig();
-    Serial.print("\r\n\n=== Logging Control Menu ===");
+    Serial.print("\r\n=== Logging Control Menu ===");
     Serial.print("\r\n1 - Toggle serial output");
     Serial.print("\r\n2 - Toggle UDP syslog");
     Serial.print("\r\n3/4 - Decrease/Increase serial level");
@@ -184,6 +184,6 @@ void CommandHandler::showLoggingMenu() {
     Serial.print("\r\nR - Reset event counter");
     Serial.print("\r\nQ - Return to main menu");
     Serial.print("\r\n? - Show this menu");
-    Serial.print("\r\n============================");
+    Serial.print("\r\n============================\r\n");
 }
 
