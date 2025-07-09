@@ -289,7 +289,7 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
             LOG_DEBUG(EventSource::MACHINE, "PGN 239 Machine Data: speed=%.1f km/h, hyd=%d, tram=0x%02X, geo=%d", 
                       speed / 10.0f, hydLift, tram, geoStop);
             
-            // Store for Phase 2 implementation
+            // Store machine control data
             instance->machineState.hydLift = hydLift;
             instance->machineState.tramline = tram;
             instance->machineState.geoStop = geoStop;
@@ -300,32 +300,49 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
         // Extract section states from bytes 11 & 12 (array indices 6 & 7)
         uint16_t sectionStates = data[6] | (data[7] << 8);
         
-        // Only update if changed
+        // Track if any states changed
+        bool statesChanged = false;
+        
+        // Check if section states changed
         if (sectionStates != instance->machineState.sectionStates) {
             instance->machineState.sectionStates = sectionStates;
+            statesChanged = true;
+        }
+        
+        // Update all function states
+        instance->updateFunctionStates();
+        
+        // Check if any function changed
+        if (instance->machineState.functionsChanged) {
+            statesChanged = true;
+            instance->machineState.functionsChanged = false;  // Reset flag
+        }
+        
+        // Only log and update outputs if something changed
+        if (statesChanged) {
+            // Show active functions for our 6 outputs
+            char activeMsg[256];
+            snprintf(activeMsg, sizeof(activeMsg), "Active functions:");
             
-            // Decode section states - will be mapped to functions in Phase 2
-            // For now, maintain backward compatibility
-            for (int i = 0; i < 16; i++) {
-                instance->machineState.functions[i + 1] = (sectionStates & (1 << i)) != 0;
+            // Check what function each output is assigned to
+            for (int pin = 1; pin <= 6; pin++) {
+                uint8_t func = instance->pinConfig.pinFunction[pin];
+                if (func > 0 && func <= MAX_FUNCTIONS) {
+                    if (instance->machineState.functions[func]) {
+                        char buf[50];
+                        snprintf(buf, sizeof(buf), " Out%d=%s", pin, instance->getFunctionName(func));
+                        strncat(activeMsg, buf, sizeof(activeMsg) - strlen(activeMsg) - 1);
+                    }
+                }
             }
-        
-        // Log section changes with binary format
-        char bin1[16], bin2[16];  // 8 bits + 7 spaces + null terminator
-        byteToBinary(data[6], bin1);
-        byteToBinary(data[7], bin2);
-        LOG_INFO(EventSource::MACHINE, "Sections changed: [6]SC1-8=0x%02X (0b%s) [7]SC9-16=0x%02X (0b%s)", 
-                 data[6], bin1, data[7], bin2);
-        
-            // Show which sections are ON (only first 6 sections we control)
-            char sectionMsg[100];
-            snprintf(sectionMsg, sizeof(sectionMsg), "Section states:");
-            for (int i = 0; i < 6; i++) {
-                char buf[20];
-                snprintf(buf, sizeof(buf), " S%d=%s", i+1, instance->machineState.functions[i + 1] ? "ON" : "OFF");
-                strncat(sectionMsg, buf, sizeof(sectionMsg) - strlen(sectionMsg) - 1);
-            }
-            LOG_INFO(EventSource::MACHINE, "%s", sectionMsg);
+            
+            LOG_INFO(EventSource::MACHINE, "%s", activeMsg);
+            
+            // Log raw section states for debugging
+            char bin1[16], bin2[16];
+            byteToBinary(data[6], bin1);
+            byteToBinary(data[7], bin2);
+            LOG_DEBUG(EventSource::MACHINE, "Sections: SC1-8=0b%s, SC9-16=0b%s", bin1, bin2);
             
             // Update outputs
             instance->updateSectionOutputs();
@@ -460,10 +477,77 @@ const char* MachineProcessor::getFunctionName(uint8_t functionNum) {
     return "Invalid";
 }
 
+void MachineProcessor::updateFunctionStates() {
+    // Save previous states to detect changes
+    bool previousStates[MAX_FUNCTIONS + 1];
+    memcpy(previousStates, machineState.functions, sizeof(previousStates));
+    
+    // Clear all function states first
+    memset(machineState.functions, 0, sizeof(machineState.functions));
+    
+    // Map section states to functions 1-16
+    for (int i = 0; i < 16; i++) {
+        machineState.functions[i + 1] = (machineState.sectionStates & (1 << i)) != 0;
+    }
+    
+    // Map hydraulic states to functions 17-18
+    // hydLift: 0=off, 1=down, 2=up
+    if (machineState.hydLift == 2) {
+        machineState.functions[17] = true;  // Hyd Up
+        machineState.functions[18] = false; // Hyd Down
+    } else if (machineState.hydLift == 1) {
+        machineState.functions[17] = false; // Hyd Up
+        machineState.functions[18] = true;  // Hyd Down
+    } else {
+        machineState.functions[17] = false; // Hyd Up
+        machineState.functions[18] = false; // Hyd Down
+    }
+    
+    // Map tramline bits to functions 19-20
+    // tramline: bit0=right, bit1=left
+    machineState.functions[19] = (machineState.tramline & 0x01) != 0; // Tram Right
+    machineState.functions[20] = (machineState.tramline & 0x02) != 0; // Tram Left
+    
+    // Map geo stop to function 21
+    // geoStop: 0=inside boundary, 1=outside boundary
+    machineState.functions[21] = (machineState.geoStop != 0);
+    
+    // Check if any function state changed
+    machineState.functionsChanged = false;
+    for (int i = 1; i <= MAX_FUNCTIONS; i++) {
+        if (machineState.functions[i] != previousStates[i]) {
+            machineState.functionsChanged = true;
+            
+            // Log state changes for debugging
+            LOG_DEBUG(EventSource::MACHINE, "Function %d (%s) changed to %s", 
+                      i, getFunctionName(i), 
+                      machineState.functions[i] ? "ON" : "OFF");
+        }
+    }
+}
+
 void MachineProcessor::updateMachineOutputs() {
     // Placeholder - will be implemented in Phase 3
     // For now, just call the existing section outputs
     updateSectionOutputs();
+    
+    // Phase 2 debug: Log non-section functions if active
+    static uint32_t lastDebugTime = 0;
+    if (millis() - lastDebugTime > 1000) {  // Limit to once per second
+        bool hasActive = false;
+        for (int i = 17; i <= 21; i++) {
+            if (machineState.functions[i]) {
+                if (!hasActive) {
+                    LOG_DEBUG(EventSource::MACHINE, "Non-section functions active:");
+                    hasActive = true;
+                }
+                LOG_DEBUG(EventSource::MACHINE, "  Function %d: %s", i, getFunctionName(i));
+            }
+        }
+        if (hasActive) {
+            lastDebugTime = millis();
+        }
+    }
 }
 
 
