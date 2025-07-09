@@ -72,8 +72,16 @@ bool MachineProcessor::initialize() {
     LOG_INFO(EventSource::MACHINE, "Initializing...");
     
     // Clear initial state
-    memset(&sectionState, 0, sizeof(sectionState));
-    sectionState.lastPGN239Time = 0;
+    memset(&machineState, 0, sizeof(machineState));
+    memset(&machineConfig, 0, sizeof(machineConfig));
+    memset(&pinConfig, 0, sizeof(pinConfig));
+    
+    // Set default pin assignments (pins 1-6 = sections 1-6)
+    for (int i = 1; i <= 6; i++) {
+        pinConfig.pinFunction[i] = i;  // Default: pin N controls section N
+    }
+    
+    machineState.lastPGN239Time = 0;
     
     // Initialize hardware
     if (!initializeSectionOutputs()) {
@@ -85,8 +93,11 @@ bool MachineProcessor::initialize() {
     LOG_DEBUG(EventSource::MACHINE, "Registering PGN callbacks...");
     // Register for broadcast PGNs (200, 202)
     bool regBroadcast = PGNProcessor::instance->registerBroadcastCallback(handleBroadcastPGN, "Machine");
-    bool reg239 = PGNProcessor::instance->registerCallback(MACHINE_PGN_DATA, handlePGN239, "Machine");
-    LOG_DEBUG(EventSource::MACHINE, "PGN registrations - Broadcast:%d, 239:%d", regBroadcast, reg239);
+    bool reg236 = PGNProcessor::instance->registerCallback(MACHINE_PGN_PIN_CONFIG, handlePGN236, "Machine-PinConfig");
+    bool reg238 = PGNProcessor::instance->registerCallback(MACHINE_PGN_CONFIG, handlePGN238, "Machine-Config");
+    bool reg239 = PGNProcessor::instance->registerCallback(MACHINE_PGN_DATA, handlePGN239, "Machine-Data");
+    LOG_INFO(EventSource::MACHINE, "PGN registrations - Broadcast:%d, 236:%d, 238:%d, 239:%d", 
+             regBroadcast, reg236, reg238, reg239);
     
     LOG_INFO(EventSource::MACHINE, "Initialized successfully");
     return true;
@@ -158,33 +169,28 @@ void MachineProcessor::process() {
     bool currentLinkState = QNetworkBase::isConnected();
     
     if (previousLinkState && !currentLinkState) {
-        // Link just went down - turn off all sections immediately
-        if (sectionState.currentStates != 0) {
-            LOG_INFO(EventSource::MACHINE, "Sections turned off - ethernet link down");
-            sectionState.currentStates = 0;
-            memset(sectionState.isOn, 0, sizeof(sectionState.isOn));
-            updateSectionOutputs();
-            
-            // Clear the timer so sections stay off
-            sectionState.lastPGN239Time = 0;
-        }
+        // Link just went down - turn off all functions immediately
+        LOG_INFO(EventSource::MACHINE, "All outputs turned off - ethernet link down");
+        memset(machineState.functions, 0, sizeof(machineState.functions));
+        machineState.sectionStates = 0;
+        updateMachineOutputs();
+        
+        // Clear the timer
+        machineState.lastPGN239Time = 0;
     }
     previousLinkState = currentLinkState;
     
-    // Watchdog timer - turn off all sections if no PGN 239 for 2 seconds
-    if (sectionState.lastPGN239Time > 0 && 
-        (millis() - sectionState.lastPGN239Time) > 2000) {
+    // Watchdog timer - turn off all outputs if no PGN 239 for 2 seconds
+    if (machineState.lastPGN239Time > 0 && 
+        (millis() - machineState.lastPGN239Time) > 2000) {
         
-        // Turn off all sections
-        if (sectionState.currentStates != 0) {
-            LOG_INFO(EventSource::MACHINE, "Sections turned off - watchdog timeout");
-            sectionState.currentStates = 0;
-            memset(sectionState.isOn, 0, sizeof(sectionState.isOn));
-            updateSectionOutputs();
-        }
+        LOG_INFO(EventSource::MACHINE, "All outputs turned off - watchdog timeout");
+        memset(machineState.functions, 0, sizeof(machineState.functions));
+        machineState.sectionStates = 0;
+        updateMachineOutputs();
         
         // Reset timer to prevent repeated messages
-        sectionState.lastPGN239Time = 0;
+        machineState.lastPGN239Time = 0;
     }
 }
 
@@ -262,24 +268,47 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
         return;
     }
     
-    // Need at least 8 bytes to have section data in bytes 6 & 7
+    // Need at least 12 bytes for all machine data
+    // PGN 239 format: uturn(5), speed(6), hydLift(7), tram(8), geo(9), reserved(10), SC1-8(11), SC9-16(12)
     if (len < 8) return;
     
     // Update watchdog timer
-    instance->sectionState.lastPGN239Time = millis();
+    instance->machineState.lastPGN239Time = millis();
     
-    // Extract section states from bytes 6 & 7
-    uint16_t sectionStates = data[6] | (data[7] << 8);
-    
-    // Only update if changed
-    if (sectionStates != instance->sectionState.currentStates) {
-        instance->sectionState.currentStates = sectionStates;
+    // For Phase 1, just log the data we're receiving
+    // Log machine control data for Phase 1
+    if (len >= 5) {
+        uint8_t uturn = data[0];      // Byte 5 - not used yet
+        uint8_t speed = data[1];      // Byte 6 - speed * 10
         
-        // Decode section states - simple on/off from bytes 6 & 7
-        // Bit 1 = ON, Bit 0 = OFF
-        for (int i = 0; i < 16; i++) {
-            instance->sectionState.isOn[i] = (sectionStates & (1 << i)) != 0;
+        if (len >= 5) {  // Have hydraulic, tram, geo data
+            uint8_t hydLift = data[2];   // Byte 7: 0=off, 1=down, 2=up
+            uint8_t tram = data[3];      // Byte 8: bit0=right, bit1=left
+            uint8_t geoStop = data[4];   // Byte 9: 0=inside, 1=outside
+            
+            LOG_DEBUG(EventSource::MACHINE, "PGN 239 Machine Data: speed=%.1f km/h, hyd=%d, tram=0x%02X, geo=%d", 
+                      speed / 10.0f, hydLift, tram, geoStop);
+            
+            // Store for Phase 2 implementation
+            instance->machineState.hydLift = hydLift;
+            instance->machineState.tramline = tram;
+            instance->machineState.geoStop = geoStop;
         }
+    }
+    
+    if (len >= 8) {
+        // Extract section states from bytes 11 & 12 (array indices 6 & 7)
+        uint16_t sectionStates = data[6] | (data[7] << 8);
+        
+        // Only update if changed
+        if (sectionStates != instance->machineState.sectionStates) {
+            instance->machineState.sectionStates = sectionStates;
+            
+            // Decode section states - will be mapped to functions in Phase 2
+            // For now, maintain backward compatibility
+            for (int i = 0; i < 16; i++) {
+                instance->machineState.functions[i + 1] = (sectionStates & (1 << i)) != 0;
+            }
         
         // Log section changes with binary format
         char bin1[16], bin2[16];  // 8 bits + 7 spaces + null terminator
@@ -288,18 +317,19 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
         LOG_INFO(EventSource::MACHINE, "Sections changed: [6]SC1-8=0x%02X (0b%s) [7]SC9-16=0x%02X (0b%s)", 
                  data[6], bin1, data[7], bin2);
         
-        // Show which sections are ON (only first 6 sections we control)
-        char sectionMsg[100];
-        snprintf(sectionMsg, sizeof(sectionMsg), "Section states:");
-        for (int i = 0; i < 6; i++) {
-            char buf[20];
-            snprintf(buf, sizeof(buf), " S%d=%s", i+1, instance->sectionState.isOn[i] ? "ON" : "OFF");
-            strncat(sectionMsg, buf, sizeof(sectionMsg) - strlen(sectionMsg) - 1);
+            // Show which sections are ON (only first 6 sections we control)
+            char sectionMsg[100];
+            snprintf(sectionMsg, sizeof(sectionMsg), "Section states:");
+            for (int i = 0; i < 6; i++) {
+                char buf[20];
+                snprintf(buf, sizeof(buf), " S%d=%s", i+1, instance->machineState.functions[i + 1] ? "ON" : "OFF");
+                strncat(sectionMsg, buf, sizeof(sectionMsg) - strlen(sectionMsg) - 1);
+            }
+            LOG_INFO(EventSource::MACHINE, "%s", sectionMsg);
+            
+            // Update outputs
+            instance->updateSectionOutputs();
         }
-        LOG_INFO(EventSource::MACHINE, "%s", sectionMsg);
-        
-        // Phase 4: Section output updates enabled
-        instance->updateSectionOutputs();
     }
     
 }
@@ -307,12 +337,13 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
 
 
 void MachineProcessor::updateSectionOutputs() {
-    // Removed periodic debug logging - this is called frequently from PGN 239
+    // For Phase 1, maintain backward compatibility
+    // This will be replaced by updateMachineOutputs in Phase 3
     
     // Update physical outputs for sections 1-6
     // Logic is inverted: HIGH turns LED ON, LOW turns LED OFF
     for (int i = 0; i < 6; i++) {
-        if (sectionState.isOn[i]) {
+        if (machineState.functions[i + 1]) {  // Functions 1-6 are sections 1-6
             // Section ON: HIGH = LED ON
             getSectionOutputs().setPin(SECTION_PINS[i], 0, 1);
         } else {
@@ -321,6 +352,120 @@ void MachineProcessor::updateSectionOutputs() {
         }
     }
 }
+void MachineProcessor::handlePGN236(uint8_t pgn, const uint8_t* data, size_t len) {
+    if (!instance) return;
+    
+    // PGN 236 - Machine Pin Config
+    // Expected length: 30 bytes (5 header + 24 pin configs + 1 reserved)
+    if (len < 24) {
+        LOG_ERROR(EventSource::MACHINE, "PGN 236 too short: %d bytes", len);
+        return;
+    }
+    
+    LOG_INFO(EventSource::MACHINE, "PGN 236 - Machine Pin Config received");
+    
+    // Parse pin function assignments (bytes 0-23 map to pins 1-24)
+    for (int i = 0; i < 24 && i < len; i++) {
+        uint8_t function = data[i];
+        
+        // Validate function number (0=unassigned, 1-21=valid functions)
+        if (function > MAX_FUNCTIONS) {
+            LOG_WARNING(EventSource::MACHINE, "Pin %d: Invalid function %d (max %d)", 
+                        i + 1, function, MAX_FUNCTIONS);
+            function = 0;  // Set to unassigned
+        }
+        
+        instance->pinConfig.pinFunction[i + 1] = function;
+        
+        // Log assignments for first 6 pins (our physical outputs)
+        if (i < 6) {
+            LOG_INFO(EventSource::MACHINE, "Output %d assigned to %s", 
+                     i + 1, instance->getFunctionName(function));
+        }
+    }
+    
+    instance->pinConfig.configReceived = true;
+    
+    // TODO: Save to EEPROM in Phase 4
+}
+
+void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len) {
+    if (!instance) return;
+    
+    // PGN 238 - Machine Config
+    // Expected length: 14 bytes (5 header + 8 config + 1 reserved)
+    if (len < 8) {
+        LOG_ERROR(EventSource::MACHINE, "PGN 238 too short: %d bytes", len);
+        return;
+    }
+    
+    LOG_INFO(EventSource::MACHINE, "PGN 238 - Machine Config received");
+    
+    // Parse configuration
+    instance->machineConfig.raiseTime = data[0];        // Byte 5
+    instance->machineConfig.lowerTime = data[1];        // Byte 6
+    instance->machineConfig.hydEnable = data[2];        // Byte 7
+    instance->machineConfig.isPinActiveHigh = data[3];  // Byte 8
+    instance->machineConfig.user1 = data[4];            // Byte 9
+    instance->machineConfig.user2 = data[5];            // Byte 10
+    instance->machineConfig.user3 = data[6];            // Byte 11
+    instance->machineConfig.user4 = data[7];            // Byte 12
+    
+    instance->machineConfig.configReceived = true;
+    
+    LOG_INFO(EventSource::MACHINE, "Machine Config: RaiseTime=%ds, LowerTime=%ds, HydEnable=%d, ActiveHigh=%d",
+             instance->machineConfig.raiseTime,
+             instance->machineConfig.lowerTime,
+             instance->machineConfig.hydEnable,
+             instance->machineConfig.isPinActiveHigh);
+    
+    LOG_DEBUG(EventSource::MACHINE, "User values: U1=%d, U2=%d, U3=%d, U4=%d",
+              instance->machineConfig.user1,
+              instance->machineConfig.user2,
+              instance->machineConfig.user3,
+              instance->machineConfig.user4);
+    
+    // TODO: Save to EEPROM in Phase 4
+}
+
+const char* MachineProcessor::getFunctionName(uint8_t functionNum) {
+    static const char* functionNames[] = {
+        "Unassigned",     // 0
+        "Section 1",      // 1
+        "Section 2",      // 2
+        "Section 3",      // 3
+        "Section 4",      // 4
+        "Section 5",      // 5
+        "Section 6",      // 6
+        "Section 7",      // 7
+        "Section 8",      // 8
+        "Section 9",      // 9
+        "Section 10",     // 10
+        "Section 11",     // 11
+        "Section 12",     // 12
+        "Section 13",     // 13
+        "Section 14",     // 14
+        "Section 15",     // 15
+        "Section 16",     // 16
+        "Hyd Up",         // 17
+        "Hyd Down",       // 18
+        "Tramline Right", // 19
+        "Tramline Left",  // 20
+        "Geo Stop"        // 21
+    };
+    
+    if (functionNum <= MAX_FUNCTIONS) {
+        return functionNames[functionNum];
+    }
+    return "Invalid";
+}
+
+void MachineProcessor::updateMachineOutputs() {
+    // Placeholder - will be implemented in Phase 3
+    // For now, just call the existing section outputs
+    updateSectionOutputs();
+}
+
 
 // Helper methods for clarity
 void MachineProcessor::setPinHigh(uint8_t pin) {
