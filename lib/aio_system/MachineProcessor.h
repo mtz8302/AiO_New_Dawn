@@ -40,6 +40,10 @@ private:
         
         // Track changes
         bool functionsChanged;       // Flag when any function state changes
+        
+        // Hydraulic timing
+        uint32_t hydStartTime;       // When hydraulic movement started
+        uint8_t lastHydLift;         // Previous hydraulic state
     } machineState;
     
     // Machine configuration from PGN 238

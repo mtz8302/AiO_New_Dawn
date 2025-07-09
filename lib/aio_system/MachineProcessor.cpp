@@ -173,6 +173,9 @@ void MachineProcessor::process() {
         LOG_INFO(EventSource::MACHINE, "All outputs turned off - ethernet link down");
         memset(machineState.functions, 0, sizeof(machineState.functions));
         machineState.sectionStates = 0;
+        machineState.hydLift = 0;
+        machineState.tramline = 0;
+        machineState.geoStop = 0;
         updateMachineOutputs();
         
         // Clear the timer
@@ -187,10 +190,52 @@ void MachineProcessor::process() {
         LOG_INFO(EventSource::MACHINE, "All outputs turned off - watchdog timeout");
         memset(machineState.functions, 0, sizeof(machineState.functions));
         machineState.sectionStates = 0;
+        machineState.hydLift = 0;
+        machineState.tramline = 0;
+        machineState.geoStop = 0;
         updateMachineOutputs();
         
         // Reset timer to prevent repeated messages
         machineState.lastPGN239Time = 0;
+    }
+    
+    // Hydraulic timing - auto shutoff after configured time
+    if (machineConfig.hydEnable && machineConfig.configReceived) {
+        // Check if hydraulic state changed
+        if (machineState.hydLift != machineState.lastHydLift) {
+            if (machineState.hydLift != 0) {
+                // Started moving - record start time
+                machineState.hydStartTime = millis();
+                LOG_DEBUG(EventSource::MACHINE, "Hydraulic %s started, max time: %ds",
+                          machineState.hydLift == 2 ? "UP" : "DOWN",
+                          machineState.hydLift == 2 ? machineConfig.raiseTime : machineConfig.lowerTime);
+            } else {
+                // Stopped moving
+                if (machineState.hydStartTime > 0) {
+                    uint32_t duration = millis() - machineState.hydStartTime;
+                    LOG_DEBUG(EventSource::MACHINE, "Hydraulic stopped after %.1f seconds", 
+                              duration / 1000.0f);
+                }
+                machineState.hydStartTime = 0;
+            }
+            machineState.lastHydLift = machineState.hydLift;
+        }
+        
+        // Check for timeout
+        if (machineState.hydLift != 0 && machineState.hydStartTime > 0) {
+            uint32_t maxTime = (machineState.hydLift == 2) ? 
+                               machineConfig.raiseTime : machineConfig.lowerTime;
+            uint32_t elapsed = millis() - machineState.hydStartTime;
+            
+            if (elapsed > (maxTime * 1000)) {
+                // Timeout - turn off hydraulic
+                LOG_INFO(EventSource::MACHINE, "Hydraulic auto-shutoff after %d seconds", maxTime);
+                machineState.hydLift = 0;
+                machineState.hydStartTime = 0;
+                updateFunctionStates();
+                updateMachineOutputs();
+            }
+        }
     }
 }
 
@@ -344,8 +389,8 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
             byteToBinary(data[7], bin2);
             LOG_DEBUG(EventSource::MACHINE, "Sections: SC1-8=0b%s, SC9-16=0b%s", bin1, bin2);
             
-            // Update outputs
-            instance->updateSectionOutputs();
+            // Update outputs using new unified handler
+            instance->updateMachineOutputs();
         }
     }
     
@@ -353,21 +398,9 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
 
 
 
+// Deprecated - replaced by updateMachineOutputs()
 void MachineProcessor::updateSectionOutputs() {
-    // For Phase 1, maintain backward compatibility
-    // This will be replaced by updateMachineOutputs in Phase 3
-    
-    // Update physical outputs for sections 1-6
-    // Logic is inverted: HIGH turns LED ON, LOW turns LED OFF
-    for (int i = 0; i < 6; i++) {
-        if (machineState.functions[i + 1]) {  // Functions 1-6 are sections 1-6
-            // Section ON: HIGH = LED ON
-            getSectionOutputs().setPin(SECTION_PINS[i], 0, 1);
-        } else {
-            // Section OFF: LOW = LED OFF
-            getSectionOutputs().setPin(SECTION_PINS[i], 0, 0);
-        }
-    }
+    updateMachineOutputs();
 }
 void MachineProcessor::handlePGN236(uint8_t pgn, const uint8_t* data, size_t len) {
     if (!instance) return;
@@ -402,6 +435,15 @@ void MachineProcessor::handlePGN236(uint8_t pgn, const uint8_t* data, size_t len
     }
     
     instance->pinConfig.configReceived = true;
+    
+    // Log configuration summary if both configs received
+    if (instance->machineConfig.configReceived) {
+        LOG_INFO(EventSource::MACHINE, "Machine configuration complete:");
+        for (int i = 1; i <= 6; i++) {
+            uint8_t func = instance->pinConfig.pinFunction[i];
+            LOG_INFO(EventSource::MACHINE, "  Output %d -> %s", i, instance->getFunctionName(func));
+        }
+    }
     
     // TODO: Save to EEPROM in Phase 4
 }
@@ -527,25 +569,58 @@ void MachineProcessor::updateFunctionStates() {
 }
 
 void MachineProcessor::updateMachineOutputs() {
-    // Placeholder - will be implemented in Phase 3
-    // For now, just call the existing section outputs
-    updateSectionOutputs();
+    // Phase 3: Full machine output control
     
-    // Phase 2 debug: Log non-section functions if active
-    static uint32_t lastDebugTime = 0;
-    if (millis() - lastDebugTime > 1000) {  // Limit to once per second
-        bool hasActive = false;
-        for (int i = 17; i <= 21; i++) {
-            if (machineState.functions[i]) {
-                if (!hasActive) {
-                    LOG_DEBUG(EventSource::MACHINE, "Non-section functions active:");
-                    hasActive = true;
-                }
-                LOG_DEBUG(EventSource::MACHINE, "  Function %d: %s", i, getFunctionName(i));
+    // Loop through our 6 physical outputs
+    for (int outputNum = 1; outputNum <= 6; outputNum++) {
+        // Get the function assigned to this output pin
+        uint8_t assignedFunction = pinConfig.pinFunction[outputNum];
+        
+        // Skip if no function assigned (0) or invalid
+        if (assignedFunction == 0 || assignedFunction > MAX_FUNCTIONS) {
+            continue;
+        }
+        
+        // Get the state of the assigned function
+        bool functionState = machineState.functions[assignedFunction];
+        
+        // Determine output state based on function type and settings
+        bool outputState;
+        
+        // For sections (functions 1-16), use standard logic
+        // Section ON = output HIGH (to turn on spray relay/valve)
+        if (assignedFunction >= 1 && assignedFunction <= 16) {
+            outputState = functionState;  // Direct mapping for sections
+        } else {
+            // For machine functions (17-21), apply active high/low setting
+            if (machineConfig.isPinActiveHigh) {
+                // Active high: function ON = output HIGH
+                outputState = functionState;
+            } else {
+                // Active low: function ON = output LOW (inverted)
+                outputState = !functionState;
             }
         }
-        if (hasActive) {
-            lastDebugTime = millis();
+        
+        // Get the actual PCA9685 pin number for this output
+        uint8_t pcaPin = SECTION_PINS[outputNum - 1];
+        
+        // Set the output
+        if (outputState) {
+            getSectionOutputs().setPin(pcaPin, 0, 1);  // HIGH
+        } else {
+            getSectionOutputs().setPin(pcaPin, 0, 0);  // LOW
+        }
+        
+        // Debug logging for function changes
+        static bool lastOutputStates[6] = {false};
+        if (functionState != lastOutputStates[outputNum - 1]) {
+            LOG_DEBUG(EventSource::MACHINE, "Output %d (pin %d): %s = %s (physical: %s)", 
+                      outputNum, pcaPin,
+                      getFunctionName(assignedFunction),
+                      functionState ? "ON" : "OFF",
+                      outputState ? "HIGH" : "LOW");
+            lastOutputStates[outputNum - 1] = functionState;
         }
     }
 }
