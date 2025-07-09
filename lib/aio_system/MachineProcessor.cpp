@@ -6,11 +6,17 @@
 #include "Adafruit_PWMServoDriver.h"
 #include "EventLogger.h"
 #include "QNetworkBase.h"
+#include <EEPROM.h>
+#include "EEPROMLayout.h"
+#include "ConfigManager.h"
 
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 
 // External network configuration - defined elsewhere
 extern struct NetworkConfig netConfig;
+
+// External config manager instance
+extern ConfigManager configManager;
 
 // PCA9685 PWM driver for section outputs - moved to static instance
 // Note: Front panel LEDs use 0x70 on Wire, sections use 0x44
@@ -80,6 +86,16 @@ bool MachineProcessor::initialize() {
     for (int i = 1; i <= 6; i++) {
         pinConfig.pinFunction[i] = i;  // Default: pin N controls section N
     }
+    
+    // Load saved configuration from EEPROM
+    loadPinConfig();
+    loadMachineConfig();
+    
+    // Load basic machine config from ConfigManager
+    machineConfig.raiseTime = configManager.getRaiseTime();
+    machineConfig.lowerTime = configManager.getLowerTime();
+    machineConfig.hydEnable = configManager.getHydraulicLift();
+    machineConfig.isPinActiveHigh = configManager.getIsPinActiveHigh();
     
     machineState.lastPGN239Time = 0;
     
@@ -445,7 +461,8 @@ void MachineProcessor::handlePGN236(uint8_t pgn, const uint8_t* data, size_t len
         }
     }
     
-    // TODO: Save to EEPROM in Phase 4
+    // Save to EEPROM
+    instance->savePinConfig();
 }
 
 void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -484,7 +501,16 @@ void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len
               instance->machineConfig.user3,
               instance->machineConfig.user4);
     
-    // TODO: Save to EEPROM in Phase 4
+    // Update ConfigManager values
+    configManager.setRaiseTime(instance->machineConfig.raiseTime);
+    configManager.setLowerTime(instance->machineConfig.lowerTime);
+    configManager.setHydraulicLift(instance->machineConfig.hydEnable != 0);
+    configManager.setIsPinActiveHigh(instance->machineConfig.isPinActiveHigh != 0);
+    
+    // Save both to EEPROM
+    LOG_INFO(EventSource::MACHINE, "Saving machine configuration to EEPROM...");
+    configManager.saveMachineConfig();
+    instance->saveMachineConfig();
 }
 
 const char* MachineProcessor::getFunctionName(uint8_t functionNum) {
@@ -635,5 +661,115 @@ void MachineProcessor::setPinHigh(uint8_t pin) {
 void MachineProcessor::setPinLow(uint8_t pin) {
     // For PCA9685: LOW = no PWM, full OFF
     getSectionOutputs().setPWM(pin, 0, 4096);
+}
+
+// EEPROM persistence methods
+void MachineProcessor::savePinConfig() {
+    // Save pin configuration starting at MACHINE_CONFIG_ADDR + 50
+    // This leaves room for existing machine config at base address
+    int addr = MACHINE_CONFIG_ADDR + 50;
+    
+    LOG_DEBUG(EventSource::MACHINE, "Saving pin config to EEPROM at address %d", addr);
+    
+    // Write a magic number to validate config
+    uint16_t magic = 0xAA55;
+    EEPROM.put(addr, magic);
+    addr += sizeof(magic);
+    
+    // Write pin function array (24 bytes)
+    for (int i = 1; i <= MAX_PIN_CONFIG; i++) {
+        EEPROM.put(addr, pinConfig.pinFunction[i]);
+        if (i <= 6) {
+            LOG_DEBUG(EventSource::MACHINE, "  Saved pin %d = function %d (%s)", 
+                      i, pinConfig.pinFunction[i], getFunctionName(pinConfig.pinFunction[i]));
+        }
+        addr++;
+    }
+    
+    LOG_INFO(EventSource::MACHINE, "Pin configuration saved to EEPROM (24 pins, final addr=%d)", addr);
+}
+
+void MachineProcessor::loadPinConfig() {
+    // Load pin configuration from EEPROM
+    int addr = MACHINE_CONFIG_ADDR + 50;
+    
+    // Check magic number
+    uint16_t magic;
+    EEPROM.get(addr, magic);
+    addr += sizeof(magic);
+    
+    if (magic == 0xAA55) {
+        // Valid config found, load it
+        for (int i = 1; i <= MAX_PIN_CONFIG; i++) {
+            EEPROM.get(addr, pinConfig.pinFunction[i]);
+            
+            // Validate function number
+            if (pinConfig.pinFunction[i] > MAX_FUNCTIONS) {
+                pinConfig.pinFunction[i] = 0;  // Reset invalid
+            }
+            addr++;
+        }
+        
+        pinConfig.configReceived = true;
+        LOG_INFO(EventSource::MACHINE, "Pin configuration loaded from EEPROM");
+        
+        // Log first 6 assignments
+        for (int i = 1; i <= 6; i++) {
+            LOG_INFO(EventSource::MACHINE, "  Output %d -> %s", 
+                     i, getFunctionName(pinConfig.pinFunction[i]));
+        }
+    } else {
+        // No valid config, keep defaults
+        LOG_INFO(EventSource::MACHINE, "No saved pin config, using defaults");
+    }
+}
+
+void MachineProcessor::saveMachineConfig() {
+    // Save extended machine config that's not in ConfigManager
+    // Using MACHINE_CONFIG_ADDR + 80 to avoid overlap
+    int addr = MACHINE_CONFIG_ADDR + 80;
+    
+    LOG_DEBUG(EventSource::MACHINE, "Saving extended machine config to EEPROM at address %d", addr);
+    
+    // Write magic number
+    uint16_t magic = 0xBB66;
+    EEPROM.put(addr, magic);
+    addr += sizeof(magic);
+    
+    // Write user values
+    EEPROM.put(addr, machineConfig.user1);
+    addr++;
+    EEPROM.put(addr, machineConfig.user2);
+    addr++;
+    EEPROM.put(addr, machineConfig.user3);
+    addr++;
+    EEPROM.put(addr, machineConfig.user4);
+    addr++;
+    
+    LOG_INFO(EventSource::MACHINE, "Extended machine config saved to EEPROM (U1=%d, U2=%d, U3=%d, U4=%d)", 
+             machineConfig.user1, machineConfig.user2, machineConfig.user3, machineConfig.user4);
+}
+
+void MachineProcessor::loadMachineConfig() {
+    // Load extended machine config
+    int addr = MACHINE_CONFIG_ADDR + 80;
+    
+    // Check magic number
+    uint16_t magic;
+    EEPROM.get(addr, magic);
+    addr += sizeof(magic);
+    
+    if (magic == 0xBB66) {
+        // Valid config found
+        EEPROM.get(addr, machineConfig.user1);
+        addr++;
+        EEPROM.get(addr, machineConfig.user2);
+        addr++;
+        EEPROM.get(addr, machineConfig.user3);
+        addr++;
+        EEPROM.get(addr, machineConfig.user4);
+        
+        LOG_DEBUG(EventSource::MACHINE, "Extended machine config loaded from EEPROM");
+    }
 }
 

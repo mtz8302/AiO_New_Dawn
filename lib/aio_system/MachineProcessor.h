@@ -86,6 +86,12 @@ public:
     // Debug helpers
     const char* getFunctionName(uint8_t functionNum);
     
+    // EEPROM persistence
+    void savePinConfig();
+    void loadPinConfig();
+    void saveMachineConfig();
+    void loadMachineConfig();
+    
     // Section control helpers
     bool initializeSectionOutputs();
     void setPinHigh(uint8_t pin);
