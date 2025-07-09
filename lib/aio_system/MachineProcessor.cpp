@@ -217,27 +217,7 @@ void MachineProcessor::process() {
     
     // Hydraulic timing - auto shutoff after configured time
     if (machineConfig.hydEnable && machineConfig.configReceived) {
-        // Check if hydraulic state changed
-        if (machineState.hydLift != machineState.lastHydLift) {
-            if (machineState.hydLift != 0) {
-                // Started moving - record start time
-                machineState.hydStartTime = millis();
-                LOG_DEBUG(EventSource::MACHINE, "Hydraulic %s started, max time: %ds",
-                          machineState.hydLift == 2 ? "UP" : "DOWN",
-                          machineState.hydLift == 2 ? machineConfig.raiseTime : machineConfig.lowerTime);
-            } else {
-                // Stopped moving
-                if (machineState.hydStartTime > 0) {
-                    uint32_t duration = millis() - machineState.hydStartTime;
-                    LOG_DEBUG(EventSource::MACHINE, "Hydraulic stopped after %.1f seconds", 
-                              duration / 1000.0f);
-                }
-                machineState.hydStartTime = 0;
-            }
-            machineState.lastHydLift = machineState.hydLift;
-        }
-        
-        // Check for timeout
+        // Check for timeout on active one-shot timer
         if (machineState.hydLift != 0 && machineState.hydStartTime > 0) {
             uint32_t maxTime = (machineState.hydLift == 2) ? 
                                machineConfig.raiseTime : machineConfig.lowerTime;
@@ -248,8 +228,15 @@ void MachineProcessor::process() {
                 LOG_INFO(EventSource::MACHINE, "Hydraulic auto-shutoff after %d seconds", maxTime);
                 machineState.hydLift = 0;
                 machineState.hydStartTime = 0;
+                machineState.lastHydLift = 0;  // Also update lastHydLift
                 updateFunctionStates();
                 updateMachineOutputs();
+                
+                // Debug logging to verify outputs are off
+                LOG_DEBUG(EventSource::MACHINE, "After timeout - hydLift=%d, func17=%d, func18=%d", 
+                          machineState.hydLift, 
+                          machineState.functions[17], 
+                          machineState.functions[18]);
             }
         }
     }
@@ -351,7 +338,29 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
                       speed / 10.0f, hydLift, tram, geoStop);
             
             // Store machine control data
-            instance->machineState.hydLift = hydLift;
+            // For hydraulic: implement one-shot timer logic
+            uint8_t prevHydLift = instance->machineState.hydLift;
+            
+            // Check for state change that should trigger a one-shot timer
+            if (hydLift != 0 && hydLift != prevHydLift) {
+                // New raise or lower command detected
+                if (instance->machineState.hydStartTime == 0 || 
+                    (prevHydLift != 0 && hydLift != prevHydLift)) {
+                    // Either starting fresh or switching direction
+                    instance->machineState.hydLift = hydLift;
+                    instance->machineState.hydStartTime = millis();
+                    LOG_INFO(EventSource::MACHINE, "Hydraulic %s one-shot started for %d seconds",
+                             hydLift == 2 ? "RAISE" : "LOWER",
+                             hydLift == 2 ? instance->machineConfig.raiseTime : instance->machineConfig.lowerTime);
+                } else {
+                    // Same command while timer active - ignore
+                    LOG_DEBUG(EventSource::MACHINE, "Ignoring repeated hydLift command %d", hydLift);
+                }
+            } else if (hydLift == 0 && prevHydLift != 0 && instance->machineState.hydStartTime == 0) {
+                // Command went to 0 and timer is not active (already timed out)
+                instance->machineState.hydLift = 0;
+            }
+            
             instance->machineState.tramline = tram;
             instance->machineState.geoStop = geoStop;
         }
