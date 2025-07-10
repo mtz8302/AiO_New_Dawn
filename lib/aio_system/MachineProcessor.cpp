@@ -69,7 +69,7 @@ MachineProcessor* MachineProcessor::getInstance() {
 }
 
 bool MachineProcessor::init() {
-    LOG_INFO(EventSource::MACHINE, "Initializing (Phase 4 - Full functionality)");
+    LOG_INFO(EventSource::MACHINE, "Initializing MachineProcessor (Phase 4 - Full functionality with EEPROM)");
     getInstance();
     return instance->initialize();
 }
@@ -96,6 +96,18 @@ bool MachineProcessor::initialize() {
     machineConfig.lowerTime = configManager.getLowerTime();
     machineConfig.hydEnable = configManager.getHydraulicLift();
     machineConfig.isPinActiveHigh = configManager.getIsPinActiveHigh();
+    
+    // Log loaded configuration
+    LOG_INFO(EventSource::MACHINE, "Loaded config: RaiseTime=%ds, LowerTime=%ds, HydEnable=%d, ActiveHigh=%d, ConfigRcvd=%d",
+             machineConfig.raiseTime, machineConfig.lowerTime, 
+             machineConfig.hydEnable, machineConfig.isPinActiveHigh,
+             machineConfig.configReceived);
+    
+    // If we have valid config from EEPROM, mark it as received
+    if (machineConfig.raiseTime > 0 && machineConfig.lowerTime > 0) {
+        machineConfig.configReceived = true;
+        LOG_INFO(EventSource::MACHINE, "Valid config loaded from EEPROM - hydraulic functions enabled");
+    }
     
     machineState.lastPGN239Time = 0;
     
@@ -146,10 +158,33 @@ bool MachineProcessor::initializeSectionOutputs() {
     }
     delayMicroseconds(150); // Wait for sleep mode to settle
     
-    // 6. Set all section outputs to OFF state before waking drivers
-    LOG_DEBUG(EventSource::MACHINE, "Setting section outputs LOW (OFF state)");
-    for (uint8_t pin : SECTION_PINS) {
-        getSectionOutputs().setPin(pin, 0, 0); // Set LOW = OFF
+    // 6. Set all section outputs to their OFF state before waking drivers
+    // For active low outputs, OFF means HIGH
+    LOG_DEBUG(EventSource::MACHINE, "Setting all outputs to OFF state (considering active high/low)");
+    
+    // Clear all function states first
+    memset(machineState.functions, 0, sizeof(machineState.functions));
+    machineState.sectionStates = 0;
+    machineState.hydLift = 0;
+    machineState.tramline = 0;
+    machineState.geoStop = 0;
+    
+    // For each output, determine the OFF state based on its assigned function
+    for (int outputNum = 1; outputNum <= 6; outputNum++) {
+        uint8_t pcaPin = SECTION_PINS[outputNum - 1];
+        uint8_t assignedFunction = pinConfig.pinFunction[outputNum];
+        
+        // Default OFF state
+        uint16_t offValue = 0;  // LOW for sections and active high machine functions
+        
+        // If this is a machine function (17-21) with active low configuration
+        if (assignedFunction >= 17 && assignedFunction <= 21 && !machineConfig.isPinActiveHigh) {
+            offValue = 4095;  // HIGH for active low machine functions when OFF
+        }
+        
+        getSectionOutputs().setPin(pcaPin, offValue, 0);
+        LOG_DEBUG(EventSource::MACHINE, "Output %d (pin %d, func %d) set to %s", 
+                  outputNum, pcaPin, assignedFunction, offValue ? "HIGH" : "LOW");
     }
     
     // 7. Wake up the section DRV8243s with reset pulse
@@ -158,13 +193,13 @@ bool MachineProcessor::initializeSectionOutputs() {
     getSectionOutputs().setPin(3, 187, 1);  // Section 3/4 - 30µs LOW pulse
     getSectionOutputs().setPin(7, 187, 1);  // Section 5/6 - 30µs LOW pulse
     
-    // 9. Enable DRV8243 outputs by setting DRVOFF LOW
+    // 8. Enable DRV8243 outputs by setting DRVOFF LOW
     LOG_DEBUG(EventSource::MACHINE, "Enabling DRV8243 outputs (DRVOFF = LOW)");
     for (uint8_t pin : DRVOFF_PINS) {
         getSectionOutputs().setPin(pin, 0, 0); // Set LOW to enable outputs
     }
     
-    LOG_INFO(EventSource::MACHINE, "Section outputs initialized");
+    LOG_INFO(EventSource::MACHINE, "Section outputs initialized - all outputs OFF");
     return true;
 }
 
@@ -225,18 +260,15 @@ void MachineProcessor::process() {
             
             if (elapsed > (maxTime * 1000)) {
                 // Timeout - turn off hydraulic
-                LOG_INFO(EventSource::MACHINE, "Hydraulic auto-shutoff after %d seconds", maxTime);
+                LOG_INFO(EventSource::MACHINE, "*** Hydraulic AUTO-SHUTOFF after %d seconds (elapsed=%dms) ***", 
+                         maxTime, elapsed);
                 machineState.hydLift = 0;
                 machineState.hydStartTime = 0;
-                machineState.lastHydLift = 0;  // Also update lastHydLift
+                // DO NOT reset lastHydLift - we need to remember the last command from AgOpenGPS
+                // to prevent retriggering when AgOpenGPS continues sending the same command
                 updateFunctionStates();
                 updateMachineOutputs();
                 
-                // Debug logging to verify outputs are off
-                LOG_DEBUG(EventSource::MACHINE, "After timeout - hydLift=%d, func17=%d, func18=%d", 
-                          machineState.hydLift, 
-                          machineState.functions[17], 
-                          machineState.functions[18]);
             }
         }
     }
@@ -287,25 +319,6 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
 }
 
 
-// Helper function to convert byte to binary string with spaces
-static void byteToBinary(uint8_t byte, char* buffer) {
-    int pos = 0;
-    for (int i = 7; i >= 0; i--) {
-        buffer[pos++] = (byte & (1 << i)) ? '1' : '0';
-        if (i > 0) buffer[pos++] = ' ';  // Add space between bits
-    }
-    buffer[pos] = '\0';
-}
-
-// Helper function to convert 16-bit value to binary string with spaces
-static void uint16ToBinary(uint16_t value, char* buffer) {
-    int pos = 0;
-    for (int i = 15; i >= 0; i--) {
-        buffer[pos++] = (value & (1 << i)) ? '1' : '0';
-        if (i > 0) buffer[pos++] = ' ';  // Add space between bits
-    }
-    buffer[pos] = '\0';
-}
 
 void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len) {
     if (!instance) return;
@@ -323,42 +336,50 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
     // Update watchdog timer
     instance->machineState.lastPGN239Time = millis();
     
+    
+    
     // For Phase 1, just log the data we're receiving
     // Log machine control data for Phase 1
     if (len >= 5) {
-        uint8_t uturn = data[0];      // Byte 5 - not used yet
-        uint8_t speed = data[1];      // Byte 6 - speed * 10
+        // uint8_t uturn = data[0];   // Byte 5 - not used yet
+        // uint8_t speed = data[1];   // Byte 6 - speed * 10
         
         if (len >= 5) {  // Have hydraulic, tram, geo data
             uint8_t hydLift = data[2];   // Byte 7: 0=off, 1=down, 2=up
             uint8_t tram = data[3];      // Byte 8: bit0=right, bit1=left
             uint8_t geoStop = data[4];   // Byte 9: 0=inside, 1=outside
             
-            LOG_DEBUG(EventSource::MACHINE, "PGN 239 Machine Data: speed=%.1f km/h, hyd=%d, tram=0x%02X, geo=%d", 
-                      speed / 10.0f, hydLift, tram, geoStop);
             
             // Store machine control data
             // For hydraulic: implement one-shot timer logic
-            uint8_t prevHydLift = instance->machineState.hydLift;
+            // uint8_t prevHydLift = instance->machineState.hydLift;  // Not needed - using lastHydLift instead
+            
             
             // Check for state change that should trigger a one-shot timer
-            if (hydLift != 0 && hydLift != prevHydLift) {
-                // New raise or lower command detected
-                if (instance->machineState.hydStartTime == 0 || 
-                    (prevHydLift != 0 && hydLift != prevHydLift)) {
-                    // Either starting fresh or switching direction
-                    instance->machineState.hydLift = hydLift;
-                    instance->machineState.hydStartTime = millis();
-                    LOG_INFO(EventSource::MACHINE, "Hydraulic %s one-shot started for %d seconds",
-                             hydLift == 2 ? "RAISE" : "LOWER",
-                             hydLift == 2 ? instance->machineConfig.raiseTime : instance->machineConfig.lowerTime);
+            
+            // Only process hydraulic if enabled
+            if (instance->machineConfig.hydEnable && instance->machineConfig.configReceived) {
+                // Check if this is a new command (different from last command from AgOpenGPS)
+                if (hydLift != instance->machineState.lastHydLift) {
+                    // Command changed
+                    if (hydLift != 0) {
+                        // New raise or lower command - start timer
+                        instance->machineState.hydLift = hydLift;
+                        instance->machineState.hydStartTime = millis();
+                        LOG_INFO(EventSource::MACHINE, "*** Hydraulic %s one-shot STARTED for %d seconds ***",
+                                 hydLift == 2 ? "RAISE" : "LOWER",
+                                 hydLift == 2 ? instance->machineConfig.raiseTime : instance->machineConfig.lowerTime);
+                    } else {
+                        // Command went to 0 - clear everything
+                        instance->machineState.hydLift = 0;
+                        instance->machineState.hydStartTime = 0;
+                    }
+                    // Update last command
+                    instance->machineState.lastHydLift = hydLift;
                 } else {
-                    // Same command while timer active - ignore
-                    LOG_DEBUG(EventSource::MACHINE, "Ignoring repeated hydLift command %d", hydLift);
+                    // Same command as before - ignore it
                 }
-            } else if (hydLift == 0 && prevHydLift != 0 && instance->machineState.hydStartTime == 0) {
-                // Command went to 0 and timer is not active (already timed out)
-                instance->machineState.hydLift = 0;
+            } else {
             }
             
             instance->machineState.tramline = tram;
@@ -408,11 +429,6 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
             
             LOG_INFO(EventSource::MACHINE, "%s", activeMsg);
             
-            // Log raw section states for debugging
-            char bin1[16], bin2[16];
-            byteToBinary(data[6], bin1);
-            byteToBinary(data[7], bin2);
-            LOG_DEBUG(EventSource::MACHINE, "Sections: SC1-8=0b%s, SC9-16=0b%s", bin1, bin2);
             
             // Update outputs using new unified handler
             instance->updateMachineOutputs();
@@ -489,8 +505,13 @@ void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len
     // Parse configuration
     instance->machineConfig.raiseTime = data[0];        // Byte 5
     instance->machineConfig.lowerTime = data[1];        // Byte 6
-    instance->machineConfig.hydEnable = data[2];        // Byte 7
-    instance->machineConfig.isPinActiveHigh = data[3];  // Byte 8
+    // Byte 7 is not used for hydraulic enable - skip data[2]
+    
+    // Byte 8: bit 0 = relay active state, bit 1 = hydraulic enable
+    uint8_t byte8 = data[3];
+    instance->machineConfig.isPinActiveHigh = (byte8 & 0x01);  // Bit 0: relay active high/low
+    instance->machineConfig.hydEnable = (byte8 & 0x02) >> 1;   // Bit 1: hydraulic enable
+    
     instance->machineConfig.user1 = data[4];            // Byte 9
     instance->machineConfig.user2 = data[5];            // Byte 10
     instance->machineConfig.user3 = data[6];            // Byte 11
@@ -498,11 +519,12 @@ void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len
     
     instance->machineConfig.configReceived = true;
     
-    LOG_INFO(EventSource::MACHINE, "Machine Config: RaiseTime=%ds, LowerTime=%ds, HydEnable=%d, ActiveHigh=%d",
+    LOG_INFO(EventSource::MACHINE, "Machine Config: RaiseTime=%ds, LowerTime=%ds, HydEnable=%d, ActiveHigh=%d (byte8=0x%02X)",
              instance->machineConfig.raiseTime,
              instance->machineConfig.lowerTime,
              instance->machineConfig.hydEnable,
-             instance->machineConfig.isPinActiveHigh);
+             instance->machineConfig.isPinActiveHigh,
+             byte8);
     
     LOG_DEBUG(EventSource::MACHINE, "User values: U1=%d, U2=%d, U3=%d, U4=%d",
               instance->machineConfig.user1,
@@ -595,10 +617,6 @@ void MachineProcessor::updateFunctionStates() {
         if (machineState.functions[i] != previousStates[i]) {
             machineState.functionsChanged = true;
             
-            // Log state changes for debugging
-            LOG_DEBUG(EventSource::MACHINE, "Function %d (%s) changed to %s", 
-                      i, getFunctionName(i), 
-                      machineState.functions[i] ? "ON" : "OFF");
         }
     }
 }
@@ -628,11 +646,15 @@ void MachineProcessor::updateMachineOutputs() {
             outputState = functionState;  // Direct mapping for sections
         } else {
             // For machine functions (17-21), apply active high/low setting
+            // When active low is configured:
+            // - Function OFF (false) -> Output should be HIGH (relay OFF)
+            // - Function ON (true) -> Output should be LOW (relay ON)
+            // This ensures outputs are OFF at boot when functions are false
             if (machineConfig.isPinActiveHigh) {
                 // Active high: function ON = output HIGH
                 outputState = functionState;
             } else {
-                // Active low: function ON = output LOW (inverted)
+                // Active low: function OFF = output HIGH, function ON = output LOW
                 outputState = !functionState;
             }
         }
@@ -647,16 +669,6 @@ void MachineProcessor::updateMachineOutputs() {
             getSectionOutputs().setPin(pcaPin, 0, 0);  // LOW
         }
         
-        // Debug logging for function changes
-        static bool lastOutputStates[6] = {false};
-        if (functionState != lastOutputStates[outputNum - 1]) {
-            LOG_DEBUG(EventSource::MACHINE, "Output %d (pin %d): %s = %s (physical: %s)", 
-                      outputNum, pcaPin,
-                      getFunctionName(assignedFunction),
-                      functionState ? "ON" : "OFF",
-                      outputState ? "HIGH" : "LOW");
-            lastOutputStates[outputNum - 1] = functionState;
-        }
     }
 }
 

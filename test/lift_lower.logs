@@ -1,0 +1,373 @@
+---- Opened the serial port /dev/tty.usbmodem151717001 ----
+[00:09:55.919] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:55.919] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:56.106] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:56.110] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:56.110] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:56.296] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:56.300] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:56.300] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:56.486] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:56.491] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:56.491] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:56.661] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:56.664] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:56.664] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:56.855] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:56.860] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:56.860] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:57.038] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:57.043] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:57.231] DEBUG/NET: Calling Machine-Data for PGN 239
+[00:09:57.231] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:57.231] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:57.430] DEBUG/NET: Calling Machine-Data for PGN 239
+[00:09:57.430] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:57.430] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:57.606] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:57.606] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:57.693] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:57.811] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:57.811] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:57.882] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:57.993] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:57.993] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:58.071] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:58.174] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:58.174] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:58.271] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:58.365] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:58.365] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:58.453] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:58.548] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:58.726] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:58.730] INFO/MACH: *** Hydraulic AUTO-SHUTOFF after 3 seconds (elapsed=3001ms) ***
+[00:09:58.730] INFO/MACH: After timeout - hydLift=0, func17=0, func18=0
+[00:09:58.913] DEBUG/STEER: shouldSteerBeActive: guidance=0, steerState=1, speed=0.0 -> NO
+[00:09:58.925] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:58.925] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:59.103] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:59.109] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:59.109] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:59.291] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:59.295] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:59.295] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:59.476] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:59.481] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:59.481] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:59.663] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:59.675] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:59.675] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:09:59.849] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:09:59.861] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:09:59.861] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:00.042] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:00.046] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:00.242] DEBUG/NET: Calling Machine-Data for PGN 239
+[00:10:00.242] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:00.242] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:00.430] DEBUG/NET: Calling Machine-Data for PGN 239
+[00:10:00.430] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:00.430] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:00.609] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:00.609] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:00.700] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:00.797] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:00.797] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:00.881] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:00.992] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:00.992] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:01.073] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:01.170] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:01.170] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:01.261] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:01.359] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:01.359] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:01.448] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:01.547] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:01.632] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:01.727] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:01.727] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:01.916] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:01.925] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:01.925] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:02.101] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:02.110] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:02.110] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:02.297] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:02.301] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:02.301] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:02.485] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:02.490] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:02.490] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:02.672] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:02.678] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:02.678] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:02.849] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:02.858] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:02.858] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:03.050] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:03.056] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:03.247] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:03.260] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:03.260] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:03.407] INFO/MACH: PGN 238 - Machine Config received
+[00:10:03.407] INFO/MACH: Machine Config: RaiseTime=3s, LowerTime=3s, HydEnable=1, ActiveHigh=0 (byte8=0x02)
+[00:10:03.478] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:03.622] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:03.622] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:03.715] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:03.809] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:03.809] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:03.899] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:04.004] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:04.004] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:04.088] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:04.186] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:04.186] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:04.278] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:04.376] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:04.376] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:04.467] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:04.564] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:04.564] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:04.748] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:04.759] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:04.759] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:04.835] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:04.926] INFO/MACH: *** Hydraulic AUTO-SHUTOFF after 3 seconds (elapsed=3001ms) ***
+[00:10:05.119] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:05.122] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:05.122] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:05.318] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:05.325] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:05.325] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:05.508] DEBUG/NET: Calling Machine-Data for PGN 239
+[00:10:05.508] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:05.508] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:05.678] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:05.683] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:05.683] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:05.865] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:05.871] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:05.871] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:06.055] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:06.059] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:06.059] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:06.251] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:06.260] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:06.260] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:06.432] DEBUG/NET: Calling Machine-Data for PGN 239
+[00:10:06.432] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:06.620] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:06.620] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:06.708] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:06.807] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:06.807] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:06.897] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:07.002] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:07.002] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:07.088] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:07.186] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:07.186] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:07.275] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:07.372] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:07.372] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:07.463] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:07.561] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:07.561] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:07.647] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:07.751] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:07.836] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:07.922] INFO/SYS: Connection Status: Ethernet=UP, AgIO=Connected (PGN traffic)
+[00:10:07.922] INFO/SYS: GPS Data Flow: Inactive (no GPS or no fix)
+[00:10:08.118] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:08.122] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:08.122] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:08.305] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:08.312] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:08.312] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:08.490] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:08.496] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:08.496] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:08.679] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:08.683] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:08.683] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:08.868] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:08.872] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:08.872] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:08.997] INFO/NET: Network status: IP=192.168.5.126, Link=100 Mbps, FullDuplex=Yes
+[00:10:09.062] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:09.065] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:09.244] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:09.248] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:09.435] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:09.438] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:09.438] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:09.624] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:09.624] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:09.712] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:09.810] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:09.810] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:09.900] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:09.998] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:09.998] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:10.087] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:10.193] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:10.194] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:10.276] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:10.374] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:10.374] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:10.470] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:10.561] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:10.561] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:10.655] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:10.749] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:10.842] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:10.982] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:10.982] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:11.033] DEBUG/STEER: shouldSteerBeActive: guidance=0, steerState=1, speed=0.0 -> NO
+[00:10:11.123] INFO/MACH: *** Hydraulic AUTO-SHUTOFF after 3 seconds (elapsed=3001ms) ***
+[00:10:11.123] INFO/MACH: After timeout - hydLift=0, func17=0, func18=0
+[00:10:11.309] DEBUG/NET: Calling Machine-Data for PGN 239
+[00:10:11.309] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:11.309] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:11.491] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:11.514] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:11.514] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:11.679] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:11.683] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:11.683] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:11.866] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:11.888] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:11.888] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:12.043] DEBUG/STEER: shouldSteerBeActive: guidance=0, steerState=1, speed=0.0 -> NO
+[00:10:12.063] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:12.063] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:12.244] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:12.247] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:12.430] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:12.433] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:12.433] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:12.632] DEBUG/NET: Calling Machine-Data for PGN 239
+[00:10:12.632] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:12.632] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:12.811] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:12.811] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:12.896] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:12.972] INFO/SYS: Connection Status: Ethernet=UP, AgIO=Connected (PGN traffic)
+[00:10:12.972] INFO/SYS: GPS Data Flow: Inactive (no GPS or no fix)
+[00:10:13.053] DEBUG/STEER: shouldSteerBeActive: guidance=0, steerState=1, speed=0.0 -> NO
+[00:10:13.187] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:13.187] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:13.286] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:13.371] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:13.371] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:13.461] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:13.566] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:13.566] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:13.646] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:13.744] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:13.834] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:13.931] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:13.931] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:14.063] DEBUG/STEER: shouldSteerBeActive: guidance=0, steerState=1, speed=0.0 -> NO
+[00:10:14.124] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:14.124] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:14.311] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:14.314] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:14.314] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:14.495] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:14.500] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:14.500] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:14.677] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:14.681] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:14.681] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:14.866] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:14.886] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:14.886] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:15.053] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:15.057] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:15.057] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:15.241] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:15.244] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:15.433] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:15.438] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:15.438] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:15.621] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:15.621] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:15.712] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:15.810] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:15.810] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:15.912] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:15.999] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:15.999] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:16.050] DEBUG/NET: Calling Machine-Config for PGN 238
+[00:10:16.276] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:16.375] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:16.375] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:16.461] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:16.559] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:16.559] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:16.649] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:16.746] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:16.746] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:16.835] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:16.932] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:16.932] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:17.093] DEBUG/STEER: shouldSteerBeActive: guidance=0, steerState=1, speed=0.0 -> NO
+[00:10:17.118] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:17.118] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:17.303] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:17.306] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:17.306] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:17.315] INFO/MACH: *** Hydraulic AUTO-SHUTOFF after 3 seconds (elapsed=3001ms) ***
+[00:10:17.494] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:17.497] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:17.497] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:17.681] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:17.684] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:17.684] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:17.866] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:17.870] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:17.870] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:18.022] INFO/SYS: Connection Status: Ethernet=UP, AgIO=Connected (PGN traffic)
+[00:10:18.070] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:18.074] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:18.248] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:18.251] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:18.435] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:18.442] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:18.442] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:18.625] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:18.625] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:18.710] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:18.809] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:18.809] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:18.899] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:18.997] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:18.997] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:19.086] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:19.184] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:19.184] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:19.274] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:19.478] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:19.649] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:19.654] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:19.654] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:19.845] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:19.850] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:19.850] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:20.025] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:20.025] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:20.115] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:20.212] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:20.212] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:20.305] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:20.408] INFO/MACH: PGN 239 RAW (8 bytes): 00 00 02 00 00 00 00 00 
+[00:10:20.408] INFO/MACH: PGN 239 Parsed: speed=0.0 km/h, hydLift=2, tram=0x00, geo=0
+[00:10:20.497] DEBUG/NET: Calling AutosteerHandler for PGN 254
+[00:10:20.498] INFO/MACH: *** Hydraulic AUTO-SHUTOFF after 3 seconds (elapsed=3001ms) ***
+[00:10:20.498] INFO/MACH: After timeout - hydLift=0, func17=0, func18=0
+[00:10:20.498] INFO/MACH: Pin 1 (function 17) should now be OFF
+---- Closed the serial port /dev/tty.usbmodem151717001 ----
