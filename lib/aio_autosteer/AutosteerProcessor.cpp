@@ -507,16 +507,17 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     lastCommandTime = millis();  // Update watchdog timer
     
     // Debug: Log raw PGN 254 data
-    static uint32_t lastRawLog = 0;
-    if (millis() - lastRawLog > 500) { // Every 500ms
-        lastRawLog = millis();
-        char hexBuf[64];
-        int pos = 0;
-        for (int i = 0; i < len && i < 16 && pos < 60; i++) {
-            pos += snprintf(hexBuf + pos, sizeof(hexBuf) - pos, "%02X ", data[i]);
-        }
-        LOG_DEBUG(EventSource::AUTOSTEER, "PGN254 raw (%d bytes): %s", len, hexBuf);
-    }
+    // Commented out to reduce log noise
+    // static uint32_t lastRawLog = 0;
+    // if (millis() - lastRawLog > 500) { // Every 500ms
+    //     lastRawLog = millis();
+    //     char hexBuf[64];
+    //     int pos = 0;
+    //     for (int i = 0; i < len && i < 16 && pos < 60; i++) {
+    //         pos += snprintf(hexBuf + pos, sizeof(hexBuf) - pos, "%02X ", data[i]);
+    //     }
+    //     LOG_DEBUG(EventSource::AUTOSTEER, "PGN254 raw (%d bytes): %s", len, hexBuf);
+    // }
     
     
     // Data format (from PGNProcessor we get data starting at speed):

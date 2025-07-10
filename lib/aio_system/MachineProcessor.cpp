@@ -6,11 +6,17 @@
 #include "Adafruit_PWMServoDriver.h"
 #include "EventLogger.h"
 #include "QNetworkBase.h"
+#include <EEPROM.h>
+#include "EEPROMLayout.h"
+#include "ConfigManager.h"
 
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 
 // External network configuration - defined elsewhere
 extern struct NetworkConfig netConfig;
+
+// External config manager instance
+extern ConfigManager configManager;
 
 // PCA9685 PWM driver for section outputs - moved to static instance
 // Note: Front panel LEDs use 0x70 on Wire, sections use 0x44
@@ -63,7 +69,7 @@ MachineProcessor* MachineProcessor::getInstance() {
 }
 
 bool MachineProcessor::init() {
-    LOG_INFO(EventSource::MACHINE, "Initializing (Phase 4 - Full functionality)");
+    LOG_INFO(EventSource::MACHINE, "Initializing MachineProcessor (Phase 4 - Full functionality with EEPROM)");
     getInstance();
     return instance->initialize();
 }
@@ -72,8 +78,38 @@ bool MachineProcessor::initialize() {
     LOG_INFO(EventSource::MACHINE, "Initializing...");
     
     // Clear initial state
-    memset(&sectionState, 0, sizeof(sectionState));
-    sectionState.lastPGN239Time = 0;
+    memset(&machineState, 0, sizeof(machineState));
+    memset(&machineConfig, 0, sizeof(machineConfig));
+    memset(&pinConfig, 0, sizeof(pinConfig));
+    
+    // Set default pin assignments (pins 1-6 = sections 1-6)
+    for (int i = 1; i <= 6; i++) {
+        pinConfig.pinFunction[i] = i;  // Default: pin N controls section N
+    }
+    
+    // Load saved configuration from EEPROM
+    loadPinConfig();
+    loadMachineConfig();
+    
+    // Load basic machine config from ConfigManager
+    machineConfig.raiseTime = configManager.getRaiseTime();
+    machineConfig.lowerTime = configManager.getLowerTime();
+    machineConfig.hydEnable = configManager.getHydraulicLift();
+    machineConfig.isPinActiveHigh = configManager.getIsPinActiveHigh();
+    
+    // Log loaded configuration
+    LOG_INFO(EventSource::MACHINE, "Loaded config: RaiseTime=%ds, LowerTime=%ds, HydEnable=%d, ActiveHigh=%d, ConfigRcvd=%d",
+             machineConfig.raiseTime, machineConfig.lowerTime, 
+             machineConfig.hydEnable, machineConfig.isPinActiveHigh,
+             machineConfig.configReceived);
+    
+    // If we have valid config from EEPROM, mark it as received
+    if (machineConfig.raiseTime > 0 && machineConfig.lowerTime > 0) {
+        machineConfig.configReceived = true;
+        LOG_INFO(EventSource::MACHINE, "Valid config loaded from EEPROM - hydraulic functions enabled");
+    }
+    
+    machineState.lastPGN239Time = 0;
     
     // Initialize hardware
     if (!initializeSectionOutputs()) {
@@ -85,8 +121,11 @@ bool MachineProcessor::initialize() {
     LOG_DEBUG(EventSource::MACHINE, "Registering PGN callbacks...");
     // Register for broadcast PGNs (200, 202)
     bool regBroadcast = PGNProcessor::instance->registerBroadcastCallback(handleBroadcastPGN, "Machine");
-    bool reg239 = PGNProcessor::instance->registerCallback(MACHINE_PGN_DATA, handlePGN239, "Machine");
-    LOG_DEBUG(EventSource::MACHINE, "PGN registrations - Broadcast:%d, 239:%d", regBroadcast, reg239);
+    bool reg236 = PGNProcessor::instance->registerCallback(MACHINE_PGN_PIN_CONFIG, handlePGN236, "Machine-PinConfig");
+    bool reg238 = PGNProcessor::instance->registerCallback(MACHINE_PGN_CONFIG, handlePGN238, "Machine-Config");
+    bool reg239 = PGNProcessor::instance->registerCallback(MACHINE_PGN_DATA, handlePGN239, "Machine-Data");
+    LOG_INFO(EventSource::MACHINE, "PGN registrations - Broadcast:%d, 236:%d, 238:%d, 239:%d", 
+             regBroadcast, reg236, reg238, reg239);
     
     LOG_INFO(EventSource::MACHINE, "Initialized successfully");
     return true;
@@ -119,10 +158,33 @@ bool MachineProcessor::initializeSectionOutputs() {
     }
     delayMicroseconds(150); // Wait for sleep mode to settle
     
-    // 6. Set all section outputs to OFF state before waking drivers
-    LOG_DEBUG(EventSource::MACHINE, "Setting section outputs LOW (OFF state)");
-    for (uint8_t pin : SECTION_PINS) {
-        getSectionOutputs().setPin(pin, 0, 0); // Set LOW = OFF
+    // 6. Set all section outputs to their OFF state before waking drivers
+    // For active low outputs, OFF means HIGH
+    LOG_DEBUG(EventSource::MACHINE, "Setting all outputs to OFF state (considering active high/low)");
+    
+    // Clear all function states first
+    memset(machineState.functions, 0, sizeof(machineState.functions));
+    machineState.sectionStates = 0;
+    machineState.hydLift = 0;
+    machineState.tramline = 0;
+    machineState.geoStop = 0;
+    
+    // For each output, determine the OFF state based on its assigned function
+    for (int outputNum = 1; outputNum <= 6; outputNum++) {
+        uint8_t pcaPin = SECTION_PINS[outputNum - 1];
+        uint8_t assignedFunction = pinConfig.pinFunction[outputNum];
+        
+        // Default OFF state
+        uint16_t offValue = 0;  // LOW for sections and active high machine functions
+        
+        // If this is a machine function (17-21) with active low configuration
+        if (assignedFunction >= 17 && assignedFunction <= 21 && !machineConfig.isPinActiveHigh) {
+            offValue = 4095;  // HIGH for active low machine functions when OFF
+        }
+        
+        getSectionOutputs().setPin(pcaPin, offValue, 0);
+        LOG_DEBUG(EventSource::MACHINE, "Output %d (pin %d, func %d) set to %s", 
+                  outputNum, pcaPin, assignedFunction, offValue ? "HIGH" : "LOW");
     }
     
     // 7. Wake up the section DRV8243s with reset pulse
@@ -131,13 +193,13 @@ bool MachineProcessor::initializeSectionOutputs() {
     getSectionOutputs().setPin(3, 187, 1);  // Section 3/4 - 30µs LOW pulse
     getSectionOutputs().setPin(7, 187, 1);  // Section 5/6 - 30µs LOW pulse
     
-    // 9. Enable DRV8243 outputs by setting DRVOFF LOW
+    // 8. Enable DRV8243 outputs by setting DRVOFF LOW
     LOG_DEBUG(EventSource::MACHINE, "Enabling DRV8243 outputs (DRVOFF = LOW)");
     for (uint8_t pin : DRVOFF_PINS) {
         getSectionOutputs().setPin(pin, 0, 0); // Set LOW to enable outputs
     }
     
-    LOG_INFO(EventSource::MACHINE, "Section outputs initialized");
+    LOG_INFO(EventSource::MACHINE, "Section outputs initialized - all outputs OFF");
     return true;
 }
 
@@ -158,33 +220,57 @@ void MachineProcessor::process() {
     bool currentLinkState = QNetworkBase::isConnected();
     
     if (previousLinkState && !currentLinkState) {
-        // Link just went down - turn off all sections immediately
-        if (sectionState.currentStates != 0) {
-            LOG_INFO(EventSource::MACHINE, "Sections turned off - ethernet link down");
-            sectionState.currentStates = 0;
-            memset(sectionState.isOn, 0, sizeof(sectionState.isOn));
-            updateSectionOutputs();
-            
-            // Clear the timer so sections stay off
-            sectionState.lastPGN239Time = 0;
-        }
+        // Link just went down - turn off all functions immediately
+        LOG_INFO(EventSource::MACHINE, "All outputs turned off - ethernet link down");
+        memset(machineState.functions, 0, sizeof(machineState.functions));
+        machineState.sectionStates = 0;
+        machineState.hydLift = 0;
+        machineState.tramline = 0;
+        machineState.geoStop = 0;
+        updateMachineOutputs();
+        
+        // Clear the timer
+        machineState.lastPGN239Time = 0;
     }
     previousLinkState = currentLinkState;
     
-    // Watchdog timer - turn off all sections if no PGN 239 for 2 seconds
-    if (sectionState.lastPGN239Time > 0 && 
-        (millis() - sectionState.lastPGN239Time) > 2000) {
+    // Watchdog timer - turn off all outputs if no PGN 239 for 2 seconds
+    if (machineState.lastPGN239Time > 0 && 
+        (millis() - machineState.lastPGN239Time) > 2000) {
         
-        // Turn off all sections
-        if (sectionState.currentStates != 0) {
-            LOG_INFO(EventSource::MACHINE, "Sections turned off - watchdog timeout");
-            sectionState.currentStates = 0;
-            memset(sectionState.isOn, 0, sizeof(sectionState.isOn));
-            updateSectionOutputs();
-        }
+        LOG_INFO(EventSource::MACHINE, "All outputs turned off - watchdog timeout");
+        memset(machineState.functions, 0, sizeof(machineState.functions));
+        machineState.sectionStates = 0;
+        machineState.hydLift = 0;
+        machineState.tramline = 0;
+        machineState.geoStop = 0;
+        updateMachineOutputs();
         
         // Reset timer to prevent repeated messages
-        sectionState.lastPGN239Time = 0;
+        machineState.lastPGN239Time = 0;
+    }
+    
+    // Hydraulic timing - auto shutoff after configured time
+    if (machineConfig.hydEnable && machineConfig.configReceived) {
+        // Check for timeout on active one-shot timer
+        if (machineState.hydLift != 0 && machineState.hydStartTime > 0) {
+            uint32_t maxTime = (machineState.hydLift == 2) ? 
+                               machineConfig.raiseTime : machineConfig.lowerTime;
+            uint32_t elapsed = millis() - machineState.hydStartTime;
+            
+            if (elapsed > (maxTime * 1000)) {
+                // Timeout - turn off hydraulic
+                LOG_INFO(EventSource::MACHINE, "*** Hydraulic AUTO-SHUTOFF after %d seconds (elapsed=%dms) ***", 
+                         maxTime, elapsed);
+                machineState.hydLift = 0;
+                machineState.hydStartTime = 0;
+                // DO NOT reset lastHydLift - we need to remember the last command from AgOpenGPS
+                // to prevent retriggering when AgOpenGPS continues sending the same command
+                updateFunctionStates();
+                updateMachineOutputs();
+                
+            }
+        }
     }
 }
 
@@ -233,25 +319,6 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
 }
 
 
-// Helper function to convert byte to binary string with spaces
-static void byteToBinary(uint8_t byte, char* buffer) {
-    int pos = 0;
-    for (int i = 7; i >= 0; i--) {
-        buffer[pos++] = (byte & (1 << i)) ? '1' : '0';
-        if (i > 0) buffer[pos++] = ' ';  // Add space between bits
-    }
-    buffer[pos] = '\0';
-}
-
-// Helper function to convert 16-bit value to binary string with spaces
-static void uint16ToBinary(uint16_t value, char* buffer) {
-    int pos = 0;
-    for (int i = 15; i >= 0; i--) {
-        buffer[pos++] = (value & (1 << i)) ? '1' : '0';
-        if (i > 0) buffer[pos++] = ' ';  // Add space between bits
-    }
-    buffer[pos] = '\0';
-}
 
 void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len) {
     if (!instance) return;
@@ -262,65 +329,349 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
         return;
     }
     
-    // Need at least 8 bytes to have section data in bytes 6 & 7
+    // Need at least 12 bytes for all machine data
+    // PGN 239 format: uturn(5), speed(6), hydLift(7), tram(8), geo(9), reserved(10), SC1-8(11), SC9-16(12)
     if (len < 8) return;
     
     // Update watchdog timer
-    instance->sectionState.lastPGN239Time = millis();
+    instance->machineState.lastPGN239Time = millis();
     
-    // Extract section states from bytes 6 & 7
-    uint16_t sectionStates = data[6] | (data[7] << 8);
     
-    // Only update if changed
-    if (sectionStates != instance->sectionState.currentStates) {
-        instance->sectionState.currentStates = sectionStates;
+    
+    // For Phase 1, just log the data we're receiving
+    // Log machine control data for Phase 1
+    if (len >= 5) {
+        // uint8_t uturn = data[0];   // Byte 5 - not used yet
+        // uint8_t speed = data[1];   // Byte 6 - speed * 10
         
-        // Decode section states - simple on/off from bytes 6 & 7
-        // Bit 1 = ON, Bit 0 = OFF
-        for (int i = 0; i < 16; i++) {
-            instance->sectionState.isOn[i] = (sectionStates & (1 << i)) != 0;
+        if (len >= 5) {  // Have hydraulic, tram, geo data
+            uint8_t hydLift = data[2];   // Byte 7: 0=off, 1=down, 2=up
+            uint8_t tram = data[3];      // Byte 8: bit0=right, bit1=left
+            uint8_t geoStop = data[4];   // Byte 9: 0=inside, 1=outside
+            
+            
+            // Store machine control data
+            // For hydraulic: implement one-shot timer logic
+            // uint8_t prevHydLift = instance->machineState.hydLift;  // Not needed - using lastHydLift instead
+            
+            
+            // Check for state change that should trigger a one-shot timer
+            
+            // Only process hydraulic if enabled
+            if (instance->machineConfig.hydEnable && instance->machineConfig.configReceived) {
+                // Check if this is a new command (different from last command from AgOpenGPS)
+                if (hydLift != instance->machineState.lastHydLift) {
+                    // Command changed
+                    if (hydLift != 0) {
+                        // New raise or lower command - start timer
+                        instance->machineState.hydLift = hydLift;
+                        instance->machineState.hydStartTime = millis();
+                        LOG_INFO(EventSource::MACHINE, "*** Hydraulic %s one-shot STARTED for %d seconds ***",
+                                 hydLift == 2 ? "RAISE" : "LOWER",
+                                 hydLift == 2 ? instance->machineConfig.raiseTime : instance->machineConfig.lowerTime);
+                    } else {
+                        // Command went to 0 - clear everything
+                        instance->machineState.hydLift = 0;
+                        instance->machineState.hydStartTime = 0;
+                    }
+                    // Update last command
+                    instance->machineState.lastHydLift = hydLift;
+                } else {
+                    // Same command as before - ignore it
+                }
+            } else {
+            }
+            
+            instance->machineState.tramline = tram;
+            instance->machineState.geoStop = geoStop;
+        }
+    }
+    
+    if (len >= 8) {
+        // Extract section states from bytes 11 & 12 (array indices 6 & 7)
+        uint16_t sectionStates = data[6] | (data[7] << 8);
+        
+        // Track if any states changed
+        bool statesChanged = false;
+        
+        // Check if section states changed
+        if (sectionStates != instance->machineState.sectionStates) {
+            instance->machineState.sectionStates = sectionStates;
+            statesChanged = true;
         }
         
-        // Log section changes with binary format
-        char bin1[16], bin2[16];  // 8 bits + 7 spaces + null terminator
-        byteToBinary(data[6], bin1);
-        byteToBinary(data[7], bin2);
-        LOG_INFO(EventSource::MACHINE, "Sections changed: [6]SC1-8=0x%02X (0b%s) [7]SC9-16=0x%02X (0b%s)", 
-                 data[6], bin1, data[7], bin2);
+        // Update all function states
+        instance->updateFunctionStates();
         
-        // Show which sections are ON (only first 6 sections we control)
-        char sectionMsg[100];
-        snprintf(sectionMsg, sizeof(sectionMsg), "Section states:");
-        for (int i = 0; i < 6; i++) {
-            char buf[20];
-            snprintf(buf, sizeof(buf), " S%d=%s", i+1, instance->sectionState.isOn[i] ? "ON" : "OFF");
-            strncat(sectionMsg, buf, sizeof(sectionMsg) - strlen(sectionMsg) - 1);
+        // Check if any function changed
+        if (instance->machineState.functionsChanged) {
+            statesChanged = true;
+            instance->machineState.functionsChanged = false;  // Reset flag
         }
-        LOG_INFO(EventSource::MACHINE, "%s", sectionMsg);
         
-        // Phase 4: Section output updates enabled
-        instance->updateSectionOutputs();
+        // Only log and update outputs if something changed
+        if (statesChanged) {
+            // Show active functions for our 6 outputs
+            char activeMsg[256];
+            snprintf(activeMsg, sizeof(activeMsg), "Active functions:");
+            
+            // Check what function each output is assigned to
+            for (int pin = 1; pin <= 6; pin++) {
+                uint8_t func = instance->pinConfig.pinFunction[pin];
+                if (func > 0 && func <= MAX_FUNCTIONS) {
+                    if (instance->machineState.functions[func]) {
+                        char buf[50];
+                        snprintf(buf, sizeof(buf), " Out%d=%s", pin, instance->getFunctionName(func));
+                        strncat(activeMsg, buf, sizeof(activeMsg) - strlen(activeMsg) - 1);
+                    }
+                }
+            }
+            
+            LOG_INFO(EventSource::MACHINE, "%s", activeMsg);
+            
+            
+            // Update outputs using new unified handler
+            instance->updateMachineOutputs();
+        }
     }
     
 }
 
 
 
+// Deprecated - replaced by updateMachineOutputs()
 void MachineProcessor::updateSectionOutputs() {
-    // Removed periodic debug logging - this is called frequently from PGN 239
+    updateMachineOutputs();
+}
+void MachineProcessor::handlePGN236(uint8_t pgn, const uint8_t* data, size_t len) {
+    if (!instance) return;
     
-    // Update physical outputs for sections 1-6
-    // Logic is inverted: HIGH turns LED ON, LOW turns LED OFF
-    for (int i = 0; i < 6; i++) {
-        if (sectionState.isOn[i]) {
-            // Section ON: HIGH = LED ON
-            getSectionOutputs().setPin(SECTION_PINS[i], 0, 1);
-        } else {
-            // Section OFF: LOW = LED OFF
-            getSectionOutputs().setPin(SECTION_PINS[i], 0, 0);
+    // PGN 236 - Machine Pin Config
+    // Expected length: 30 bytes (5 header + 24 pin configs + 1 reserved)
+    if (len < 24) {
+        LOG_ERROR(EventSource::MACHINE, "PGN 236 too short: %d bytes", len);
+        return;
+    }
+    
+    LOG_INFO(EventSource::MACHINE, "PGN 236 - Machine Pin Config received");
+    
+    // Parse pin function assignments (bytes 0-23 map to pins 1-24)
+    for (int i = 0; i < 24 && i < len; i++) {
+        uint8_t function = data[i];
+        
+        // Validate function number (0=unassigned, 1-21=valid functions)
+        if (function > MAX_FUNCTIONS) {
+            LOG_WARNING(EventSource::MACHINE, "Pin %d: Invalid function %d (max %d)", 
+                        i + 1, function, MAX_FUNCTIONS);
+            function = 0;  // Set to unassigned
+        }
+        
+        instance->pinConfig.pinFunction[i + 1] = function;
+        
+        // Log assignments for first 6 pins (our physical outputs)
+        if (i < 6) {
+            LOG_INFO(EventSource::MACHINE, "Output %d assigned to %s", 
+                     i + 1, instance->getFunctionName(function));
+        }
+    }
+    
+    instance->pinConfig.configReceived = true;
+    
+    // Log configuration summary if both configs received
+    if (instance->machineConfig.configReceived) {
+        LOG_INFO(EventSource::MACHINE, "Machine configuration complete:");
+        for (int i = 1; i <= 6; i++) {
+            uint8_t func = instance->pinConfig.pinFunction[i];
+            LOG_INFO(EventSource::MACHINE, "  Output %d -> %s", i, instance->getFunctionName(func));
+        }
+    }
+    
+    // Save to EEPROM
+    instance->savePinConfig();
+}
+
+void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len) {
+    if (!instance) return;
+    
+    // PGN 238 - Machine Config
+    // Expected length: 14 bytes (5 header + 8 config + 1 reserved)
+    if (len < 8) {
+        LOG_ERROR(EventSource::MACHINE, "PGN 238 too short: %d bytes", len);
+        return;
+    }
+    
+    LOG_INFO(EventSource::MACHINE, "PGN 238 - Machine Config received");
+    
+    // Parse configuration
+    instance->machineConfig.raiseTime = data[0];        // Byte 5
+    instance->machineConfig.lowerTime = data[1];        // Byte 6
+    // Byte 7 is not used for hydraulic enable - skip data[2]
+    
+    // Byte 8: bit 0 = relay active state, bit 1 = hydraulic enable
+    uint8_t byte8 = data[3];
+    instance->machineConfig.isPinActiveHigh = (byte8 & 0x01);  // Bit 0: relay active high/low
+    instance->machineConfig.hydEnable = (byte8 & 0x02) >> 1;   // Bit 1: hydraulic enable
+    
+    instance->machineConfig.user1 = data[4];            // Byte 9
+    instance->machineConfig.user2 = data[5];            // Byte 10
+    instance->machineConfig.user3 = data[6];            // Byte 11
+    instance->machineConfig.user4 = data[7];            // Byte 12
+    
+    instance->machineConfig.configReceived = true;
+    
+    LOG_INFO(EventSource::MACHINE, "Machine Config: RaiseTime=%ds, LowerTime=%ds, HydEnable=%d, ActiveHigh=%d (byte8=0x%02X)",
+             instance->machineConfig.raiseTime,
+             instance->machineConfig.lowerTime,
+             instance->machineConfig.hydEnable,
+             instance->machineConfig.isPinActiveHigh,
+             byte8);
+    
+    LOG_DEBUG(EventSource::MACHINE, "User values: U1=%d, U2=%d, U3=%d, U4=%d",
+              instance->machineConfig.user1,
+              instance->machineConfig.user2,
+              instance->machineConfig.user3,
+              instance->machineConfig.user4);
+    
+    // Update ConfigManager values
+    configManager.setRaiseTime(instance->machineConfig.raiseTime);
+    configManager.setLowerTime(instance->machineConfig.lowerTime);
+    configManager.setHydraulicLift(instance->machineConfig.hydEnable != 0);
+    configManager.setIsPinActiveHigh(instance->machineConfig.isPinActiveHigh != 0);
+    
+    // Save both to EEPROM
+    LOG_INFO(EventSource::MACHINE, "Saving machine configuration to EEPROM...");
+    configManager.saveMachineConfig();
+    instance->saveMachineConfig();
+}
+
+const char* MachineProcessor::getFunctionName(uint8_t functionNum) {
+    static const char* functionNames[] = {
+        "Unassigned",     // 0
+        "Section 1",      // 1
+        "Section 2",      // 2
+        "Section 3",      // 3
+        "Section 4",      // 4
+        "Section 5",      // 5
+        "Section 6",      // 6
+        "Section 7",      // 7
+        "Section 8",      // 8
+        "Section 9",      // 9
+        "Section 10",     // 10
+        "Section 11",     // 11
+        "Section 12",     // 12
+        "Section 13",     // 13
+        "Section 14",     // 14
+        "Section 15",     // 15
+        "Section 16",     // 16
+        "Hyd Up",         // 17
+        "Hyd Down",       // 18
+        "Tramline Right", // 19
+        "Tramline Left",  // 20
+        "Geo Stop"        // 21
+    };
+    
+    if (functionNum <= MAX_FUNCTIONS) {
+        return functionNames[functionNum];
+    }
+    return "Invalid";
+}
+
+void MachineProcessor::updateFunctionStates() {
+    // Save previous states to detect changes
+    bool previousStates[MAX_FUNCTIONS + 1];
+    memcpy(previousStates, machineState.functions, sizeof(previousStates));
+    
+    // Clear all function states first
+    memset(machineState.functions, 0, sizeof(machineState.functions));
+    
+    // Map section states to functions 1-16
+    for (int i = 0; i < 16; i++) {
+        machineState.functions[i + 1] = (machineState.sectionStates & (1 << i)) != 0;
+    }
+    
+    // Map hydraulic states to functions 17-18
+    // hydLift: 0=off, 1=down, 2=up
+    if (machineState.hydLift == 2) {
+        machineState.functions[17] = true;  // Hyd Up
+        machineState.functions[18] = false; // Hyd Down
+    } else if (machineState.hydLift == 1) {
+        machineState.functions[17] = false; // Hyd Up
+        machineState.functions[18] = true;  // Hyd Down
+    } else {
+        machineState.functions[17] = false; // Hyd Up
+        machineState.functions[18] = false; // Hyd Down
+    }
+    
+    // Map tramline bits to functions 19-20
+    // tramline: bit0=right, bit1=left
+    machineState.functions[19] = (machineState.tramline & 0x01) != 0; // Tram Right
+    machineState.functions[20] = (machineState.tramline & 0x02) != 0; // Tram Left
+    
+    // Map geo stop to function 21
+    // geoStop: 0=inside boundary, 1=outside boundary
+    machineState.functions[21] = (machineState.geoStop != 0);
+    
+    // Check if any function state changed
+    machineState.functionsChanged = false;
+    for (int i = 1; i <= MAX_FUNCTIONS; i++) {
+        if (machineState.functions[i] != previousStates[i]) {
+            machineState.functionsChanged = true;
+            
         }
     }
 }
+
+void MachineProcessor::updateMachineOutputs() {
+    // Phase 3: Full machine output control
+    
+    // Loop through our 6 physical outputs
+    for (int outputNum = 1; outputNum <= 6; outputNum++) {
+        // Get the function assigned to this output pin
+        uint8_t assignedFunction = pinConfig.pinFunction[outputNum];
+        
+        // Skip if no function assigned (0) or invalid
+        if (assignedFunction == 0 || assignedFunction > MAX_FUNCTIONS) {
+            continue;
+        }
+        
+        // Get the state of the assigned function
+        bool functionState = machineState.functions[assignedFunction];
+        
+        // Determine output state based on function type and settings
+        bool outputState;
+        
+        // For sections (functions 1-16), use standard logic
+        // Section ON = output HIGH (to turn on spray relay/valve)
+        if (assignedFunction >= 1 && assignedFunction <= 16) {
+            outputState = functionState;  // Direct mapping for sections
+        } else {
+            // For machine functions (17-21), apply active high/low setting
+            // When active low is configured:
+            // - Function OFF (false) -> Output should be HIGH (relay OFF)
+            // - Function ON (true) -> Output should be LOW (relay ON)
+            // This ensures outputs are OFF at boot when functions are false
+            if (machineConfig.isPinActiveHigh) {
+                // Active high: function ON = output HIGH
+                outputState = functionState;
+            } else {
+                // Active low: function OFF = output HIGH, function ON = output LOW
+                outputState = !functionState;
+            }
+        }
+        
+        // Get the actual PCA9685 pin number for this output
+        uint8_t pcaPin = SECTION_PINS[outputNum - 1];
+        
+        // Set the output
+        if (outputState) {
+            getSectionOutputs().setPin(pcaPin, 0, 1);  // HIGH
+        } else {
+            getSectionOutputs().setPin(pcaPin, 0, 0);  // LOW
+        }
+        
+    }
+}
+
 
 // Helper methods for clarity
 void MachineProcessor::setPinHigh(uint8_t pin) {
@@ -331,5 +682,115 @@ void MachineProcessor::setPinHigh(uint8_t pin) {
 void MachineProcessor::setPinLow(uint8_t pin) {
     // For PCA9685: LOW = no PWM, full OFF
     getSectionOutputs().setPWM(pin, 0, 4096);
+}
+
+// EEPROM persistence methods
+void MachineProcessor::savePinConfig() {
+    // Save pin configuration starting at MACHINE_CONFIG_ADDR + 50
+    // This leaves room for existing machine config at base address
+    int addr = MACHINE_CONFIG_ADDR + 50;
+    
+    LOG_DEBUG(EventSource::MACHINE, "Saving pin config to EEPROM at address %d", addr);
+    
+    // Write a magic number to validate config
+    uint16_t magic = 0xAA55;
+    EEPROM.put(addr, magic);
+    addr += sizeof(magic);
+    
+    // Write pin function array (24 bytes)
+    for (int i = 1; i <= MAX_PIN_CONFIG; i++) {
+        EEPROM.put(addr, pinConfig.pinFunction[i]);
+        if (i <= 6) {
+            LOG_DEBUG(EventSource::MACHINE, "  Saved pin %d = function %d (%s)", 
+                      i, pinConfig.pinFunction[i], getFunctionName(pinConfig.pinFunction[i]));
+        }
+        addr++;
+    }
+    
+    LOG_INFO(EventSource::MACHINE, "Pin configuration saved to EEPROM (24 pins, final addr=%d)", addr);
+}
+
+void MachineProcessor::loadPinConfig() {
+    // Load pin configuration from EEPROM
+    int addr = MACHINE_CONFIG_ADDR + 50;
+    
+    // Check magic number
+    uint16_t magic;
+    EEPROM.get(addr, magic);
+    addr += sizeof(magic);
+    
+    if (magic == 0xAA55) {
+        // Valid config found, load it
+        for (int i = 1; i <= MAX_PIN_CONFIG; i++) {
+            EEPROM.get(addr, pinConfig.pinFunction[i]);
+            
+            // Validate function number
+            if (pinConfig.pinFunction[i] > MAX_FUNCTIONS) {
+                pinConfig.pinFunction[i] = 0;  // Reset invalid
+            }
+            addr++;
+        }
+        
+        pinConfig.configReceived = true;
+        LOG_INFO(EventSource::MACHINE, "Pin configuration loaded from EEPROM");
+        
+        // Log first 6 assignments
+        for (int i = 1; i <= 6; i++) {
+            LOG_INFO(EventSource::MACHINE, "  Output %d -> %s", 
+                     i, getFunctionName(pinConfig.pinFunction[i]));
+        }
+    } else {
+        // No valid config, keep defaults
+        LOG_INFO(EventSource::MACHINE, "No saved pin config, using defaults");
+    }
+}
+
+void MachineProcessor::saveMachineConfig() {
+    // Save extended machine config that's not in ConfigManager
+    // Using MACHINE_CONFIG_ADDR + 80 to avoid overlap
+    int addr = MACHINE_CONFIG_ADDR + 80;
+    
+    LOG_DEBUG(EventSource::MACHINE, "Saving extended machine config to EEPROM at address %d", addr);
+    
+    // Write magic number
+    uint16_t magic = 0xBB66;
+    EEPROM.put(addr, magic);
+    addr += sizeof(magic);
+    
+    // Write user values
+    EEPROM.put(addr, machineConfig.user1);
+    addr++;
+    EEPROM.put(addr, machineConfig.user2);
+    addr++;
+    EEPROM.put(addr, machineConfig.user3);
+    addr++;
+    EEPROM.put(addr, machineConfig.user4);
+    addr++;
+    
+    LOG_INFO(EventSource::MACHINE, "Extended machine config saved to EEPROM (U1=%d, U2=%d, U3=%d, U4=%d)", 
+             machineConfig.user1, machineConfig.user2, machineConfig.user3, machineConfig.user4);
+}
+
+void MachineProcessor::loadMachineConfig() {
+    // Load extended machine config
+    int addr = MACHINE_CONFIG_ADDR + 80;
+    
+    // Check magic number
+    uint16_t magic;
+    EEPROM.get(addr, magic);
+    addr += sizeof(magic);
+    
+    if (magic == 0xBB66) {
+        // Valid config found
+        EEPROM.get(addr, machineConfig.user1);
+        addr++;
+        EEPROM.get(addr, machineConfig.user2);
+        addr++;
+        EEPROM.get(addr, machineConfig.user3);
+        addr++;
+        EEPROM.get(addr, machineConfig.user4);
+        
+        LOG_DEBUG(EventSource::MACHINE, "Extended machine config loaded from EEPROM");
+    }
 }
 

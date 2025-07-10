@@ -8,8 +8,8 @@ The front panel has four status LEDs arranged horizontally:
 
 1. **PWR/ETH** - Power and Ethernet Status
 2. **GPS** - GPS Status
-3. **IMU** - IMU/INS Status  
-4. **AUTO** - Autosteer Status
+3. **AUTO** - Autosteer Status  
+4. **IMU** - IMU/INS Status
 
 Each LED can display different colors and patterns to indicate various states.
 
