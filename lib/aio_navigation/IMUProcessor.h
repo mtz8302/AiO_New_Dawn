@@ -3,7 +3,7 @@
 
 #include "Arduino.h"
 #include "SerialManager.h"
-#include "BNO_RVC.h"
+#include "BNOAiOParser.h"
 #include "TM171AiOParser.h"
 #include "elapsedMillis.h"
 #include "PGNProcessor.h"
@@ -36,7 +36,7 @@ private:
     bool isInitialized;
 
     // BNO085 RVC support
-    BNO_RVC *bno;
+    BNOAiOParser *bnoParser;
     HardwareSerial *imuSerial;
 
     // TM171 support

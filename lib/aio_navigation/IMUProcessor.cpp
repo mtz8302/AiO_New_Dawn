@@ -10,7 +10,7 @@ IMUProcessor *IMUProcessor::instance = nullptr;
 
 IMUProcessor::IMUProcessor()
     : serialMgr(nullptr), detectedType(IMUType::NONE), isInitialized(false),
-      bno(nullptr), imuSerial(&Serial4), tm171Parser(nullptr),
+      bnoParser(nullptr), imuSerial(&Serial4), tm171Parser(nullptr),
       timeSinceLastPacket(0)
 {
     instance = this;
@@ -21,10 +21,10 @@ IMUProcessor::IMUProcessor()
 
 IMUProcessor::~IMUProcessor()
 {
-    if (bno)
+    if (bnoParser)
     {
-        delete bno;
-        bno = nullptr;
+        delete bnoParser;
+        bnoParser = nullptr;
     }
     if (tm171Parser)
     {
@@ -89,17 +89,44 @@ bool IMUProcessor::initBNO085()
 {
     LOG_DEBUG(EventSource::IMU, "Initializing BNO085 RVC mode");
 
-    bno = new BNO_RVC();
-    if (bno->begin(imuSerial))
+    // Initialize serial port for BNO085 RVC mode
+    imuSerial->begin(115200);  // BNO085 RVC uses 115200 baud
+    
+    // Create parser
+    bnoParser = new BNOAiOParser();
+    
+    // Clear any existing data in serial buffer
+    while (imuSerial->available())
     {
-        LOG_INFO(EventSource::IMU, "BNO085 communication established");
-        LOG_DEBUG(EventSource::IMU, "Initial data: Yaw=%d, Pitch=%d, Roll=%d",
-                  bno->rvcData.yawX10, bno->rvcData.pitchX10, bno->rvcData.rollX10);
-        return true;
+        imuSerial->read();
+    }
+    
+    // Wait for valid data to confirm BNO is present
+    uint32_t startTime = millis();
+    bool detected = false;
+    
+    while (millis() - startTime < 100)  // Wait up to 100ms
+    {
+        while (imuSerial->available())
+        {
+            uint8_t byte = imuSerial->read();
+            bnoParser->processByte(byte);
+            
+            if (bnoParser->isDataValid())
+            {
+                detected = true;
+                LOG_INFO(EventSource::IMU, "BNO085 communication established");
+                LOG_DEBUG(EventSource::IMU, "Initial data: Yaw=%.1f, Pitch=%.1f, Roll=%.1f",
+                          bnoParser->getYaw(), bnoParser->getPitch(), bnoParser->getRoll());
+                return true;
+            }
+        }
+        delay(5);
     }
 
-    delete bno;
-    bno = nullptr;
+    // No valid data received
+    delete bnoParser;
+    bnoParser = nullptr;
     return false;
 }
 
@@ -126,28 +153,32 @@ bool IMUProcessor::initTM171()
         imuSerial->read();
     }
 
-    // Wait a bit for TM171 to send data
+    // Wait for valid TM171 data
     LOG_DEBUG(EventSource::IMU, "Waiting for TM171 data...");
     uint32_t startTime = millis();
-    bool dataReceived = false;
+    bool validDataReceived = false;
     
     while (millis() - startTime < 500) {  // Wait up to 500ms
-        if (imuSerial->available()) {
-            dataReceived = true;
-            break;
+        while (imuSerial->available()) {
+            uint8_t byte = imuSerial->read();
+            tm171Parser->processByte(byte);
+            
+            if (tm171Parser->isDataValid()) {
+                validDataReceived = true;
+                LOG_INFO(EventSource::IMU, "TM171 valid data detected!");
+                LOG_DEBUG(EventSource::IMU, "Initial data: Yaw=%.1f, Pitch=%.1f, Roll=%.1f",
+                          tm171Parser->getYaw(), tm171Parser->getPitch(), tm171Parser->getRoll());
+                return true;
+            }
         }
         delay(10);
     }
     
-    if (!dataReceived) {
-        LOG_DEBUG(EventSource::IMU, "No data received from TM171");
-        delete tm171Parser;
-        tm171Parser = nullptr;
-        return false;
-    }
-    
-    LOG_INFO(EventSource::IMU, "TM171 data detected!");
-    return true;
+    // No valid TM171 data received
+    LOG_DEBUG(EventSource::IMU, "No valid TM171 data received");
+    delete tm171Parser;
+    tm171Parser = nullptr;
+    return false;
 }
 
 void IMUProcessor::process()
@@ -172,24 +203,36 @@ void IMUProcessor::process()
 
 void IMUProcessor::processBNO085Data()
 {
-    if (!bno)
+    if (!bnoParser)
         return;
 
-    // BNO085 read() returns true when new data is available
-    if (bno->read())
+    // Process all available bytes
+    while (imuSerial->available())
+    {
+        uint8_t byte = imuSerial->read();
+        bnoParser->processByte(byte);
+    }
+    
+    // Update current data if valid
+    if (bnoParser->isDataValid())
     {
         // Update current data
-        currentData.heading = bno->rvcData.yawX10 / 10.0f;
-        currentData.pitch = bno->rvcData.pitchX10 / 10.0f;
-        currentData.roll = bno->rvcData.rollX10 / 10.0f;
-        currentData.yawRate = bno->rvcData.angVel / 10.0f;
-        currentData.quality = bno->isActive ? 10 : 0;
+        currentData.heading = bnoParser->getYaw();
+        currentData.pitch = bnoParser->getPitch();
+        currentData.roll = bnoParser->getRoll();
+        currentData.yawRate = bnoParser->getYawRate();
+        currentData.quality = bnoParser->isActive() ? 10 : 0;
         currentData.timestamp = millis();
         currentData.isValid = true;
 
         // Update statistics
-        // Valid packet received
         timeSinceLastPacket = 0;
+    }
+    else if (bnoParser->getTimeSinceLastValid() > 100)
+    {
+        // Mark data as invalid if no recent updates
+        currentData.isValid = false;
+        currentData.quality = 0;
     }
 }
 
