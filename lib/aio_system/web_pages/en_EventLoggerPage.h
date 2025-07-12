@@ -53,8 +53,10 @@ const char EN_EVENTLOGGER_PAGE[] PROGMEM = R"rawliteral(
             
             <div class='info'>Syslog server IP is configured by your network admin. Default port is 514.</div>
             
-            <button type='button' onclick='saveConfig()'>Save Configuration</button>
-            <button type='button' onclick='window.location="/"'>Back to Home</button>
+            <div class='nav-buttons'>
+                <button type='button' class='btn btn-home' onclick='window.location="/"'>Home</button>
+                <button type='button' class='btn btn-primary' onclick='saveConfig()'>Apply Changes</button>
+            </div>
         </form>
         
         <script>

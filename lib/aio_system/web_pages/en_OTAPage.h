@@ -100,8 +100,10 @@ const char EN_OTA_PAGE[] PROGMEM = R"rawliteral(
             
             <div id='status' style='margin: 10px 0;'></div>
             
-            <button type='submit' id='uploadBtn' class='btn btn-warning'>Upload Firmware</button>
-            <button type='button' class='btn' onclick='window.location.href="/"'>Cancel</button>
+            <div class='nav-buttons'>
+                <button type='button' class='btn btn-home' onclick='window.location.href="/"'>Home</button>
+                <button type='submit' id='uploadBtn' class='btn btn-primary'>Apply Update</button>
+            </div>
         </form>
         
         <div style='margin-top: 30px; color: #666;'>

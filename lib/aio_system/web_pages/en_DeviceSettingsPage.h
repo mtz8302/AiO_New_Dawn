@@ -92,8 +92,10 @@ const char EN_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
             
             <div id='status' style='margin: 10px 0;'></div>
             
-            <button type='submit' class='btn btn-primary'>Save Settings</button>
-            <button type='button' class='btn' onclick='window.location="/"'>Back to Home</button>
+            <div class='nav-buttons'>
+                <button type='button' class='btn btn-home' onclick='window.location="/"'>Home</button>
+                <button type='submit' class='btn btn-primary'>Apply Changes</button>
+            </div>
         </form>
     </div>
 </body>

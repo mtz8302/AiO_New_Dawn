@@ -53,8 +53,10 @@ const char DE_EVENTLOGGER_PAGE[] PROGMEM = R"rawliteral(
             
             <div class='info'>Die Syslog-Server-IP wird von Ihrem Netzwerkadministrator konfiguriert. Standardport ist 514.</div>
             
-            <button type='button' onclick='saveConfig()'>Konfiguration speichern</button>
-            <button type='button' onclick='window.location="/"'>Zurück zur Startseite</button>
+            <div class='nav-buttons'>
+                <button type='button' class='btn btn-home' onclick='window.location="/"'>Startseite</button>
+                <button type='button' class='btn btn-primary' onclick='saveConfig()'>Änderungen anwenden</button>
+            </div>
         </form>
         
         <script>
