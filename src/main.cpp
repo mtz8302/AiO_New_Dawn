@@ -383,9 +383,10 @@ void loop()
   navTime += micros() - functionTime;
 
   // Poll CAN messages (like NG-V6 does)
-  functionTime = micros();
-  canManager.pollForDevices();
-  canTime += micros() - functionTime;
+  // DISABLED - Motor driver already reads CAN3 messages
+  // functionTime = micros();
+  // canManager.pollForDevices();
+  // canTime += micros() - functionTime;
   
   // Process motor driver (must be called regularly for CAN motors)
   functionTime = micros();
@@ -458,15 +459,15 @@ void loop()
   }
 
 
-  // Process GPS1 data if available
+  // Process GPS1 data if available - ONE byte per loop
   functionTime = micros();
-  while (SerialGPS1.available())
+  if (SerialGPS1.available())
   {
     char c = SerialGPS1.read();
     gnssProcessor.processNMEAChar(c);
   }
   
-  // Process GPS2 data if available (for F9P dual RELPOSNED)
+  // Process GPS2 data if available (for F9P dual RELPOSNED) - ONE byte per loop
   if (SerialGPS2.available())
   {
     uint8_t b = SerialGPS2.read();
