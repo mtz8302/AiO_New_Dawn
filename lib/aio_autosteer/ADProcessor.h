@@ -2,6 +2,7 @@
 #define ADPROCESSOR_H
 
 #include <Arduino.h>
+#include <ADC.h>
 
 /**
  * ADProcessor - Analog/Digital Input Processor for Autosteer
@@ -96,6 +97,9 @@ private:
     
     // Timing
     uint32_t lastProcessTime;
+    
+    // Teensy ADC object
+    ADC* teensyADC;
     
     // Helper methods
     void updateSwitches();
