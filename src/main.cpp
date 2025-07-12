@@ -395,6 +395,13 @@ void loop()
   }
   motorTime += micros() - functionTime;
   
+  // Debug: Print motor driver type once
+  static bool motorTypeLogged = false;
+  if (motorPTR && !motorTypeLogged) {
+    motorTypeLogged = true;
+    Serial.println("Motor driver is active");
+  }
+  
   // Process autosteer
   functionTime = micros();
   AutosteerProcessor::getInstance()->process();

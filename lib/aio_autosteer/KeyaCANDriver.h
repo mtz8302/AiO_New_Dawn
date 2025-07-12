@@ -67,11 +67,8 @@ public:
     }
     
     void process() override {
-        // Check for CAN messages multiple times per process() call
-        // to ensure we don't miss responses
-        for (int i = 0; i < 5; i++) {
-            checkCANMessages();
-        }
+        // Check for CAN messages - reduced from 5 to 1 for performance
+        checkCANMessages();
         
         // Send commands in rotation every 20ms
         if (millis() - lastSendTime >= 20) {
@@ -240,7 +237,8 @@ private:
     void checkCANMessages() {
         CAN_message_t rxMsg;
         
-        while (can3->read(rxMsg)) {
+        // Process only ONE message per call to prevent blocking
+        if (can3->read(rxMsg)) {
             // Check for heartbeat message from Keya (ID: 0x07000001)
             if (rxMsg.id == 0x07000001 && rxMsg.flags.extended) {
                 // Heartbeat format (from manual - big-endian/MSB first):
