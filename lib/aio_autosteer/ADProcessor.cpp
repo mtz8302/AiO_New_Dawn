@@ -45,7 +45,7 @@ bool ADProcessor::init()
     
     // Configure ADC for 12-bit resolution with averaging
     analogReadResolution(12);              // 12-bit (0-4095)
-    analogReadAveraging(16);               // Average 16 samples
+    analogReadAveraging(4);                // Average 4 samples (was 16) for faster reads
     
     // Take initial readings
     updateWAS();
@@ -67,26 +67,37 @@ bool ADProcessor::init()
 
 void ADProcessor::process()
 {
+    // Always read WAS - critical for steering
     updateWAS();
-    updateSwitches();
     
-    // Read kickout sensors
-    kickoutAnalogRaw = analogRead(AD_KICKOUT_A_PIN);
-    motorCurrentRaw = analogRead(AD_CURRENT_PIN);
+    // Read other sensors at reduced rate (every 10ms = 100Hz)
+    static uint32_t lastSlowRead = 0;
+    uint32_t now = millis();
     
-    // Update pressure sensor reading with filtering
-    // Scale 12-bit ADC (0-4095) to match NG-V6 behavior
-    float sensorSample = (float)kickoutAnalogRaw;
-    sensorSample *= 0.15f;  // Scale down to try matching old AIO
-    sensorSample = min(sensorSample, 255.0f);  // Limit to 1 byte (0-255)
-    pressureReading = pressureReading * 0.8f + sensorSample * 0.2f;  // 80/20 filter
+    if (now - lastSlowRead >= 10) {
+        lastSlowRead = now;
+        
+        // Update switches
+        updateSwitches();
+        
+        // Read kickout sensors
+        kickoutAnalogRaw = analogRead(AD_KICKOUT_A_PIN);
+        motorCurrentRaw = analogRead(AD_CURRENT_PIN);
+        
+        // Update pressure sensor reading with filtering
+        // Scale 12-bit ADC (0-4095) to match NG-V6 behavior
+        float sensorSample = (float)kickoutAnalogRaw;
+        sensorSample *= 0.15f;  // Scale down to try matching old AIO
+        sensorSample = min(sensorSample, 255.0f);  // Limit to 1 byte (0-255)
+        pressureReading = pressureReading * 0.8f + sensorSample * 0.2f;  // 80/20 filter
+    }
     
     lastProcessTime = millis();
 }
 
 void ADProcessor::updateWAS()
 {
-    // Read WAS with hardware averaging (16 samples)
+    // Read WAS with hardware averaging (4 samples)
     wasRaw = analogRead(AD_WAS_PIN);
 }
 
