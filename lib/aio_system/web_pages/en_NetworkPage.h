@@ -111,10 +111,10 @@ const char EN_NETWORK_PAGE[] PROGMEM = R"rawliteral(
                 </div>
             </div>
             
-            <div class='nav-buttons'>
-                <button type='button' class='btn btn-home' onclick='window.location.href="/"'>Home</button>
-                <button type='button' class='btn btn-primary' onclick='saveIPSettings()'>Apply Changes</button>
+            <div style='margin-top: 20px;'>
+                <button type='button' class='btn btn-primary' onclick='saveIPSettings()'>Save</button>
                 <button type='button' class='btn btn-warning' onclick='rebootSystem()'>Reboot</button>
+                <button type='button' class='btn' onclick='window.location.href="/"'>Cancel</button>
             </div>
             
             <p style='margin-top: 20px; color: #666;'>

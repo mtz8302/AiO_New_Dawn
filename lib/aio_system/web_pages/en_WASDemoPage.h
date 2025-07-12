@@ -160,9 +160,7 @@ const char EN_WASDEMO_PAGE[] PROGMEM = R"rawliteral(
             </div>
         </div>
         
-        <div class='nav-buttons'>
-            <button type='button' class='btn btn-home' onclick='window.location="/"'>Home</button>
-        </div>
+        <button type='button' onclick='window.location="/"'>Back to Home</button>
     </div>
     
     <script>
