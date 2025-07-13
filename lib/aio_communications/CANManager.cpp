@@ -40,24 +40,8 @@ bool CANManager::init() {
 void CANManager::pollForDevices() {
     CAN_message_t msg;
     
-    // Check CAN1
-    while (can1->read(msg)) {
-        if (!can1Active) {
-            can1Active = true;
-            LOG_DEBUG(EventSource::CAN, "First message on CAN1: ID 0x%08X", msg.id);
-        }
-    }
-    
-    // Check CAN2
-    while (can2->read(msg)) {
-        if (!can2Active) {
-            can2Active = true;
-            LOG_DEBUG(EventSource::CAN, "First message on CAN2: ID 0x%08X", msg.id);
-        }
-    }
-    
-    // Check CAN3 for Keya heartbeat
-    while (can3->read(msg)) {
+    // Only check CAN3 for Keya - process ONE message per loop
+    if (can3->read(msg)) {
         if (!can3Active) {
             can3Active = true;
             LOG_DEBUG(EventSource::CAN, "First message on CAN3: ID 0x%08X", msg.id);
@@ -71,4 +55,9 @@ void CANManager::pollForDevices() {
             }
         }
     }
+    
+    // Skip CAN1 and CAN2 if not in use
+    // Uncomment when needed:
+    // if (can1->read(msg)) { can1Active = true; }
+    // if (can2->read(msg)) { can2Active = true; }
 }

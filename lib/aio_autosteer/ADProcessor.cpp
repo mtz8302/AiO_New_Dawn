@@ -12,7 +12,8 @@ ADProcessor::ADProcessor() :
     pressureReading(0.0f),
     motorCurrentRaw(0),
     debounceDelay(50),  // 50ms default debounce
-    lastProcessTime(0)
+    lastProcessTime(0),
+    teensyADC(nullptr)
 {
     // Initialize switch states
     workSwitch = {false, false, 0, false};
@@ -43,9 +44,20 @@ bool ADProcessor::init()
     // Test immediately after setting
     LOG_DEBUG(EventSource::AUTOSTEER, "After pinMode: Pin %d digital=%d", AD_STEER_PIN, digitalRead(AD_STEER_PIN));
     
-    // Configure ADC for 12-bit resolution with averaging
-    analogReadResolution(12);              // 12-bit (0-4095)
-    analogReadAveraging(4);                // Average 4 samples (was 16) for faster reads
+    // Initialize Teensy ADC library
+    teensyADC = new ADC();
+    
+    // Configure ADC0 for WAS reading - optimized settings
+    teensyADC->adc0->setAveraging(4);                                      // Reduced from 16 for faster reads
+    teensyADC->adc0->setResolution(12);                                    // 12-bit resolution
+    teensyADC->adc0->setConversionSpeed(ADC_CONVERSION_SPEED::HIGH_SPEED); // Faster than MED_SPEED
+    teensyADC->adc0->setSamplingSpeed(ADC_SAMPLING_SPEED::HIGH_SPEED);     // Faster than MED_SPEED
+    
+    // Configure ADC1 for other sensors if needed
+    teensyADC->adc1->setAveraging(4);
+    teensyADC->adc1->setResolution(12);
+    teensyADC->adc1->setConversionSpeed(ADC_CONVERSION_SPEED::MED_SPEED);
+    teensyADC->adc1->setSamplingSpeed(ADC_SAMPLING_SPEED::MED_SPEED);
     
     // Take initial readings
     updateWAS();
@@ -80,9 +92,9 @@ void ADProcessor::process()
         // Update switches
         updateSwitches();
         
-        // Read kickout sensors
-        kickoutAnalogRaw = analogRead(AD_KICKOUT_A_PIN);
-        motorCurrentRaw = analogRead(AD_CURRENT_PIN);
+        // Read kickout sensors using ADC1 for parallel operation
+        kickoutAnalogRaw = teensyADC->adc1->analogRead(AD_KICKOUT_A_PIN);
+        motorCurrentRaw = teensyADC->adc1->analogRead(AD_CURRENT_PIN);
         
         // Update pressure sensor reading with filtering
         // Scale 12-bit ADC (0-4095) to match NG-V6 behavior
@@ -97,8 +109,12 @@ void ADProcessor::process()
 
 void ADProcessor::updateWAS()
 {
-    // Read WAS with hardware averaging (4 samples)
-    wasRaw = analogRead(AD_WAS_PIN);
+    // Read WAS using Teensy ADC library (4 samples averaging)
+    // Use ADC1 like the old firmware
+    wasRaw = teensyADC->adc1->analogRead(AD_WAS_PIN);
+    
+    // Note: The old firmware applies 3.23x scaling, but in our architecture
+    // the calibration (wasOffset and wasCountsPerDegree) handles the scaling
 }
 
 void ADProcessor::updateSwitches()

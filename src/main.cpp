@@ -305,19 +305,55 @@ void setup()
 
 void loop()
 {
+  // Timing variables
+  static uint32_t loopStartTime = 0;
+  static uint32_t functionTime = 0;
+  static uint32_t lastTimingPrint = 0;
+  static uint32_t loopCount = 0;
+  
+  // Timing accumulators for averaging
+  static uint32_t otaTime = 0;
+  static uint32_t ethernetTime = 0;
+  static uint32_t networkTime = 0;
+  static uint32_t udpTime = 0;
+  
+  loopStartTime = micros();
+  loopCount++;
+  
   // Check for OTA update apply
+  functionTime = micros();
   OTAHandler::applyUpdate();
+  otaTime += micros() - functionTime;
   
   // Process Ethernet events - REQUIRED for QNEthernet!
+  functionTime = micros();
   Ethernet.loop();
+  ethernetTime += micros() - functionTime;
   
+  functionTime = micros();
   QNetworkBase::poll();
+  networkTime += micros() - functionTime;
   
   // Poll AsyncUDP for network diagnostics
+  functionTime = micros();
   AsyncUDPHandler::poll();
+  udpTime += micros() - functionTime;
   
   // AsyncUDP handles all UDP packet reception via callbacks
   // The poll() call above is just for diagnostics and status monitoring
+  
+  // More timing accumulators
+  static uint32_t commandTime = 0;
+  static uint32_t imuTime = 0;
+  static uint32_t adcTime = 0;
+  static uint32_t navTime = 0;
+  static uint32_t canTime = 0;
+  static uint32_t motorTime = 0;
+  static uint32_t autosteerTime = 0;
+  static uint32_t machineTime = 0;
+  static uint32_t ledTime = 0;
+  static uint32_t sseTime = 0;
+  static uint32_t gpsTime = 0;
   
   // Check network status and display system ready message when appropriate
   static uint32_t lastNetworkCheck = 0;
@@ -327,42 +363,70 @@ void loop()
   }
 
   // Process serial commands through CommandHandler
+  functionTime = micros();
   CommandHandler::getInstance()->process();
+  commandTime += micros() - functionTime;
   
   // Process IMU data
+  functionTime = micros();
   imuProcessor.process();
+  imuTime += micros() - functionTime;
   
   // Process A/D inputs
+  functionTime = micros();
   adProcessor.process();
+  adcTime += micros() - functionTime;
 
   // Process NAV messages
+  functionTime = micros();
   NAVProcessor::getInstance()->process();
+  navTime += micros() - functionTime;
 
   // Poll CAN messages (like NG-V6 does)
-  canManager.pollForDevices();
+  // DISABLED - Motor driver already reads CAN3 messages
+  // functionTime = micros();
+  // canManager.pollForDevices();
+  // canTime += micros() - functionTime;
   
   // Process motor driver (must be called regularly for CAN motors)
+  functionTime = micros();
   if (motorPTR)
   {
     motorPTR->process();
   }
+  motorTime += micros() - functionTime;
+  
+  // Debug: Print motor driver type once
+  static bool motorTypeLogged = false;
+  if (motorPTR && !motorTypeLogged) {
+    motorTypeLogged = true;
+    Serial.println("Motor driver is active");
+  }
   
   // Process autosteer
+  functionTime = micros();
   AutosteerProcessor::getInstance()->process();
+  autosteerTime += micros() - functionTime;
   
   // Process machine
+  functionTime = micros();
   MachineProcessor::getInstance()->process();
+  machineTime += micros() - functionTime;
   
   // Update LEDs
   static uint32_t lastLEDUpdate = 0;
+  functionTime = micros();
   if (millis() - lastLEDUpdate > 100)  // Update every 100ms
   {
     lastLEDUpdate = millis();
     ledManager.updateAll();
   }
+  ledTime += micros() - functionTime;
   
   // Update SSE clients with WAS data if enabled
+  functionTime = micros();
   webManager.updateWASClients();
+  sseTime += micros() - functionTime;
   
 
 
@@ -395,18 +459,53 @@ void loop()
   }
 
 
-  // Process GPS1 data if available
-  while (SerialGPS1.available())
+  // Process GPS1 data if available - ONE byte per loop
+  functionTime = micros();
+  if (SerialGPS1.available())
   {
     char c = SerialGPS1.read();
     gnssProcessor.processNMEAChar(c);
   }
   
-  // Process GPS2 data if available (for F9P dual RELPOSNED)
+  // Process GPS2 data if available (for F9P dual RELPOSNED) - ONE byte per loop
   if (SerialGPS2.available())
   {
     uint8_t b = SerialGPS2.read();
     gnssProcessor.processUBXByte(b);
   }
+  gpsTime += micros() - functionTime;
 
+  // Print timing report every second
+  if (millis() - lastTimingPrint >= 1000) {
+    Serial.println("\n=== Loop Timing Report (microseconds) ===");
+    Serial.printf("Loops: %lu, Avg loop time: %lu us\n", loopCount, 1000000UL / loopCount);
+    Serial.printf("OTA:       %lu us\n", otaTime / loopCount);
+    Serial.printf("Ethernet:  %lu us\n", ethernetTime / loopCount);
+    Serial.printf("Network:   %lu us\n", networkTime / loopCount);
+    Serial.printf("UDP:       %lu us\n", udpTime / loopCount);
+    Serial.printf("Command:   %lu us\n", commandTime / loopCount);
+    Serial.printf("IMU:       %lu us\n", imuTime / loopCount);
+    Serial.printf("ADC:       %lu us\n", adcTime / loopCount);
+    Serial.printf("NAV:       %lu us\n", navTime / loopCount);
+    Serial.printf("CAN:       %lu us\n", canTime / loopCount);
+    Serial.printf("Motor:     %lu us\n", motorTime / loopCount);
+    Serial.printf("Autosteer: %lu us\n", autosteerTime / loopCount);
+    Serial.printf("Machine:   %lu us\n", machineTime / loopCount);
+    Serial.printf("LED:       %lu us\n", ledTime / loopCount);
+    Serial.printf("SSE:       %lu us\n", sseTime / loopCount);
+    Serial.printf("GPS:       %lu us\n", gpsTime / loopCount);
+    
+    uint32_t totalTime = (otaTime + ethernetTime + networkTime + udpTime + commandTime + 
+                         imuTime + adcTime + navTime + canTime + motorTime + autosteerTime + 
+                         machineTime + ledTime + sseTime + gpsTime) / loopCount;
+    Serial.printf("Total:     %lu us\n", totalTime);
+    Serial.println("========================================");
+    
+    // Reset counters
+    lastTimingPrint = millis();
+    loopCount = 0;
+    otaTime = ethernetTime = networkTime = udpTime = commandTime = 0;
+    imuTime = adcTime = navTime = canTime = motorTime = 0;
+    autosteerTime = machineTime = ledTime = sseTime = gpsTime = 0;
+  }
 }
