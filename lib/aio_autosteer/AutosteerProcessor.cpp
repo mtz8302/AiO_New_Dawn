@@ -4,7 +4,7 @@
 #include "MotorDriverInterface.h"
 #include "KeyaCANDriver.h"
 #include "ConfigManager.h"
-#include "LEDManager.h"
+#include "LEDManagerFSM.h"
 #include "EventLogger.h"
 #include "QNetworkBase.h"
 #include "HardwareManager.h"
@@ -16,7 +16,7 @@ extern void sendUDPbytes(uint8_t* data, int len);
 
 // External objects and pointers
 extern ConfigManager configManager;
-extern LEDManager ledManager;
+// extern LEDManager ledManager; // Using FSM version now
 extern ADProcessor adProcessor;
 extern MotorDriverInterface* motorPTR;
 extern WheelAngleFusion* wheelAngleFusionPtr;
@@ -270,11 +270,48 @@ void AutosteerProcessor::process() {
     // Send PGN 253 status to AgOpenGPS
     sendPGN253();
     
-    // Update LED status
+    // Update LED status using FSM with hysteresis
     bool wasReady = true;  // ADProcessor is always available as an object
-    bool enabled = (steerState == 0);    // Button/OSB active
-    bool active = (shouldSteerBeActive() && motorSpeed != 0.0f);  // Actually steering
-    ledManager.setSteerState(wasReady, enabled, active);
+    bool buttonEnabled = (steerState == 0);    // Button/OSB active
+    bool guidanceReady = shouldSteerBeActive(); // All conditions met for steering
+    
+    // Use hysteresis for motor active detection to prevent flickering
+    static bool lastMotorActive = false;
+    bool motorActive;
+    float motorSpeedAbs = abs(motorSpeed);
+    
+    // Higher thresholds for test mode oscillations (PWM 0-10 = 0-3.9%)
+    if (lastMotorActive) {
+        // Was active - need to drop below 2% to become inactive
+        motorActive = (motorSpeedAbs > 2.0f);
+    } else {
+        // Was inactive - need to rise above 5% to become active
+        motorActive = (motorSpeedAbs > 5.0f);
+    }
+    
+    // Debug logging for motor speed transitions
+    static float lastLoggedSpeed = -999.0f;
+    if (abs(motorSpeedAbs - lastLoggedSpeed) > 1.0f) {
+        LOG_DEBUG(EventSource::AUTOSTEER, "Motor speed: %.1f%% (active=%d)", motorSpeedAbs, motorActive);
+        lastLoggedSpeed = motorSpeedAbs;
+    }
+    
+    lastMotorActive = motorActive;
+    
+    // Convert to FSM states
+    LEDManagerFSM::SteerState ledState;
+    if (!wasReady) {
+        ledState = LEDManagerFSM::STEER_NOT_READY;
+    } else if (!buttonEnabled) {
+        ledState = LEDManagerFSM::STEER_DISABLED;  // Yellow - button/OSB not active
+    } else if (!guidanceReady) {
+        ledState = LEDManagerFSM::STEER_DISABLED;  // Yellow - waiting for conditions
+    } else if (!motorActive) {
+        ledState = LEDManagerFSM::STEER_STANDBY;   // Green blinking - ready but not steering
+    } else {
+        ledState = LEDManagerFSM::STEER_ACTIVE;    // Green solid - actively steering
+    }
+    ledManagerFSM.transitionSteerState(ledState);
 }
 
 void AutosteerProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len) {
