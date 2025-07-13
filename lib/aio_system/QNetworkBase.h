@@ -7,7 +7,7 @@
 
 #include <QNEthernet.h>
 #include <QNEthernetUDP.h>
-#include "LEDManager.h"
+#include "LEDManagerFSM.h"
 
 using namespace qindesign::network;
 
@@ -39,8 +39,8 @@ public:
         }
         
         // Update LED immediately on link change
-        extern LEDManager ledManager;
-        ledManager.updateAll();
+        extern LEDManagerFSM ledManagerFSM;
+        ledManagerFSM.updateAll();
     }
     
     // Initialize network stack
