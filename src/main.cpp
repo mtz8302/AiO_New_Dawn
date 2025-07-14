@@ -349,13 +349,6 @@ void loop()
     motorPTR->process();
   }
   
-  // Debug: Print motor driver type once
-  static bool motorTypeLogged = false;
-  if (motorPTR && !motorTypeLogged) {
-    motorTypeLogged = true;
-    Serial.println("Motor driver is active");
-  }
-  
   // Process autosteer
   AutosteerProcessor::getInstance()->process();
   
@@ -372,13 +365,7 @@ void loop()
   
   // Update SSE clients with WAS data if enabled
   webManager.updateWASClients();
-  
-
-
-
-
-  
-  
+    
   // Update PWM speed pulse from GPS
   static uint32_t lastSpeedUpdate = 0;
   
@@ -402,7 +389,6 @@ void loop()
       pwmProcessor.setSpeedKmh(speedKmh);
     }
   }
-
 
   // Process GPS1 data if available - ONE byte per loop
   if (SerialGPS1.available())
