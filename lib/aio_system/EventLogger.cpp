@@ -301,11 +301,11 @@ void EventLogger::checkNetworkReady() {
         } else {
             Serial.println("*** System ready - UDP syslog disabled ***");
         }
-        Serial.println("*** Press '?' for menu, 'L' for logging control ***");
+        Serial.println("*** Press '?' for menu ***");
         Serial.println("**************************************************\r\n");
         
         // Send a syslog-friendly message with menu instructions
-        LOG_WARNING(EventSource::SYSTEM, "* System ready - Press '?' for menu, 'L' for logging control *");
+        LOG_WARNING(EventSource::SYSTEM, "* System ready - Press '?' for menu *");
     }
 }
 
