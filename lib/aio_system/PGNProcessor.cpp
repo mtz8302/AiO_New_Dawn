@@ -61,7 +61,6 @@ void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& 
                 }
             }
         }
-        bool handled = false;
         
         // Check if this is a broadcast PGN (Hello or Scan Request)
         bool isBroadcast = (pgn == 200 || pgn == 202);
@@ -76,7 +75,6 @@ void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& 
             for (size_t i = 0; i < broadcastCount; i++)
             {
                 broadcastCallbacks[i](pgn, pgnData, dataLen);
-                handled = true;
             }
         }
         else
@@ -97,7 +95,6 @@ void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& 
                     // Always log when debug is enabled - this is what debug mode is for
                     LOG_DEBUG(EventSource::NETWORK, "Calling %s for PGN %d", registrations[i].name, pgn);
                     registrations[i].callback(pgn, pgnData, dataLen);
-                    handled = true;
                     break; // Only one handler per non-broadcast PGN
                 }
             }

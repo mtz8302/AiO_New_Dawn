@@ -103,7 +103,6 @@ bool IMUProcessor::initBNO085()
     
     // Wait for valid data to confirm BNO is present
     uint32_t startTime = millis();
-    bool detected = false;
     
     while (millis() - startTime < 100)  // Wait up to 100ms
     {
@@ -114,7 +113,6 @@ bool IMUProcessor::initBNO085()
             
             if (bnoParser->isDataValid())
             {
-                detected = true;
                 LOG_INFO(EventSource::IMU, "BNO085 communication established");
                 LOG_DEBUG(EventSource::IMU, "Initial data: Yaw=%.1f, Pitch=%.1f, Roll=%.1f",
                           bnoParser->getYaw(), bnoParser->getPitch(), bnoParser->getRoll());
@@ -156,7 +154,6 @@ bool IMUProcessor::initTM171()
     // Wait for valid TM171 data
     LOG_DEBUG(EventSource::IMU, "Waiting for TM171 data...");
     uint32_t startTime = millis();
-    bool validDataReceived = false;
     
     while (millis() - startTime < 500) {  // Wait up to 500ms
         while (imuSerial->available()) {
@@ -164,7 +161,6 @@ bool IMUProcessor::initTM171()
             tm171Parser->processByte(byte);
             
             if (tm171Parser->isDataValid()) {
-                validDataReceived = true;
                 LOG_INFO(EventSource::IMU, "TM171 valid data detected!");
                 LOG_DEBUG(EventSource::IMU, "Initial data: Yaw=%.1f, Pitch=%.1f, Roll=%.1f",
                           tm171Parser->getYaw(), tm171Parser->getPitch(), tm171Parser->getRoll());

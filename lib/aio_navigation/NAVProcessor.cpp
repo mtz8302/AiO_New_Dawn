@@ -313,7 +313,6 @@ void NAVProcessor::process() {
     
     // Track message type changes
     static NavMessageType lastMsgType = NavMessageType::NONE;
-    static uint32_t messageTypeStartTime = 0;
     
     if (msgType != lastMsgType) {
         if (msgType != NavMessageType::NONE) {
@@ -321,7 +320,6 @@ void NAVProcessor::process() {
                      msgType == NavMessageType::PANDA ? "PANDA" : "PAOGI");
         }
         lastMsgType = msgType;
-        messageTypeStartTime = millis();
     }
     
     switch (msgType) {

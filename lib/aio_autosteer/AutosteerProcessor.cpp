@@ -211,7 +211,6 @@ void AutosteerProcessor::process() {
     }
     
     // Read button state with debouncing
-    static uint32_t lastButtonPrint = 0;
     static bool lastButtonReading = HIGH;
     bool buttonReading = digitalRead(2);  // HIGH when not pressed, LOW when pressed
     

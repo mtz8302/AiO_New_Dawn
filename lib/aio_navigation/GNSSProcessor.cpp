@@ -1041,9 +1041,6 @@ extern void sendUDPbytes(uint8_t *message, int msgLen);
 // External network config
 extern struct NetworkConfig netConfig;
 
-// Static instance pointer for callback access
-static GNSSProcessor* gnssInstance = nullptr;
-
 // Removed registerPGNCallbacks - broadcast PGNs are handled automatically
 
 // Static callback for broadcast PGNs (Hello and Scan Request)
