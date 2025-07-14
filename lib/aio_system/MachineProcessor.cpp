@@ -542,6 +542,10 @@ void MachineProcessor::handlePGN238(uint8_t pgn, const uint8_t* data, size_t len
     LOG_INFO(EventSource::MACHINE, "Saving machine configuration to EEPROM...");
     configManager.saveMachineConfig();
     instance->saveMachineConfig();
+    
+    // Update all outputs immediately with new active high/low setting
+    LOG_INFO(EventSource::MACHINE, "Updating all outputs with new active high/low setting");
+    instance->updateMachineOutputs();
 }
 
 const char* MachineProcessor::getFunctionName(uint8_t functionNum) {
@@ -662,11 +666,11 @@ void MachineProcessor::updateMachineOutputs() {
         // Get the actual PCA9685 pin number for this output
         uint8_t pcaPin = SECTION_PINS[outputNum - 1];
         
-        // Set the output
+        // Set the output (INVERTED to fix tester feedback)
         if (outputState) {
-            getSectionOutputs().setPin(pcaPin, 0, 1);  // HIGH
+            getSectionOutputs().setPin(pcaPin, 0, 0);  // LOW when state is true
         } else {
-            getSectionOutputs().setPin(pcaPin, 0, 0);  // LOW
+            getSectionOutputs().setPin(pcaPin, 0, 1);  // HIGH when state is false
         }
         
     }
