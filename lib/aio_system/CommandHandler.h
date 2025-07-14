@@ -5,16 +5,12 @@
 #include "EventLogger.h"
 #include "MachineProcessor.h"
 
-// Command handler states
-enum class CommandState {
-    MAIN_MENU,
-    LOGGING_MENU
-};
+// External function from main.cpp
+extern void toggleLoopTiming();
 
 class CommandHandler {
 private:
     static CommandHandler* instance;
-    CommandState currentState = CommandState::MAIN_MENU;
     
     // Pointers to system components
     MachineProcessor* machinePtr = nullptr;
@@ -23,13 +19,11 @@ private:
     // Private constructor for singleton
     CommandHandler();
     
-    // Menu handlers
-    void handleMainMenu(char cmd);
-    void handleLoggingMenu(char cmd);
+    // Command handler
+    void handleCommand(char cmd);
     
-    // Menu display functions
-    void showMainMenu();
-    void showLoggingMenu();
+    // Menu display function
+    void showMenu();
 
 public:
     ~CommandHandler();
@@ -43,9 +37,6 @@ public:
     
     // Main process function - call this from loop()
     void process();
-    
-    // Get current state
-    CommandState getState() const { return currentState; }
 };
 
 #endif // COMMANDHANDLER_H_

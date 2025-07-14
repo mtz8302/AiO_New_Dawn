@@ -34,43 +34,11 @@ void CommandHandler::process() {
         return;
     }
     
-    // Handle state-specific commands
-    switch (currentState) {
-        case CommandState::MAIN_MENU:
-            handleMainMenu(cmd);
-            break;
-            
-        case CommandState::LOGGING_MENU:
-            handleLoggingMenu(cmd);
-            break;
-            
-        // CONFIG_MENU removed per Phase 6 simplification
-    }
+    // Handle command
+    handleCommand(cmd);
 }
 
-void CommandHandler::handleMainMenu(char cmd) {
-    switch (cmd) {
-        case 'l':
-        case 'L':
-            currentState = CommandState::LOGGING_MENU;
-            showLoggingMenu();
-            break;
-            
-        // D and C options removed per Phase 6 simplification
-            
-        case '?':
-        case 'h':
-        case 'H':
-            showMainMenu();
-            break;
-            
-        default:
-            // Unknown command - could show help
-            break;
-    }
-}
-
-void CommandHandler::handleLoggingMenu(char cmd) {
+void CommandHandler::handleCommand(char cmd) {
     EventConfig& config = loggerPtr->getConfig();
     
     switch (cmd) {
@@ -148,17 +116,15 @@ void CommandHandler::handleLoggingMenu(char cmd) {
         // QNEthernet doesn't need explicit log level management
         // Removed Mongoose log level option
             
-        case 'q':  // Quit to main menu
-        case 'Q':
-        case 27:   // ESC key
-            currentState = CommandState::MAIN_MENU;
-            Serial.print("Returned to main menu\r\n");
+        case 'l':  // Loop timing diagnostics (moved from T to avoid conflict)
+        case 'L':
+            toggleLoopTiming();
             break;
             
         case '?':
         case 'h':
         case 'H':
-            showLoggingMenu();
+            showMenu();
             break;
             
         default:
@@ -168,27 +134,19 @@ void CommandHandler::handleLoggingMenu(char cmd) {
 }
 
 
-void CommandHandler::showMainMenu() {
-    Serial.print("\r\n=== Main Menu ===");
-    Serial.print("\r\nL - Logging configuration");
-    Serial.print("\r\n? - Show this menu");
-    Serial.print("\r\n=================\r\n");
-}
-
-void CommandHandler::showLoggingMenu() {
+void CommandHandler::showMenu() {
     loggerPtr->printConfig();
-    Serial.print("\r\n=== Logging Control Menu ===");
+    Serial.print("\r\n=== Firmware Controls ===");
     Serial.print("\r\n1 - Toggle serial output");
     Serial.print("\r\n2 - Toggle UDP syslog");
     Serial.print("\r\n3/4 - Decrease/Increase serial level");
     Serial.print("\r\n5/6 - Decrease/Increase UDP level");
     Serial.print("\r\n7 - Toggle rate limiting");
-    // QNEthernet handles its own logging internally
     Serial.print("\r\nT - Generate test messages");
     Serial.print("\r\nS - Show statistics");
     Serial.print("\r\nR - Reset event counter");
-    Serial.print("\r\nQ - Return to main menu");
+    Serial.print("\r\nL - Toggle loop timing diagnostics");
     Serial.print("\r\n? - Show this menu");
-    Serial.print("\r\n============================\r\n");
+    Serial.print("\r\n=========================\r\n");
 }
 

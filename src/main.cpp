@@ -48,6 +48,24 @@ PWMProcessor pwmProcessor;
 WebManager webManager;
 MotorDriverInterface *motorPTR = nullptr; // Motor driver still uses factory pattern
 
+// Loop timing diagnostics
+volatile bool loopTimingEnabled = false;
+uint32_t loopCount = 0;
+elapsedMillis timingPeriod;  // Teensy's auto-incrementing millisecond timer
+
+// Function to toggle loop timing
+void toggleLoopTiming() {
+  loopTimingEnabled = !loopTimingEnabled;
+  if (loopTimingEnabled) {
+    // Reset counters when enabling
+    loopCount = 0;
+    timingPeriod = 0;
+    Serial.println("Loop timing diagnostics ENABLED - first report in 30 seconds");
+  } else {
+    Serial.println("Loop timing diagnostics DISABLED");
+  }
+}
+
 void setup()
 {
   delay(5000); // delay for time to start monitor
@@ -305,7 +323,6 @@ void setup()
 
 void loop()
 {
-  
   // Check for OTA update apply
   OTAHandler::applyUpdate();
   
@@ -404,4 +421,22 @@ void loop()
     gnssProcessor.processUBXByte(b);
   }
 
+  // Loop timing - ultra lightweight, just increment counter
+  if (loopTimingEnabled) {
+    loopCount++;
+    
+    // Report every 30 seconds
+    if (timingPeriod >= 30000) {
+      // Calculate average from total time / total loops
+      float avgLoopTime = (float)timingPeriod * 1000.0f / (float)loopCount;  // Convert ms to us
+      float loopFreqKhz = (float)loopCount / (float)timingPeriod;  // loops per ms = kHz
+      
+      LOG_INFO(EventSource::SYSTEM, "Loop: %.2f kHz, Time: %.0f us (samples: %lu)", 
+               loopFreqKhz, avgLoopTime, loopCount);
+      
+      // Reset for next period
+      timingPeriod = 0;
+      loopCount = 0;
+    }
+  }
 }
