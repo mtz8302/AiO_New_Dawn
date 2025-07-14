@@ -108,6 +108,11 @@ button:hover {
     border-radius: 5px;
     margin: 10px 0;
 }
+.help-text {
+    color: #f44336;
+    font-size: 0.9em;
+    margin-left: 10px;
+}
 a {
     color: #2196F3;
     text-decoration: none;

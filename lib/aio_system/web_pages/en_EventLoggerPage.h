@@ -51,6 +51,13 @@ const char EN_EVENTLOGGER_PAGE[] PROGMEM = R"rawliteral(
                 <input type='number' id='syslogPort' value='%SYSLOG_PORT%' min='1' max='65535'>
             </div>
             
+            <h3>Debug Options</h3>
+            <div class='form-group'>
+                <label>Disable Rate Limiting:</label>
+                <input type='checkbox' id='rateLimitDisabled' %RATE_LIMIT_DISABLED%>
+                <span class='help-text'>⚠️ Warning: May flood console with messages</span>
+            </div>
+            
             <div class='info'>Syslog server IP is configured by your network admin. Default port is 514.</div>
             
             <div class='nav-buttons'>
@@ -66,7 +73,8 @@ const char EN_EVENTLOGGER_PAGE[] PROGMEM = R"rawliteral(
                 serialLevel: parseInt(document.getElementById('serialLevel').value),
                 udpEnabled: document.getElementById('udpEnabled').checked,
                 udpLevel: parseInt(document.getElementById('udpLevel').value),
-                syslogPort: parseInt(document.getElementById('syslogPort').value)
+                syslogPort: parseInt(document.getElementById('syslogPort').value),
+                rateLimitDisabled: document.getElementById('rateLimitDisabled').checked
             };
             fetch('/api/eventlogger/config', {
                 method: 'POST',

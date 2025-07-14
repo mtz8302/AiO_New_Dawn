@@ -34,7 +34,10 @@ const uint8_t SLEEP_PINS[3] = {
     3,  // Section 3/4 nSLEEP
     7   // Section 5/6 nSLEEP
 };
-// Note: Pins 14 (LOCK) and 15 (AUX) removed - may be motor-related
+
+// Special DRV8243 sleep pins for LOCK and AUX (from NG-V6)
+const uint8_t AUX_SLEEP_PIN = 15;    // AUX nSLEEP on PCA9685
+const uint8_t LOCK_SLEEP_PIN = 14;   // LOCK nSLEEP on PCA9685
 
 // Hardware configuration:
 // - nSLEEP: Also has 4.7K pullup, but needs reset pulse
@@ -151,11 +154,15 @@ bool MachineProcessor::initializeSectionOutputs() {
     getSectionOutputs().setPWMFreq(1526);  // Max frequency
     getSectionOutputs().setOutputMode(true);  // Push-pull outputs
     
-    // 5. Put all DRV8243s to sleep initially
+    // 5. Put all DRV8243s to sleep initially (including LOCK and AUX)
     LOG_DEBUG(EventSource::MACHINE, "Putting all DRV8243 drivers to sleep");
     for (uint8_t pin : SLEEP_PINS) {
         getSectionOutputs().setPin(pin, 0, 0); // Set LOW for sleep mode
     }
+    // Also put LOCK and AUX to sleep
+    getSectionOutputs().setPin(LOCK_SLEEP_PIN, 0, 0); // LOCK sleep
+    getSectionOutputs().setPin(AUX_SLEEP_PIN, 0, 0);  // AUX sleep
+    
     delayMicroseconds(150); // Wait for sleep mode to settle
     
     // 6. Set all section outputs to their OFF state before waking drivers
@@ -187,11 +194,23 @@ bool MachineProcessor::initializeSectionOutputs() {
                   outputNum, pcaPin, assignedFunction, offValue ? "HIGH" : "LOW");
     }
     
-    // 7. Wake up the section DRV8243s with reset pulse
+    // 7. Wake up LOCK and AUX first (like NG-V6)
+    // LOCK still needs signal from Autosteer code before its output is HIGH
+    LOG_INFO(EventSource::MACHINE, "Enabling LOCK DRV on pin %d, output controlled by Autosteer", LOCK_SLEEP_PIN);
+    getSectionOutputs().setPin(LOCK_SLEEP_PIN, 187, 1); // LOW pulse, 187/4096 is 30µs at 1526Hz
+    
+    // AUX's output is HIGH as soon as it wakes up
+    LOG_INFO(EventSource::MACHINE, "Enabling AUX Output on pin %d (always HIGH)", AUX_SLEEP_PIN);
+    getSectionOutputs().setPin(AUX_SLEEP_PIN, 187, 1); // LOW pulse, 187/4096 is 30µs at 1526Hz
+    
+    // 7a. Then wake up the section DRV8243s with reset pulse
     LOG_DEBUG(EventSource::MACHINE, "Waking section DRV8243 drivers");
     getSectionOutputs().setPin(13, 187, 1); // Section 1/2 - 30µs LOW pulse
     getSectionOutputs().setPin(3, 187, 1);  // Section 3/4 - 30µs LOW pulse
     getSectionOutputs().setPin(7, 187, 1);  // Section 5/6 - 30µs LOW pulse
+    
+    // The actual LOCK control comes from Teensy SLEEP_PIN (pin 4)
+    LOG_INFO(EventSource::MACHINE, "LOCK control via Teensy pin 4, DRV8243 awakened on PCA9685 pin %d", LOCK_SLEEP_PIN);
     
     // 8. Enable DRV8243 outputs by setting DRVOFF LOW
     LOG_DEBUG(EventSource::MACHINE, "Enabling DRV8243 outputs (DRVOFF = LOW)");

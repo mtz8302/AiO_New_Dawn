@@ -40,10 +40,9 @@ bool PWMMotorDriver::init() {
         digitalWrite(enablePin, LOW);   // Pull low
         delay(1);                       // Hold for 1ms
         digitalWrite(enablePin, HIGH);  // Rising edge wakes the driver
-        LOG_DEBUG(EventSource::AUTOSTEER, "Sent wake-up pulse on nSLEEP pin %d", enablePin);
-        
-        // Leave it high (awake) but motor disabled via PWM=0
-        digitalWrite(enablePin, HIGH);  // Keep driver awake
+        delayMicroseconds(100);         // Let it stabilize
+        digitalWrite(enablePin, LOW);   // Return to sleep/LOW (like NG-V6)
+        LOG_DEBUG(EventSource::AUTOSTEER, "Sent wake-up pulse on nSLEEP pin %d, now LOW", enablePin);
     }
     
     if (hasCurrentSense) {

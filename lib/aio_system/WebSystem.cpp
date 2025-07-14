@@ -239,6 +239,7 @@ void WebManager::setupEventLoggerAPI() {
         doc["udpEnabled"] = config.enableUDP;
         doc["udpLevel"] = config.udpLevel;
         doc["syslogPort"] = (config.syslogPort[0] << 8) | config.syslogPort[1];
+        doc["rateLimitDisabled"] = config.disableRateLimit;
         
         // Add level names for display
         doc["serialLevelName"] = logger->getLevelName(static_cast<EventSeverity>(config.serialLevel));
@@ -281,6 +282,9 @@ void WebManager::setupEventLoggerAPI() {
                 if (doc["udpLevel"].is<int>()) {
                     logger->setUDPLevel(static_cast<EventSeverity>(doc["udpLevel"].as<int>()));
                 }
+                if (doc["rateLimitDisabled"].is<bool>()) {
+                    logger->setRateLimitEnabled(!doc["rateLimitDisabled"].as<bool>());
+                }
                 
                 // Log the configuration change
                 LOG_INFO(EventSource::CONFIG, "EventLogger configuration updated via web interface");
@@ -312,6 +316,9 @@ void WebManager::handleEventLoggerPage(AsyncWebServerRequest* request) {
     // Set UDP port
     uint16_t udpPort = (config.syslogPort[0] << 8) | config.syslogPort[1];
     html.replace("%SYSLOG_PORT%", String(udpPort));
+    
+    // Set rate limiting checkbox
+    html.replace("%RATE_LIMIT_DISABLED%", config.disableRateLimit ? "checked" : "");
     
     AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
     response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");

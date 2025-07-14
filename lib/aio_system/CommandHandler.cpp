@@ -116,6 +116,10 @@ void CommandHandler::handleLoggingMenu(char cmd) {
             }
             break;
             
+        case '7':  // Toggle rate limiting
+            loggerPtr->setRateLimitEnabled(!loggerPtr->isRateLimitEnabled());
+            break;
+            
         case 't':  // Test log messages
         case 'T':
             LOG_INFO(EventSource::USER, "Generating test log messages...");
@@ -178,6 +182,7 @@ void CommandHandler::showLoggingMenu() {
     Serial.print("\r\n2 - Toggle UDP syslog");
     Serial.print("\r\n3/4 - Decrease/Increase serial level");
     Serial.print("\r\n5/6 - Decrease/Increase UDP level");
+    Serial.print("\r\n7 - Toggle rate limiting");
     // QNEthernet handles its own logging internally
     Serial.print("\r\nT - Generate test messages");
     Serial.print("\r\nS - Show statistics");

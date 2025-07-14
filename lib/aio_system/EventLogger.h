@@ -37,7 +37,8 @@ struct EventConfig {
     bool enableSerial = true;
     bool enableUDP = false;
     uint8_t syslogPort[2] = {2, 2};  // Port 514 (0x0202)
-    uint8_t reserved[10];  // Future expansion
+    bool disableRateLimit = false;  // Flag to disable rate limiting
+    uint8_t reserved[9];  // Future expansion
 };
 
 class EventLogger {
@@ -144,6 +145,10 @@ public:
     // System startup logging control
     void setStartupMode(bool startup);
     bool isStartupMode() { return startupMode; }
+    
+    // Rate limiting control
+    void setRateLimitEnabled(bool enabled);
+    bool isRateLimitEnabled() const { return !config.disableRateLimit; }
     
     // Get the effective log level for UDP syslog
     EventSeverity getEffectiveLogLevel() {

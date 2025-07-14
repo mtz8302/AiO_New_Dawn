@@ -50,8 +50,8 @@ void EventLogger::init() {
 }
 
 void EventLogger::log(EventSeverity severity, EventSource source, const char* format, ...) {
-    // Check rate limiting first
-    if (!checkRateLimit(severity)) {
+    // Check rate limiting first (unless disabled)
+    if (!config.disableRateLimit && !checkRateLimit(severity)) {
         return;
     }
     
@@ -257,6 +257,8 @@ void EventLogger::printConfig() {
                   config.enableUDP ? "ENABLED" : "DISABLED",
                   severityNames[config.udpLevel],
                   (config.syslogPort[0] << 8) | config.syslogPort[1]);
+    Serial.printf("Rate Limiting: %s\r\n", 
+                  config.disableRateLimit ? "DISABLED" : "ENABLED");
     // QNEthernet handles its own logging internally
     Serial.printf("Total Events Logged: %lu\r\n", eventCounter);
     Serial.println("=====================================");
@@ -315,4 +317,15 @@ void EventLogger::setStartupMode(bool startup) {
                  severityNames[config.serialLevel]);
     }
     // Note: We don't support re-entering startup mode after exiting
+}
+
+void EventLogger::setRateLimitEnabled(bool enabled) {
+    config.disableRateLimit = !enabled;
+    saveConfig();
+    
+    if (enabled) {
+        LOG_INFO(EventSource::SYSTEM, "Rate limiting ENABLED");
+    } else {
+        LOG_WARNING(EventSource::SYSTEM, "Rate limiting DISABLED - all messages will be logged!");
+    }
 }

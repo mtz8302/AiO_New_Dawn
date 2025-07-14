@@ -91,8 +91,10 @@ bool AutosteerProcessor::init() {
     pinMode(2, INPUT_PULLUP);
     LOG_DEBUG(EventSource::AUTOSTEER, "Button pin 2 configured as INPUT_PULLUP");
     
-    // Note: LOCK output (pin 4) is controlled by the motor driver as SLEEP/Enable pin
-    // When motor is enabled, LOCK output is active (dual-purpose pin)
+    // Initialize LOCK output pin (SLEEP_PIN = 4)
+    pinMode(4, OUTPUT);
+    digitalWrite(4, LOW);  // Start with LOCK OFF (like NG-V6)
+    LOG_DEBUG(EventSource::AUTOSTEER, "LOCK output pin 4 configured as OUTPUT, initially LOW");
     
     // Initialize PID controller with default values
     pid.setKp(5.0f);  // Default proportional gain
@@ -716,6 +718,16 @@ void AutosteerProcessor::updateMotorControl() {
         if (motorPTR) {
             motorPTR->enable(false);
             motorPTR->setSpeed(0.0f);
+            
+            // LOCK output control
+            if (motorPTR->getType() == MotorDriverType::KEYA_CAN) {
+                // Directly control LOCK output for Keya motor
+                digitalWrite(4, LOW);  // SLEEP_PIN = 4, LOW = LOCK OFF
+                LOG_INFO(EventSource::AUTOSTEER, "LOCK output: INACTIVE (pin 4 LOW for Keya motor)");
+            } else {
+                // For PWM motors, pin 4 is controlled by the motor driver
+                LOG_INFO(EventSource::AUTOSTEER, "LOCK output: INACTIVE (motor disabled)");
+            }
         }
         // Give more specific disable reason
         if (!QNetworkBase::isConnected()) {
@@ -822,6 +834,22 @@ void AutosteerProcessor::updateMotorControl() {
     if (motorPTR) {
         motorPTR->enable(true);
         motorPTR->setSpeed(motorSpeed);
+        
+        // LOCK output control
+        // For PWM motors, pin 4 is controlled by the motor driver
+        // For Keya/CAN motors, we need to control pin 4 directly
+        if (motorPTR->getType() == MotorDriverType::KEYA_CAN) {
+            // Directly control LOCK output for Keya motor
+            digitalWrite(4, HIGH);  // SLEEP_PIN = 4, HIGH = LOCK ON
+            
+            static bool lockLogged = false;
+            if (motorState == MotorState::NORMAL_CONTROL && !lockLogged) {
+                LOG_INFO(EventSource::AUTOSTEER, "LOCK output: ACTIVE (pin 4 HIGH for Keya motor)");
+                lockLogged = true;
+            } else if (motorState == MotorState::DISABLED) {
+                lockLogged = false;
+            }
+        }
     }
     
 }
@@ -871,6 +899,11 @@ void AutosteerProcessor::emergencyStop() {
     if (motorPTR) {
         motorPTR->setSpeed(0.0f);
         motorPTR->enable(false);
+        
+        // Ensure LOCK is OFF on kickout
+        if (motorPTR->getType() == MotorDriverType::KEYA_CAN) {
+            digitalWrite(4, LOW);  // SLEEP_PIN = 4, LOW = LOCK OFF
+        }
     }
     
     // Set inactive state
