@@ -644,23 +644,16 @@ void MachineProcessor::updateMachineOutputs() {
         // Determine output state based on function type and settings
         bool outputState;
         
-        // For sections (functions 1-16), use standard logic
-        // Section ON = output HIGH (to turn on spray relay/valve)
-        if (assignedFunction >= 1 && assignedFunction <= 16) {
-            outputState = functionState;  // Direct mapping for sections
+        // Apply active high/low setting to ALL functions (sections and machine)
+        // isPinActiveHigh from AOG (PGN238 Byte 8 Bit 0):
+        // - true: relay turns ON when pin goes HIGH  
+        // - false: relay turns ON when pin goes LOW
+        if (machineConfig.isPinActiveHigh) {
+            // Active high: function state directly maps to output
+            outputState = functionState;
         } else {
-            // For machine functions (17-21), apply active high/low setting
-            // When active low is configured:
-            // - Function OFF (false) -> Output should be HIGH (relay OFF)
-            // - Function ON (true) -> Output should be LOW (relay ON)
-            // This ensures outputs are OFF at boot when functions are false
-            if (machineConfig.isPinActiveHigh) {
-                // Active high: function ON = output HIGH
-                outputState = functionState;
-            } else {
-                // Active low: function OFF = output HIGH, function ON = output LOW
-                outputState = !functionState;
-            }
+            // Active low: invert the function state
+            outputState = !functionState;
         }
         
         // Get the actual PCA9685 pin number for this output
