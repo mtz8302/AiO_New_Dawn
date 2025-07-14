@@ -265,8 +265,9 @@ bool NAVProcessor::formatPAOGIMessage() {
 
 void NAVProcessor::sendMessage(const char* message) {
     // NMEA messages must end with CR+LF
-    char buffer[BUFFER_SIZE];
-    snprintf(buffer, BUFFER_SIZE, "%s\r\n", message);
+    // Buffer size increased by 3 to accommodate "\r\n" and null terminator
+    char buffer[BUFFER_SIZE + 3];
+    snprintf(buffer, sizeof(buffer), "%s\r\n", message);
     
     // Send via UDP to AgIO
     sendUDPbytes((uint8_t*)buffer, strlen(buffer));
