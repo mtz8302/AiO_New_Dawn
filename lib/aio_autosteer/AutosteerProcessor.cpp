@@ -508,6 +508,10 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     pid.setKp(scaledKp);
     LOG_DEBUG(EventSource::AUTOSTEER, "PID updated with Kp=%.1f", scaledKp);
     
+    // Update ADProcessor with WAS calibration values
+    adProcessor.setWASOffset(steerSettings.wasOffset);
+    adProcessor.setWASCountsPerDegree(steerSettings.steerSensorCounts);
+    
     // Log all settings at INFO level in a single message so users see everything
     LOG_INFO(EventSource::AUTOSTEER, "Steer settings: Kp=%.1f PWM=%d-%d-%d WAS_offset=%d counts=%d Ackerman=%.2f", 
              scaledKp,
