@@ -170,9 +170,28 @@ bool ADProcessor::debounceSwitch(SwitchState& sw, bool rawState)
 float ADProcessor::getWASAngle() const
 {
     // Calculate angle from raw reading
-    // Angle = (raw - offset) / countsPerDegree
+    // The WAS is expected to be centered at ~2048 (half of 12-bit range)
+    // But AgOpenGPS expects values scaled by 3.23x, so center is ~6805
+    
+    // Apply the 3.23x scaling to match AgOpenGPS expectations
+    float scaledWAS = wasRaw * 3.23f;
+    
+    // Apply center point (6805) and offset
+    float centeredWAS = scaledWAS - 6805.0f - wasOffset;
+    
+    // Calculate angle
     if (wasCountsPerDegree != 0) {
-        return (float)(wasRaw - wasOffset) / wasCountsPerDegree;
+        float angle = centeredWAS / wasCountsPerDegree;
+        
+        // Debug logging
+        static uint32_t lastWASDebug = 0;
+        if (millis() - lastWASDebug > 2000) {
+            lastWASDebug = millis();
+            LOG_DEBUG(EventSource::AUTOSTEER, "WAS: raw=%d, scaled=%.0f, centered=%.0f, angle=%.2f°, offset=%d, CPD=%.1f", 
+                      wasRaw, scaledWAS, centeredWAS, angle, wasOffset, wasCountsPerDegree);
+        }
+        
+        return angle;
     }
     return 0.0f;
 }

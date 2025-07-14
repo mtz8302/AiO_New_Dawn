@@ -40,6 +40,9 @@ AutosteerProcessor::AutosteerProcessor() {
     steerSettings.highPWM = 255;
     steerSettings.lowPWM = 10;
     steerSettings.minPWM = 5;
+    steerSettings.steerSensorCounts = 1;  // Avoid divide by zero
+    steerSettings.wasOffset = 0;
+    steerSettings.AckermanFix = 1.0f;
 }
 
 AutosteerProcessor* AutosteerProcessor::getInstance() {
@@ -96,10 +99,28 @@ bool AutosteerProcessor::init() {
     digitalWrite(4, LOW);  // Start with LOCK OFF (like NG-V6)
     LOG_DEBUG(EventSource::AUTOSTEER, "LOCK output pin 4 configured as OUTPUT, initially LOW");
     
-    // Initialize PID controller with default values
-    pid.setKp(5.0f);  // Default proportional gain
+    // Load steer settings from EEPROM
+    configManager.loadSteerSettings();
+    steerSettings.Kp = configManager.getKp();
+    steerSettings.highPWM = configManager.getHighPWM();
+    steerSettings.lowPWM = configManager.getLowPWM();
+    steerSettings.minPWM = configManager.getMinPWM();
+    steerSettings.steerSensorCounts = configManager.getSteerSensorCounts();
+    steerSettings.wasOffset = configManager.getWasOffset();
+    steerSettings.AckermanFix = configManager.getAckermanFix();
+    
+    LOG_INFO(EventSource::AUTOSTEER, "Loaded steer settings from EEPROM: offset=%d, CPD=%d, highPWM=%d", 
+             steerSettings.wasOffset, steerSettings.steerSensorCounts, steerSettings.highPWM);
+    
+    // Update ADProcessor with loaded values
+    adProcessor.setWASOffset(steerSettings.wasOffset);
+    adProcessor.setWASCountsPerDegree(steerSettings.steerSensorCounts);
+    
+    // Initialize PID controller with loaded Kp value
+    float scaledKp = steerSettings.Kp / 10.0f;  // AgOpenGPS sends Kp * 10
+    pid.setKp(scaledKp);
     pid.setOutputLimit(100.0f);  // Motor speed limit (±100%)
-    LOG_DEBUG(EventSource::AUTOSTEER, "PID controller initialized");
+    LOG_DEBUG(EventSource::AUTOSTEER, "PID controller initialized with Kp=%.1f", scaledKp);
     
     // Register PGN handlers with PGNProcessor
     if (PGNProcessor::instance) {
@@ -518,6 +539,21 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
              steerSettings.minPWM, steerSettings.lowPWM, steerSettings.highPWM,
              steerSettings.wasOffset, steerSettings.steerSensorCounts,
              steerSettings.AckermanFix);
+    
+    // Also log that we updated the ADProcessor
+    LOG_INFO(EventSource::AUTOSTEER, "Updated ADProcessor with offset=%d, CPD=%d", 
+             steerSettings.wasOffset, steerSettings.steerSensorCounts);
+    
+    // Save steer settings to EEPROM
+    configManager.setKp(steerSettings.Kp);
+    configManager.setHighPWM(steerSettings.highPWM);
+    configManager.setLowPWM(steerSettings.lowPWM);
+    configManager.setMinPWM(steerSettings.minPWM);
+    configManager.setSteerSensorCounts(steerSettings.steerSensorCounts);
+    configManager.setWasOffset(steerSettings.wasOffset);
+    configManager.setAckermanFix(steerSettings.AckermanFix);
+    configManager.saveSteerSettings();
+    LOG_INFO(EventSource::AUTOSTEER, "Steer settings saved to EEPROM");
 }
 
 void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -784,8 +820,21 @@ void AutosteerProcessor::updateMotorControl() {
             }
             
             // Convert to percentage for motor driver
+            // Important: Scale based on actual highPWM limit, not 255
             motorSpeed = (scaledPWM / 255.0f) * 100.0f;
-            if (pidOutput < 0) motorSpeed = -motorSpeed;
+            
+            // Ensure motor speed percentage respects highPWM limit
+            float maxMotorSpeed = (highPWM / 255.0f) * 100.0f;
+            float originalSpeed = motorSpeed;
+            motorSpeed = constrain(motorSpeed, -maxMotorSpeed, maxMotorSpeed);
+            
+            // Log if we hit the limit
+            if (abs(originalSpeed) > maxMotorSpeed) {
+                LOG_DEBUG(EventSource::AUTOSTEER, "PWM LIMITED: %.1f%% -> %.1f%% (max=%.1f%%, highPWM=%d)", 
+                         originalSpeed, motorSpeed, maxMotorSpeed, highPWM);
+            }
+            
+            if (pidOutput < 0 && motorSpeed > 0) motorSpeed = -motorSpeed;
             
             // Apply soft-start if active
             if (motorState == MotorState::SOFT_START) {
@@ -832,6 +881,49 @@ void AutosteerProcessor::updateMotorControl() {
     // Apply motor direction from config
     if (configManager.getMotorDriveDirection()) {
         motorSpeed = -motorSpeed;  // Invert if configured
+    }
+    
+    // Final PWM limit check - ensure we never exceed highPWM setting
+    // Always log current settings for debugging
+    static uint32_t lastPWMSettingsLog = 0;
+    if (millis() - lastPWMSettingsLog > 5000) {  // Log every 5 seconds
+        lastPWMSettingsLog = millis();
+        LOG_INFO(EventSource::AUTOSTEER, "PWM Settings: highPWM=%d, lowPWM=%d, minPWM=%d", 
+                 steerSettings.highPWM, steerSettings.lowPWM, steerSettings.minPWM);
+    }
+    
+    if (steerSettings.highPWM > 0 && steerSettings.highPWM < 255) {
+        float maxMotorSpeed = (steerSettings.highPWM / 255.0f) * 100.0f;
+        float originalSpeed = motorSpeed;
+        motorSpeed = constrain(motorSpeed, -maxMotorSpeed, maxMotorSpeed);
+        
+        // Always log when motor speed is high
+        if (abs(motorSpeed) > 50.0f) {
+            LOG_INFO(EventSource::AUTOSTEER, "High motor speed: %.1f%% (max allowed=%.1f%%, highPWM=%d)", 
+                     motorSpeed, maxMotorSpeed, steerSettings.highPWM);
+        }
+        
+        // Log if we hit the limit
+        if (abs(originalSpeed) > maxMotorSpeed) {
+            LOG_INFO(EventSource::AUTOSTEER, "PWM LIMITED: %.1f%% -> %.1f%% (max=%.1f%%, highPWM=%d)", 
+                     originalSpeed, motorSpeed, maxMotorSpeed, steerSettings.highPWM);
+        }
+    } else {
+        // Log why limiting is not applied
+        static bool loggedNoLimit = false;
+        if (!loggedNoLimit && abs(motorSpeed) > 50.0f) {
+            loggedNoLimit = true;
+            LOG_WARNING(EventSource::AUTOSTEER, "PWM limiting NOT active: highPWM=%d (must be 1-254)", 
+                        steerSettings.highPWM);
+        }
+    }
+    
+    // Debug log final motor speed periodically
+    static uint32_t lastMotorSpeedLog = 0;
+    if (millis() - lastMotorSpeedLog > 1000 && abs(motorSpeed) > 10.0f) {
+        lastMotorSpeedLog = millis();
+        LOG_DEBUG(EventSource::AUTOSTEER, "Motor speed: %.1f%% (highPWM=%d, PID=%.1f)", 
+                  motorSpeed, steerSettings.highPWM, pidOutput);
     }
     
     // Send to motor
