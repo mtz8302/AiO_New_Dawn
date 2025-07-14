@@ -46,12 +46,14 @@ const char DE_EVENTLOGGER_PAGE[] PROGMEM = R"rawliteral(
                 </select>
             </div>
             
+            <h3>Debug-Optionen</h3>
             <div class='form-group'>
-                <label>Syslog-Port:</label>
-                <input type='number' id='syslogPort' value='%SYSLOG_PORT%' min='1' max='65535'>
+                <label>Ratenbegrenzung deaktivieren:</label>
+                <input type='checkbox' id='rateLimitDisabled' %RATE_LIMIT_DISABLED%>
+                <span class='help-text'>⚠️ Warnung: Kann die Konsole mit Nachrichten überfluten</span>
             </div>
             
-            <div class='info'>Die Syslog-Server-IP wird von Ihrem Netzwerkadministrator konfiguriert. Standardport ist 514.</div>
+            <div class='info'>Syslog-Nachrichten werden an die von Ihrem Netzwerkadministrator konfigurierte Server-IP auf Port 514 gesendet.</div>
             
             <div class='nav-buttons'>
                 <button type='button' class='btn btn-home' onclick='window.location="/"'>Startseite</button>
@@ -66,7 +68,7 @@ const char DE_EVENTLOGGER_PAGE[] PROGMEM = R"rawliteral(
                 serialLevel: parseInt(document.getElementById('serialLevel').value),
                 udpEnabled: document.getElementById('udpEnabled').checked,
                 udpLevel: parseInt(document.getElementById('udpLevel').value),
-                syslogPort: parseInt(document.getElementById('syslogPort').value)
+                rateLimitDisabled: document.getElementById('rateLimitDisabled').checked
             };
             fetch('/api/eventlogger/config', {
                 method: 'POST',

@@ -313,9 +313,7 @@ void WebManager::handleEventLoggerPage(AsyncWebServerRequest* request) {
     html.replace("%SERIAL_LEVEL_OPTIONS%", buildLevelOptions(config.serialLevel));
     html.replace("%UDP_LEVEL_OPTIONS%", buildLevelOptions(config.udpLevel));
     
-    // Set UDP port
-    uint16_t udpPort = (config.syslogPort[0] << 8) | config.syslogPort[1];
-    html.replace("%SYSLOG_PORT%", String(udpPort));
+    // Syslog port field removed - always uses standard port 514
     
     // Set rate limiting checkbox
     html.replace("%RATE_LIMIT_DISABLED%", config.disableRateLimit ? "checked" : "");
