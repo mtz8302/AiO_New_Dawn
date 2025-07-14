@@ -46,8 +46,8 @@ const uint8_t LOCK_SLEEP_PIN = 14;   // LOCK nSLEEP on PCA9685
 
 // In independent mode:
 // - Each INx directly controls OUTx
-// - HIGH on INx = OUTx sinks current (LED ON)
-// - LOW on INx = OUTx high impedance (LED OFF)
+// - HIGH on INx = OUTx sources current (LED ON, Output pushed HIGH)
+// - LOW on INx = OUTx sinks current (LED OFF, Output pulled LOW)
 
 // Static instance pointers
 MachineProcessor* MachineProcessor::instance = nullptr;
