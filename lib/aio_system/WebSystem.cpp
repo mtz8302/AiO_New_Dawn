@@ -445,16 +445,20 @@ void WebManager::setupNetworkAPI() {
 }
 
 void WebManager::handleOTAPage(AsyncWebServerRequest* request) {
-    String html = FPSTR(WebPageSelector::getOTAPage(currentLanguage));
+    // Use strcpy_P to ensure proper PROGMEM string handling
+    const char* pagePtr = WebPageSelector::getOTAPage(currentLanguage);
+    size_t len = strlen_P(pagePtr);
+    char* buffer = new char[len + 1];
+    strcpy_P(buffer, pagePtr);
+    
+    String html(buffer);
+    delete[] buffer;
+    
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     html.replace("%FIRMWARE_VERSION%", FIRMWARE_VERSION);
     html.replace("%BOARD_TYPE%", TEENSY_BOARD_TYPE);
     
-    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
-    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    response->addHeader("Pragma", "no-cache");
-    response->addHeader("Expires", "0");
-    request->send(response);
+    request->send(200, "text/html", html);
 }
 
 void WebManager::setupOTARoutes() {
