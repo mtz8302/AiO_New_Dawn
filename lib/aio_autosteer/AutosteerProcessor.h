@@ -27,6 +27,7 @@ struct SteerConfig {
     uint8_t PressureSensor;
     uint8_t CurrentSensor;
     uint8_t IsUseY_Axis;
+    uint8_t MotorDriverConfig;  // From PGN251 Byte 8
 };
 
 // Steer Settings structure (PGN 252)

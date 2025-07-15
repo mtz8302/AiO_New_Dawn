@@ -19,10 +19,11 @@ This plan outlines the phased implementation to support three motor driver types
 
 ## Detection Priority Order
 1. **Keya CAN** - Heartbeat detection on CAN3
-2. **Danfoss** - PGN251 configuration
+2. **Danfoss** - EEPROM configuration (set via PGN251)
 3. **DRV8701P** - Default fallback
 
 ## Configuration Mapping (PGN251 Byte 8)
+Configuration is sent when user updates settings in AOG and stored in EEPROM:
 - 0x00: DRV8701P + Wheel Encoder
 - 0x01: Danfoss + Wheel Encoder
 - 0x02: DRV8701P + Pressure Sensor
@@ -44,54 +45,53 @@ This plan outlines the phased implementation to support three motor driver types
    ```
 
 2. Create `MotorDriverDetector` class:
-   - Monitor CAN3 for Keya heartbeat
-   - Parse PGN251 Byte 8 for driver configuration
+   - Integrate with existing Keya heartbeat detection at startup
+   - Read driver configuration from EEPROM (originally set by PGN251 Byte 8)
    - Implement detection state machine
    - Add detection logging
 
 3. Update `SteerConfig` structure to include:
    - `IsDanfoss` flag
    - `KickoutType` enum (Encoder, Pressure, Current)
-   - Motor driver configuration from PGN251
+   - Motor driver configuration stored in EEPROM
 
 **Test Points**:
-- Simulate Keya heartbeat, verify detection
-- Send PGN251 with various Byte 8 values
+- Test with live Keya motor connected
+- Send PGN251 with various Byte 8 values and verify EEPROM storage
 - Verify detection priority order
 
 **Deliverables**:
 - Updated interfaces
 - Detection logic implementation
-- Unit tests for detection
+- Compile, test, debug and commit
 
 ---
 
-### Phase 2: Keya CAN Driver Enhancement (1-2 days)
-**Objective**: Complete Keya implementation based on V6
+### Phase 2: Keya CAN Driver Verification (1 day)
+**Objective**: Verify and complete existing Keya implementation
 
 **Tasks**:
-1. Update `KeyaCANDriver`:
-   - Port heartbeat monitoring from V6
-   - Implement proper speed mapping (-255 to 255 → -995 to 995)
-   - Add current sensor reading support
-   - Implement enable/disable commands
-   - Add version query support
+1. Verify existing `KeyaCANDriver` functionality:
+   - Confirm heartbeat monitoring is working
+   - Verify speed mapping (-255 to 255 → -995 to 995)
+   - Confirm enable/disable commands work
+   - Test encoder/speed query functionality
 
-2. CAN message handling:
-   - Heartbeat response (0x7000001)
-   - Speed/direction commands (0x6000001)
-   - Current query/response
-   - Encoder/speed query
+2. Update kickout handling:
+   - Use existing "motor slip" method from New Dawn
+   - Remove current sensor query (not required)
+   - Remove version query (not required)
 
 **Test Points**:
 - Test with actual Keya motor
 - Verify speed control accuracy
-- Test current sensor feedback
+- Test motor slip detection
 - Verify kickout functionality
 
 **Deliverables**:
-- Complete Keya driver
-- Integration tests
+- Verified Keya driver functionality
+- Any necessary bug fixes
+- Compile, test, debug and commit
 
 ---
 
@@ -103,19 +103,20 @@ This plan outlines the phased implementation to support three motor driver types
    ```cpp
    class DanfossMotorDriver : public MotorDriverInterface {
        // Output 5: Enable pin (HIGH = enabled)
-       // Output 6: Analog control (25% = left, 50% = center, 75% = right)
+       // Output 6: Analog control (PWM value mapped to 25%-75% range)
    };
    ```
 
 2. Implement control logic:
-   - Map -100% to +100% speed → 25% to 75% PWM
+   - Take standard PWM value (0-255) from autosteer calculation
+   - Map to Danfoss range: 0 → 64 (25%), 128 → 128 (50%), 255 → 192 (75%)
    - Control Output 5 for enable/disable
    - Implement 12V analog output on Output 6
-   - Add center position calibration
+   - Use existing center position from steering wizard
 
 3. Configure outputs:
    - Use machine output pins 5 & 6
-   - Ensure proper PWM frequency for analog output
+   - Use PWM frequencies from autosteer.h
    - Add safety limits
 
 **Test Points**:
@@ -127,7 +128,7 @@ This plan outlines the phased implementation to support three motor driver types
 **Deliverables**:
 - Danfoss driver implementation
 - Voltage measurement logs
-- Integration tests
+- Compile, test, debug and commit
 
 ---
 
@@ -166,6 +167,7 @@ This plan outlines the phased implementation to support three motor driver types
 **Deliverables**:
 - Updated DRV8701P driver
 - Current sensor calibration data
+- Compile, test, debug and commit
 
 ---
 
@@ -180,10 +182,9 @@ This plan outlines the phased implementation to support three motor driver types
    - Event generation
 
 2. Input handling:
-   - Wheel encoder (KICKOUT_D_PIN)
+   - Wheel encoder (KICKOUT_D_PIN) - single input only
    - Pressure sensor (KICKOUT_A_PIN)
    - Current sensor (driver-specific)
-   - Implement quadrature encoder support
 
 3. Integration:
    - Each driver registers with KickoutMonitor
@@ -199,34 +200,34 @@ This plan outlines the phased implementation to support three motor driver types
 **Deliverables**:
 - Kickout monitoring system
 - Integration with all drivers
+- Compile, test, debug and commit
 
 ---
 
 ### Phase 6: Factory & Auto-Selection (1 day)
-**Objective**: Automatic driver selection and instantiation
+**Objective**: Automatic driver selection and instantiation at startup
 
 **Tasks**:
 1. Update `MotorDriverFactory`:
    - Integrate with MotorDriverDetector
    - Implement detection → instantiation flow
    - Add fallback logic
-   - Support runtime driver switching
+   - Driver selection occurs only at startup
 
 2. AutosteerProcessor integration:
    - Remove hardcoded driver selection
-   - Use factory for driver creation
-   - Handle driver switching events
+   - Use factory for driver creation at initialization
    - Update status reporting
 
 **Test Points**:
-- Test automatic detection
-- Test driver switching
+- Test automatic detection at startup
 - Verify fallback to DRV8701P
-- Test PGN251 configuration changes
+- Test PGN251 configuration changes (requires reboot)
 
 **Deliverables**:
 - Updated factory implementation
 - Auto-selection logic
+- Compile, test, debug and commit
 
 ---
 
@@ -235,14 +236,14 @@ This plan outlines the phased implementation to support three motor driver types
 
 **Tasks**:
 1. Integration testing:
-   - Test all driver combinations
+   - Test each driver type individually
    - Verify kickout configurations
-   - Test driver switching scenarios
+   - Test configuration changes and reboot
    - Performance profiling
 
-2. Edge cases:
-   - CAN bus disconnection/reconnection
-   - Invalid PGN251 values
+2. Fault recovery testing:
+   - CAN bus disconnection (should disable autosteer)
+   - Invalid PGN251 values (should use EEPROM or default)
    - Kickout during active steering
    - Power cycling behavior
 
@@ -269,11 +270,11 @@ This plan outlines the phased implementation to support three motor driver types
 1. **Hardware Availability**: Ensure access to all three motor types for testing
 2. **Backward Compatibility**: Maintain existing functionality during transition
 3. **Safety**: Implement failsafe modes for each driver type
-4. **Testing Coverage**: Create simulators for motors not immediately available
+4. **Testing Coverage**: Use available hardware (live Keya motor) for testing
 
 ## Success Criteria
 
-1. Automatic detection works reliably for all three motor types
+1. Detection works reliably at startup for all three motor types
 2. Each driver provides equivalent steering performance
 3. Kickout functionality works correctly for all configurations
 4. No regression in existing functionality
@@ -281,10 +282,10 @@ This plan outlines the phased implementation to support three motor driver types
 
 ## Timeline Estimate
 
-Total: 12-16 days of development
+Total: 11-14 days of development
 
 - Phase 1: 2-3 days
-- Phase 2: 1-2 days  
+- Phase 2: 1 day  
 - Phase 3: 2-3 days
 - Phase 4: 1-2 days
 - Phase 5: 2 days
@@ -294,6 +295,5 @@ Total: 12-16 days of development
 ## Next Steps
 
 1. Review and approve this plan
-2. Set up test hardware for all three motor types
-3. Begin Phase 1 implementation
-4. Schedule regular testing checkpoints
+2. Begin Phase 1 implementation
+3. Schedule regular testing checkpoints with available hardware

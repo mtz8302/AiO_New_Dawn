@@ -5,6 +5,7 @@
 #include "MotorDriverInterface.h"
 #include "PWMMotorDriver.h"
 #include "KeyaCANDriver.h"
+#include "MotorDriverDetector.h"
 #include "HardwareManager.h"
 #include "CANManager.h"
 #include "EventLogger.h"
@@ -29,6 +30,17 @@ public:
             case MotorDriverType::KEYA_CAN:
                 return new KeyaCANDriver();
                 
+            case MotorDriverType::DANFOSS:
+                LOG_WARNING(EventSource::AUTOSTEER, "Danfoss driver not yet implemented - using DRV8701");
+                // TODO: Return DanfossMotorDriver when implemented
+                return new PWMMotorDriver(
+                    MotorDriverType::DRV8701,
+                    hwMgr->getPWM1Pin(),
+                    hwMgr->getPWM2Pin(),
+                    hwMgr->getSleepPin(),
+                    hwMgr->getCurrentPin()
+                );
+                
             default:
                 LOG_WARNING(EventSource::AUTOSTEER, "Unknown motor type");
                 return nullptr;
@@ -37,15 +49,25 @@ public:
     
     // Auto-detect motor type
     static MotorDriverType detectMotorType(CANManager* canMgr) {
-        // Check for Keya motor on CAN with new CANManager
-        if (canMgr && canMgr->isKeyaDetected()) {
-            LOG_INFO(EventSource::AUTOSTEER, "Keya motor detected on CAN3");
-            return MotorDriverType::KEYA_CAN;
+        // Initialize the detector
+        MotorDriverDetector* detector = MotorDriverDetector::getInstance();
+        detector->init();
+        
+        // Wait for detection to complete (up to 2 seconds for Keya)
+        uint32_t startTime = millis();
+        while (!detector->isDetectionComplete() && (millis() - startTime) < 2100) {
+            // Check for Keya heartbeat
+            bool keyaDetected = canMgr && canMgr->isKeyaDetected();
+            detector->detect(keyaDetected);
+            delay(10);
         }
         
-        // Default to DRV8701 if no CAN motor detected
-        LOG_INFO(EventSource::AUTOSTEER, "No CAN motor detected, defaulting to DRV8701");
-        return MotorDriverType::DRV8701;
+        // Force detection completion if timeout
+        if (!detector->isDetectionComplete()) {
+            detector->detect(false);
+        }
+        
+        return detector->getDetectedType();
     }
 };
 

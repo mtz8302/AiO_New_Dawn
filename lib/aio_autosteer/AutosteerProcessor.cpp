@@ -9,6 +9,7 @@
 #include "QNetworkBase.h"
 #include "HardwareManager.h"
 #include "WheelAngleFusion.h"
+#include "MotorDriverDetector.h"
 #include <cmath>  // For sin() function
 
 // External network function
@@ -401,9 +402,9 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     // PGN 251 - Steer Config
     // Expected length is 14 bytes total, but we get data after header
     
-    LOG_DEBUG(EventSource::AUTOSTEER, "PGN 251 (Steer Config) received, %d bytes", len);
+    LOG_INFO(EventSource::AUTOSTEER, "PGN 251 (Steer Config) received, %d bytes", len);
     
-    // Debug: dump entire PGN 251 packet
+    // Always show debug info first, regardless of packet validity
     char debugMsg[256];
     snprintf(debugMsg, sizeof(debugMsg), "Raw PGN 251 data:");
     for (int i = 0; i < len && strlen(debugMsg) < 200; i++) {
@@ -411,10 +412,10 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
         snprintf(buf, sizeof(buf), " [%d]=0x%02X(%d)", i, data[i], data[i]);
         strncat(debugMsg, buf, sizeof(debugMsg) - strlen(debugMsg) - 1);
     }
-    LOG_DEBUG(EventSource::AUTOSTEER, "%s", debugMsg);
+    LOG_INFO(EventSource::AUTOSTEER, "%s", debugMsg);
     
-    if (len < 4) {  // Changed from 5 to 4 since we only need up to index 3
-        LOG_ERROR(EventSource::AUTOSTEER, "PGN 251 too short!");
+    if (len < 4) {  // Minimum needed for basic config
+        LOG_ERROR(EventSource::AUTOSTEER, "PGN 251 too short! Got %d bytes", len);
         return;
     }
     
@@ -444,6 +445,15 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     steerConfig.PressureSensor = bitRead(sett1, 1);
     steerConfig.CurrentSensor = bitRead(sett1, 2);
     steerConfig.IsUseY_Axis = bitRead(sett1, 3);
+    
+    // Read motor driver configuration from byte 8 of the message (data array index 3)
+    // Message structure: Header(5) + Data(8) + CRC(1) = 14 bytes total
+    // Byte 8 of the message = data[3] (since data array starts after 5-byte header)
+    steerConfig.MotorDriverConfig = data[3];
+    LOG_INFO(EventSource::AUTOSTEER, "Motor driver config byte: 0x%02X", steerConfig.MotorDriverConfig);
+    
+    // Update motor driver detector with new configuration
+    MotorDriverDetector::getInstance()->updateMotorConfig(steerConfig.MotorDriverConfig);
     
     LOG_DEBUG(EventSource::AUTOSTEER, "InvertWAS: %d", steerConfig.InvertWAS);
     LOG_DEBUG(EventSource::AUTOSTEER, "MotorDriveDirection: %d", steerConfig.MotorDriveDirection);

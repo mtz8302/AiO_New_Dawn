@@ -184,3 +184,24 @@ void PWMMotorDriver::setPWMFrequency(uint32_t freq) {
     analogWriteFrequency(pwmPin, freq);
     LOG_INFO(EventSource::AUTOSTEER, "PWM frequency set to %lu Hz", freq);
 }
+
+void PWMMotorDriver::handleKickout(KickoutType type, float value) {
+    // Handle kickout based on type
+    switch (type) {
+        case KickoutType::WHEEL_ENCODER:
+            LOG_WARNING(EventSource::AUTOSTEER, "PWM motor kickout: Wheel encoder count %d", (int)value);
+            break;
+        case KickoutType::PRESSURE_SENSOR:
+            LOG_WARNING(EventSource::AUTOSTEER, "PWM motor kickout: Pressure %.1f", value);
+            break;
+        case KickoutType::CURRENT_SENSOR:
+            LOG_WARNING(EventSource::AUTOSTEER, "PWM motor kickout: Current %.2fA", value);
+            break;
+        default:
+            break;
+    }
+    
+    // Disable the motor
+    enable(false);
+    stop();
+}

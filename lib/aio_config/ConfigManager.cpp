@@ -88,6 +88,8 @@ void ConfigManager::saveSteerConfig()
     EEPROM.put(addr, pulseCountMax);
     addr += sizeof(pulseCountMax);
     EEPROM.put(addr, minSpeed);
+    addr += sizeof(minSpeed);
+    EEPROM.put(addr, motorDriverConfig);
     
     // Verify the write
     uint8_t verifyByte1;
@@ -108,6 +110,8 @@ void ConfigManager::loadSteerConfig()
     EEPROM.get(addr, pulseCountMax);
     addr += sizeof(pulseCountMax);
     EEPROM.get(addr, minSpeed);
+    addr += sizeof(minSpeed);
+    EEPROM.get(addr, motorDriverConfig);
 
     // Unpack boolean values
     invertWAS = (configByte1 & 0x01) != 0;
@@ -378,6 +382,7 @@ void ConfigManager::resetToDefaults()
     isUseYAxis = false;
     pulseCountMax = 5;
     minSpeed = 3;
+    motorDriverConfig = 0x00;  // Default to DRV8701 with wheel encoder
 
     // Steer settings defaults
     kp = 40.0;

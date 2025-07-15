@@ -48,6 +48,11 @@ public:
     // PWM-specific configuration
     void setCurrentScaling(float scale, float offset);
     void setPWMFrequency(uint32_t freq);
+    
+    // New interface methods
+    bool isDetected() override { return true; }  // PWM drivers are always "detected"
+    void handleKickout(KickoutType type, float value) override;
+    float getCurrentDraw() override { return getCurrent(); }
 };
 
 #endif // PWM_MOTOR_DRIVER_H
