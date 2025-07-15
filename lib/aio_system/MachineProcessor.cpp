@@ -430,23 +430,32 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
         
         // Only log and update outputs if something changed
         if (statesChanged) {
-            // Show active functions for our 6 outputs
-            char activeMsg[256];
-            snprintf(activeMsg, sizeof(activeMsg), "Active functions:");
+            // Rate limit the "Active functions" logging to prevent spam during hydraulic operations
+            static uint32_t lastActiveFunctionLog = 0;
+            uint32_t now = millis();
+            bool shouldLogActive = (now - lastActiveFunctionLog) >= 1000; // Log at most once per second
             
-            // Check what function each output is assigned to
-            for (int pin = 1; pin <= 6; pin++) {
-                uint8_t func = instance->pinConfig.pinFunction[pin];
-                if (func > 0 && func <= MAX_FUNCTIONS) {
-                    if (instance->machineState.functions[func]) {
-                        char buf[50];
-                        snprintf(buf, sizeof(buf), " Out%d=%s", pin, instance->getFunctionName(func));
-                        strncat(activeMsg, buf, sizeof(activeMsg) - strlen(activeMsg) - 1);
+            if (shouldLogActive) {
+                lastActiveFunctionLog = now;
+                
+                // Show active functions for our 6 outputs
+                char activeMsg[256];
+                snprintf(activeMsg, sizeof(activeMsg), "Active functions:");
+                
+                // Check what function each output is assigned to
+                for (int pin = 1; pin <= 6; pin++) {
+                    uint8_t func = instance->pinConfig.pinFunction[pin];
+                    if (func > 0 && func <= MAX_FUNCTIONS) {
+                        if (instance->machineState.functions[func]) {
+                            char buf[50];
+                            snprintf(buf, sizeof(buf), " Out%d=%s", pin, instance->getFunctionName(func));
+                            strncat(activeMsg, buf, sizeof(activeMsg) - strlen(activeMsg) - 1);
+                        }
                     }
                 }
+                
+                LOG_INFO(EventSource::MACHINE, "%s", activeMsg);
             }
-            
-            LOG_INFO(EventSource::MACHINE, "%s", activeMsg);
             
             
             // Update outputs using new unified handler
