@@ -105,17 +105,6 @@ const char EN_OTA_PAGE[] PROGMEM = R"rawliteral(
                 <button type='submit' id='uploadBtn' class='btn btn-primary'>Apply Update</button>
             </div>
         </form>
-        
-        <div style='margin-top: 30px; color: #666;'>
-            <h3>Instructions:</h3>
-            <ol>
-                <li>Build your firmware in PlatformIO</li>
-                <li>Locate the .hex file in .pio/build/teensy41/</li>
-                <li>Select the file and click Upload Firmware</li>
-                <li>Wait for upload to complete</li>
-                <li>System will automatically reboot with new firmware</li>
-            </ol>
-        </div>
     </div>
 </body>
 </html>

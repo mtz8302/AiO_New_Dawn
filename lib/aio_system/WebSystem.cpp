@@ -347,15 +347,30 @@ void WebManager::handleNetworkPage(AsyncWebServerRequest* request) {
     String ipStr = String(ip[0]) + "." + String(ip[1]) + "." + String(ip[2]) + "." + String(ip[3]);
     String linkSpeed = String(Ethernet.linkSpeed());
     
-    String html = FPSTR(WebPageSelector::getNetworkPage(currentLanguage));
+    // Load page template with proper buffer handling
+    const char* pageTemplate = WebPageSelector::getNetworkPage(currentLanguage);
+    size_t templateLen = strlen_P(pageTemplate);
+    
+    // Allocate buffer with extra space for replacements and zero it out
+    size_t bufferSize = templateLen + 1024; // More extra space
+    char* buffer = new char[bufferSize];
+    memset(buffer, 0, bufferSize); // Zero out the buffer
+    strcpy_P(buffer, pageTemplate);
+    
+    // Create String from buffer
+    String html(buffer);
+    delete[] buffer;
+    
+    // Perform replacements
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     html.replace("%IP1%", String(ip[0]));
     html.replace("%IP2%", String(ip[1]));
     html.replace("%IP3%", String(ip[2]));
     html.replace("%IP_ADDRESS%", ipStr);
-    html.replace("%LINK_SPEED%", linkSpeed);  // Add this replacement too
+    html.replace("%LINK_SPEED%", linkSpeed);
     
-    AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
+    // Send response
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html", html);
     response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     response->addHeader("Pragma", "no-cache");
     response->addHeader("Expires", "0");
@@ -445,20 +460,31 @@ void WebManager::setupNetworkAPI() {
 }
 
 void WebManager::handleOTAPage(AsyncWebServerRequest* request) {
-    // Use strcpy_P to ensure proper PROGMEM string handling
-    const char* pagePtr = WebPageSelector::getOTAPage(currentLanguage);
-    size_t len = strlen_P(pagePtr);
-    char* buffer = new char[len + 1];
-    strcpy_P(buffer, pagePtr);
+    // Load page template
+    const char* pageTemplate = WebPageSelector::getOTAPage(currentLanguage);
+    size_t templateLen = strlen_P(pageTemplate);
     
+    // Allocate buffer with extra space for replacements and zero it out
+    size_t bufferSize = templateLen + 1024; // More extra space
+    char* buffer = new char[bufferSize];
+    memset(buffer, 0, bufferSize); // Zero out the buffer
+    strcpy_P(buffer, pageTemplate);
+    
+    // Create String from buffer
     String html(buffer);
     delete[] buffer;
     
+    // Perform replacements
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     html.replace("%FIRMWARE_VERSION%", FIRMWARE_VERSION);
     html.replace("%BOARD_TYPE%", TEENSY_BOARD_TYPE);
     
-    request->send(200, "text/html", html);
+    // Send response
+    AsyncWebServerResponse* response = request->beginResponse(200, "text/html", html);
+    response->addHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    response->addHeader("Pragma", "no-cache");
+    response->addHeader("Expires", "0");
+    request->send(response);
 }
 
 void WebManager::setupOTARoutes() {
