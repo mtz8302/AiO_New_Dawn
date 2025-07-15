@@ -36,7 +36,7 @@ AutosteerProcessor::AutosteerProcessor() {
     memset(&steerSettings, 0, sizeof(SteerSettings));
     
     // Set some sensible defaults
-    steerSettings.Kp = 1.0f;
+    steerSettings.Kp = 10;  // 1.0 * 10 (AgOpenGPS format)
     steerSettings.highPWM = 255;
     steerSettings.lowPWM = 10;
     steerSettings.minPWM = 5;
@@ -117,10 +117,9 @@ bool AutosteerProcessor::init() {
     adProcessor.setWASCountsPerDegree(steerSettings.steerSensorCounts);
     
     // Initialize PID controller with loaded Kp value
-    float scaledKp = steerSettings.Kp / 10.0f;  // AgOpenGPS sends Kp * 10
-    pid.setKp(scaledKp);
+    pid.setKp(steerSettings.Kp);
     pid.setOutputLimit(100.0f);  // Motor speed limit (±100%)
-    LOG_DEBUG(EventSource::AUTOSTEER, "PID controller initialized with Kp=%.1f", scaledKp);
+    LOG_DEBUG(EventSource::AUTOSTEER, "PID controller initialized with Kp=%d", steerSettings.Kp);
     
     // Register PGN handlers with PGNProcessor
     if (PGNProcessor::instance) {
@@ -486,7 +485,7 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     LOG_DEBUG(EventSource::AUTOSTEER, "PGN 252 (Steer Settings) received, %d bytes", len);
     
     if (len < 8) {
-        LOG_ERROR(EventSource::AUTOSTEER, "PGN 251 too short!");
+        LOG_ERROR(EventSource::AUTOSTEER, "PGN 252 too short!");
         return;
     }
     
@@ -515,26 +514,18 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     
     steerSettings.AckermanFix = (float)data[7] * 0.01f;
     
-    LOG_DEBUG(EventSource::AUTOSTEER, "Kp: %d", steerSettings.Kp);
-    LOG_DEBUG(EventSource::AUTOSTEER, "highPWM: %d", steerSettings.highPWM);
-    LOG_DEBUG(EventSource::AUTOSTEER, "lowPWM: %d", steerSettings.lowPWM);
-    LOG_DEBUG(EventSource::AUTOSTEER, "minPWM: %d", steerSettings.minPWM);
-    LOG_DEBUG(EventSource::AUTOSTEER, "steerSensorCounts: %d", steerSettings.steerSensorCounts);
-    LOG_DEBUG(EventSource::AUTOSTEER, "wasOffset: %d", steerSettings.wasOffset);
-    LOG_DEBUG(EventSource::AUTOSTEER, "AckermanFix: %.2f", steerSettings.AckermanFix);
     
     // Update PID controller with new Kp
-    float scaledKp = steerSettings.Kp / 10.0f;  // AgOpenGPS sends Kp * 10
-    pid.setKp(scaledKp);
-    LOG_DEBUG(EventSource::AUTOSTEER, "PID updated with Kp=%.1f", scaledKp);
+    pid.setKp(steerSettings.Kp);
+    LOG_DEBUG(EventSource::AUTOSTEER, "PID updated with Kp=%d", steerSettings.Kp);
     
     // Update ADProcessor with WAS calibration values
     adProcessor.setWASOffset(steerSettings.wasOffset);
     adProcessor.setWASCountsPerDegree(steerSettings.steerSensorCounts);
     
     // Log all settings at INFO level in a single message so users see everything
-    LOG_INFO(EventSource::AUTOSTEER, "Steer settings: Kp=%.1f PWM=%d-%d-%d WAS_offset=%d counts=%d Ackerman=%.2f", 
-             scaledKp,
+    LOG_INFO(EventSource::AUTOSTEER, "Steer settings: Kp=%d PWM=%d-%d-%d WAS_offset=%d counts=%d Ackerman=%.2f", 
+             steerSettings.Kp,
              steerSettings.minPWM, steerSettings.lowPWM, steerSettings.highPWM,
              steerSettings.wasOffset, steerSettings.steerSensorCounts,
              steerSettings.AckermanFix);
@@ -789,27 +780,37 @@ void AutosteerProcessor::updateMotorControl() {
         return;
     }
     
+    // Apply Ackerman fix to current angle if it's negative (left turn)
+    float actualAngle = currentAngle;
+    if (actualAngle < 0) {
+        actualAngle = actualAngle * steerSettings.AckermanFix;
+        
+        // Log Ackerman fix application periodically
+        static uint32_t lastAckermanLog = 0;
+        if (millis() - lastAckermanLog > 5000 && abs(actualAngle) > 1.0f) {
+            lastAckermanLog = millis();
+            LOG_DEBUG(EventSource::AUTOSTEER, "Ackerman fix applied: %.2f° * %.2f = %.2f°", 
+                     currentAngle, steerSettings.AckermanFix, actualAngle);
+        }
+    }
+    
     // Calculate angle error
-    float angleError = targetAngle - currentAngle;
+    float angleError = actualAngle - targetAngle;
     float errorAbs = abs(angleError);
     
     // Calculate base PWM output (error * Kp)
-    float pValue = steerSettings.Kp * angleError;
+    int16_t pValue = steerSettings.Kp * angleError;
     
     // Apply PWM calculation similar to V6
     if (steerSettings.highPWM > 0) {  // Check if we have valid settings
-        float highPWM = steerSettings.highPWM;
-        float lowPWM = steerSettings.lowPWM;
-        float minPWM = steerSettings.minPWM;
-        
         // Start with base P value
-        float pwmDrive = pValue;
+        int16_t pwmDrive = pValue;
         
         // Add min throttle factor so no delay from motor resistance
         if (pwmDrive < 0) {
-            pwmDrive -= minPWM;
+            pwmDrive -= steerSettings.minPWM;
         } else if (pwmDrive > 0) {
-            pwmDrive += minPWM;
+            pwmDrive += steerSettings.minPWM;
         } else {
             // Dead zone
             motorSpeed = 0.0f;
@@ -817,16 +818,16 @@ void AutosteerProcessor::updateMotorControl() {
         }
         
         // Calculate dynamic PWM limit based on error magnitude
-        float newHighPWM;
+        int16_t newHighPWM;
         const float LOW_HIGH_DEGREES = 3.0f;  // 0-3 degree range for scaling
         
         if (errorAbs < LOW_HIGH_DEGREES) {
             // Scale linearly from lowPWM to highPWM based on error (0-3 degrees)
-            float highLowPerDeg = (highPWM - lowPWM) / LOW_HIGH_DEGREES;
-            newHighPWM = (errorAbs * highLowPerDeg) + lowPWM;
+            float highLowPerDeg = ((float)(steerSettings.highPWM - steerSettings.lowPWM)) / LOW_HIGH_DEGREES;
+            newHighPWM = (errorAbs * highLowPerDeg) + steerSettings.lowPWM;
         } else {
             // For errors >= 3 degrees, use full highPWM
-            newHighPWM = highPWM;
+            newHighPWM = steerSettings.highPWM;
         }
         
         // Limit the PWM drive to the calculated maximum
@@ -845,8 +846,8 @@ void AutosteerProcessor::updateMotorControl() {
         }
         
         // Log the PWM calculation
-        LOG_DEBUG(EventSource::AUTOSTEER, "PWM calc: error=%.1f° * Kp=%.1f = %.1f, +minPWM=%d, limit=%.0f, final=%.0f (%.1f%%)", 
-                 angleError, steerSettings.Kp, pValue, (int)minPWM, newHighPWM, pwmDrive, motorSpeed);
+        LOG_DEBUG(EventSource::AUTOSTEER, "PWM calc: actual=%.1f° - target=%.1f° = error=%.1f° * Kp=%d = %d, +minPWM=%d, limit=%d, final=%d (%.1f%%)", 
+                 actualAngle, targetAngle, angleError, steerSettings.Kp, pValue, steerSettings.minPWM, newHighPWM, pwmDrive, motorSpeed);
         
         // Debug log final motor speed periodically
         static uint32_t lastMotorSpeedLog = 0;
@@ -872,7 +873,7 @@ void AutosteerProcessor::updateMotorControl() {
                     float sineRamp = sin(rampProgress * PI / 2.0f);
                     
                     // Calculate soft-start limit based on lowPWM
-                    float softStartLimit = (lowPWM / 255.0f) * 100.0f * softStartMaxPWM * sineRamp;
+                    float softStartLimit = (steerSettings.lowPWM / 255.0f) * 100.0f * softStartMaxPWM * sineRamp;
                     
                     // Apply limit in direction of motor speed
                     if (motorSpeed > 0) {

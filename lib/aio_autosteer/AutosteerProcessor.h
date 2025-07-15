@@ -31,7 +31,7 @@ struct SteerConfig {
 
 // Steer Settings structure (PGN 252)
 struct SteerSettings {
-    float Kp;
+    uint8_t Kp;              // Raw value from AgOpenGPS (actual Kp * 10)
     uint8_t highPWM;
     uint8_t lowPWM;
     uint8_t minPWM;
