@@ -5,6 +5,7 @@
 #include "MotorDriverInterface.h"
 #include "PWMMotorDriver.h"
 #include "KeyaCANDriver.h"
+#include "DanfossMotorDriver.h"
 #include "MotorDriverDetector.h"
 #include "HardwareManager.h"
 #include "CANManager.h"
@@ -31,15 +32,8 @@ public:
                 return new KeyaCANDriver();
                 
             case MotorDriverType::DANFOSS:
-                LOG_WARNING(EventSource::AUTOSTEER, "Danfoss driver not yet implemented - using DRV8701");
-                // TODO: Return DanfossMotorDriver when implemented
-                return new PWMMotorDriver(
-                    MotorDriverType::DRV8701,
-                    hwMgr->getPWM1Pin(),
-                    hwMgr->getPWM2Pin(),
-                    hwMgr->getSleepPin(),
-                    hwMgr->getCurrentPin()
-                );
+                LOG_INFO(EventSource::AUTOSTEER, "Creating Danfoss valve driver");
+                return new DanfossMotorDriver(hwMgr);
                 
             default:
                 LOG_WARNING(EventSource::AUTOSTEER, "Unknown motor type");

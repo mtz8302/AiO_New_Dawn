@@ -946,8 +946,11 @@ void AutosteerProcessor::updateMotorControl() {
     
     // Send to motor
     if (motorPTR) {
-        motorPTR->enable(true);
-        motorPTR->setSpeed(motorSpeed);
+        // Only enable motor if not in disabled state
+        if (motorState != MotorState::DISABLED) {
+            motorPTR->enable(true);
+            motorPTR->setSpeed(motorSpeed);
+        }
         
         // LOCK output control
         // For PWM motors, pin 4 is controlled by the motor driver
