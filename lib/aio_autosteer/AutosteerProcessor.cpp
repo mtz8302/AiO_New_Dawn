@@ -789,54 +789,75 @@ void AutosteerProcessor::updateMotorControl() {
         return;
     }
     
-    // Calculate PID output
-    float pidOutput = pid.compute(targetAngle, currentAngle);
+    // Calculate angle error
+    float angleError = targetAngle - currentAngle;
+    float errorAbs = abs(angleError);
     
-    // Apply PWM scaling - use steerSettings directly, not configPTR
+    // Calculate base PWM output (error * Kp)
+    float pValue = steerSettings.Kp * angleError;
+    
+    // Apply PWM calculation similar to V6
     if (steerSettings.highPWM > 0) {  // Check if we have valid settings
         float highPWM = steerSettings.highPWM;
         float lowPWM = steerSettings.lowPWM;
         float minPWM = steerSettings.minPWM;
         
-        if (abs(pidOutput) < 0.1f) {
+        // Start with base P value
+        float pwmDrive = pValue;
+        
+        // Add min throttle factor so no delay from motor resistance
+        if (pwmDrive < 0) {
+            pwmDrive -= minPWM;
+        } else if (pwmDrive > 0) {
+            pwmDrive += minPWM;
+        } else {
             // Dead zone
             motorSpeed = 0.0f;
+            return;
+        }
+        
+        // Calculate dynamic PWM limit based on error magnitude
+        float newHighPWM;
+        const float LOW_HIGH_DEGREES = 3.0f;  // 0-3 degree range for scaling
+        
+        if (errorAbs < LOW_HIGH_DEGREES) {
+            // Scale linearly from lowPWM to highPWM based on error (0-3 degrees)
+            float highLowPerDeg = (highPWM - lowPWM) / LOW_HIGH_DEGREES;
+            newHighPWM = (errorAbs * highLowPerDeg) + lowPWM;
         } else {
-            // Scale PID output to PWM range
-            float absPID = abs(pidOutput);
-            float pwmRange = highPWM - lowPWM;
-            float scaledPWM = lowPWM + (absPID / 100.0f) * pwmRange;
-            
-            // Ensure we don't exceed highPWM
-            if (scaledPWM > highPWM) {
-                scaledPWM = highPWM;
-            }
-            
-            // Apply minimum PWM threshold
-            if (scaledPWM < minPWM) {
-                scaledPWM = 0.0f;
-                LOG_DEBUG(EventSource::AUTOSTEER, "PWM ZEROED (<%d)", (int)minPWM);
-            }
-            
-            // Convert to percentage for motor driver
-            // Important: Scale based on actual highPWM limit, not 255
-            motorSpeed = (scaledPWM / 255.0f) * 100.0f;
-            
-            // Ensure motor speed percentage respects highPWM limit
-            float maxMotorSpeed = (highPWM / 255.0f) * 100.0f;
-            float originalSpeed = motorSpeed;
-            motorSpeed = constrain(motorSpeed, -maxMotorSpeed, maxMotorSpeed);
-            
-            // Log if we hit the limit
-            if (abs(originalSpeed) > maxMotorSpeed) {
-                LOG_DEBUG(EventSource::AUTOSTEER, "PWM LIMITED: %.1f%% -> %.1f%% (max=%.1f%%, highPWM=%d)", 
-                         originalSpeed, motorSpeed, maxMotorSpeed, highPWM);
-            }
-            
-            if (pidOutput < 0 && motorSpeed > 0) motorSpeed = -motorSpeed;
-            
-            // Apply soft-start if active
-            if (motorState == MotorState::SOFT_START) {
+            // For errors >= 3 degrees, use full highPWM
+            newHighPWM = highPWM;
+        }
+        
+        // Limit the PWM drive to the calculated maximum
+        if (pwmDrive > newHighPWM) {
+            pwmDrive = newHighPWM;
+        } else if (pwmDrive < -newHighPWM) {
+            pwmDrive = -newHighPWM;
+        }
+        
+        // Convert to percentage for motor driver (0-100%)
+        motorSpeed = (abs(pwmDrive) / 255.0f) * 100.0f;
+        
+        // Preserve direction
+        if (pwmDrive < 0) {
+            motorSpeed = -motorSpeed;
+        }
+        
+        // Log the PWM calculation
+        LOG_DEBUG(EventSource::AUTOSTEER, "PWM calc: error=%.1f° * Kp=%.1f = %.1f, +minPWM=%d, limit=%.0f, final=%.0f (%.1f%%)", 
+                 angleError, steerSettings.Kp, pValue, (int)minPWM, newHighPWM, pwmDrive, motorSpeed);
+        
+        // Debug log final motor speed periodically
+        static uint32_t lastMotorSpeedLog = 0;
+        if (millis() - lastMotorSpeedLog > 1000 && abs(motorSpeed) > 10.0f) {
+            lastMotorSpeedLog = millis();
+            LOG_DEBUG(EventSource::AUTOSTEER, "Motor speed: %.1f%% (highPWM=%d, pwmDrive=%.1f)", 
+                      motorSpeed, steerSettings.highPWM, pwmDrive);
+        }
+        
+        // Apply soft-start if active
+        if (motorState == MotorState::SOFT_START) {
                 uint32_t elapsed = millis() - softStartBeginTime;
                 
                 if (elapsed >= softStartDurationMs) {
@@ -871,10 +892,10 @@ void AutosteerProcessor::updateMotorControl() {
                     }
                 }
             }
-        }
     } else {
-        // No config, use raw PID output
-        motorSpeed = pidOutput;
+        // No valid PWM config
+        motorSpeed = 0.0f;
+        LOG_ERROR(EventSource::AUTOSTEER, "Invalid PWM configuration");
     }
     
     // Apply motor direction from config
@@ -896,13 +917,7 @@ void AutosteerProcessor::updateMotorControl() {
         float originalSpeed = motorSpeed;
         motorSpeed = constrain(motorSpeed, -maxMotorSpeed, maxMotorSpeed);
         
-        // Always log when motor speed is high
-        if (abs(motorSpeed) > 50.0f) {
-            LOG_INFO(EventSource::AUTOSTEER, "High motor speed: %.1f%% (max allowed=%.1f%%, highPWM=%d)", 
-                     motorSpeed, maxMotorSpeed, steerSettings.highPWM);
-        }
-        
-        // Log if we hit the limit
+        // Log only if we hit the limit
         if (abs(originalSpeed) > maxMotorSpeed) {
             LOG_INFO(EventSource::AUTOSTEER, "PWM LIMITED: %.1f%% -> %.1f%% (max=%.1f%%, highPWM=%d)", 
                      originalSpeed, motorSpeed, maxMotorSpeed, steerSettings.highPWM);
@@ -917,13 +932,6 @@ void AutosteerProcessor::updateMotorControl() {
         }
     }
     
-    // Debug log final motor speed periodically
-    static uint32_t lastMotorSpeedLog = 0;
-    if (millis() - lastMotorSpeedLog > 1000 && abs(motorSpeed) > 10.0f) {
-        lastMotorSpeedLog = millis();
-        LOG_DEBUG(EventSource::AUTOSTEER, "Motor speed: %.1f%% (highPWM=%d, PID=%.1f)", 
-                  motorSpeed, steerSettings.highPWM, pidOutput);
-    }
     
     // Send to motor
     if (motorPTR) {
