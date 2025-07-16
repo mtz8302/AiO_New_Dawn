@@ -11,9 +11,9 @@ private:
     MotorStatus status;
     
     // Pin assignments
-    uint8_t pwmPin;
-    uint8_t dirPin;
-    uint8_t enablePin;
+    uint8_t pwm1Pin;     // PWM1 for LEFT direction
+    uint8_t pwm2Pin;     // PWM2 for RIGHT direction
+    uint8_t enablePin;   // nSLEEP pin (also LOCK output)
     uint8_t currentPin;  // Optional current sense
     
     // PWM parameters  
@@ -27,7 +27,7 @@ private:
     float currentOffset; // Zero current ADC offset
     
 public:
-    PWMMotorDriver(MotorDriverType type, uint8_t pwm, uint8_t dir, 
+    PWMMotorDriver(MotorDriverType type, uint8_t pwm1, uint8_t pwm2, 
                    uint8_t enable = 255, uint8_t current = 255);
     ~PWMMotorDriver() = default;
     

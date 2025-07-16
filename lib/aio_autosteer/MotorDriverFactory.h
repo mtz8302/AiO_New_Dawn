@@ -22,8 +22,8 @@ public:
             case MotorDriverType::DRV8701:
                 return new PWMMotorDriver(
                     MotorDriverType::DRV8701,
-                    hwMgr->getPWM1Pin(),       // PWM pin
-                    hwMgr->getPWM2Pin(),       // Direction pin  
+                    hwMgr->getPWM1Pin(),       // PWM1 for LEFT
+                    hwMgr->getPWM2Pin(),       // PWM2 for RIGHT  
                     hwMgr->getSleepPin(),      // Enable pin (SLEEP_PIN on DRV8701, also LOCK output)
                     hwMgr->getCurrentPin()     // Current sense pin
                 );

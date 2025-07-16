@@ -4,9 +4,9 @@
 #include "EventLogger.h"
 #include "HardwareManager.h"
 
-PWMMotorDriver::PWMMotorDriver(MotorDriverType type, uint8_t pwm, uint8_t dir, 
+PWMMotorDriver::PWMMotorDriver(MotorDriverType type, uint8_t pwm1, uint8_t pwm2, 
                                uint8_t enable, uint8_t current) 
-    : driverType(type), pwmPin(pwm), dirPin(dir), enablePin(enable), 
+    : driverType(type), pwm1Pin(pwm1), pwm2Pin(pwm2), enablePin(enable), 
       currentPin(current), hasCurrentSense(false), currentScale(0.5f), currentOffset(0.0f) {
     
     // Initialize status
@@ -31,8 +31,8 @@ bool PWMMotorDriver::init() {
     LOG_INFO(EventSource::AUTOSTEER, "Initializing DRV8701 motor driver...");
     
     // Configure pins
-    pinMode(pwmPin, OUTPUT);    // PWM1 (pin 5)
-    pinMode(dirPin, OUTPUT);    // PWM2 (pin 6) - for complementary PWM
+    pinMode(pwm1Pin, OUTPUT);    // PWM1 (pin 5) for LEFT
+    pinMode(pwm2Pin, OUTPUT);    // PWM2 (pin 6) for RIGHT
     
     if (enablePin != 255) {
         pinMode(enablePin, OUTPUT);
@@ -48,15 +48,15 @@ bool PWMMotorDriver::init() {
     }
     
     // Set initial state - both PWM outputs to LOW
-    analogWrite(pwmPin, 0);
-    analogWrite(dirPin, 0);
+    analogWrite(pwm1Pin, 0);
+    analogWrite(pwm2Pin, 0);
     
     // Configure PWM for DRV8701
     analogWriteResolution(8);  // 8-bit resolution (0-255)
-    analogWriteFrequency(pwmPin, PWM_FREQUENCY);
-    analogWriteFrequency(dirPin, PWM_FREQUENCY);
+    analogWriteFrequency(pwm1Pin, PWM_FREQUENCY);
+    analogWriteFrequency(pwm2Pin, PWM_FREQUENCY);
     
-    LOG_INFO(EventSource::AUTOSTEER, "DRV8701 initialized with complementary PWM on pins %d (LEFT) and %d (RIGHT)", pwmPin, dirPin);
+    LOG_INFO(EventSource::AUTOSTEER, "DRV8701 initialized with complementary PWM on pins %d (LEFT) and %d (RIGHT)", pwm1Pin, pwm2Pin);
     
     return true;
 }
@@ -80,8 +80,8 @@ void PWMMotorDriver::enable(bool en) {
     
     if (!en) {
         // Stop motor when disabling - set both outputs to LOW
-        analogWrite(pwmPin, 0);
-        analogWrite(dirPin, 0);
+        analogWrite(pwm1Pin, 0);
+        analogWrite(pwm2Pin, 0);
         
         status.targetSpeed = 0.0f;
         status.actualSpeed = 0.0f;
@@ -107,16 +107,16 @@ void PWMMotorDriver::setSpeed(float speedPercent) {
     
     if (speedPercent < 0) {
         // LEFT: PWM1 active, PWM2 low
-        analogWrite(pwmPin, pwmValue);     // PWM1 active for LEFT (0-256)
-        analogWrite(dirPin, 0);            // PWM2 LOW
+        analogWrite(pwm1Pin, pwmValue);     // PWM1 active for LEFT (0-256)
+        analogWrite(pwm2Pin, 0);            // PWM2 LOW
     } else if (speedPercent > 0) {
         // RIGHT: PWM2 active, PWM1 low
-        analogWrite(pwmPin, 0);            // PWM1 LOW
-        analogWrite(dirPin, pwmValue);     // PWM2 active for RIGHT (0-256)
+        analogWrite(pwm1Pin, 0);            // PWM1 LOW
+        analogWrite(pwm2Pin, pwmValue);     // PWM2 active for RIGHT (0-256)
     } else {
         // Stop: both outputs LOW
-        analogWrite(pwmPin, 0);
-        analogWrite(dirPin, 0);
+        analogWrite(pwm1Pin, 0);
+        analogWrite(pwm2Pin, 0);
     }
     
     // Debug output
@@ -144,8 +144,8 @@ void PWMMotorDriver::setSpeed(float speedPercent) {
 
 void PWMMotorDriver::stop() {
     // Set both outputs to LOW
-    analogWrite(pwmPin, 0);
-    analogWrite(dirPin, 0);
+    analogWrite(pwm1Pin, 0);
+    analogWrite(pwm2Pin, 0);
     
     status.targetSpeed = 0.0f;
     status.actualSpeed = 0.0f;
@@ -194,7 +194,8 @@ void PWMMotorDriver::setCurrentScaling(float scale, float offset) {
 }
 
 void PWMMotorDriver::setPWMFrequency(uint32_t freq) {
-    analogWriteFrequency(pwmPin, freq);
+    analogWriteFrequency(pwm1Pin, freq);
+    analogWriteFrequency(pwm2Pin, freq);
     LOG_INFO(EventSource::AUTOSTEER, "PWM frequency set to %lu Hz", freq);
 }
 
