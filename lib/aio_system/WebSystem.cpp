@@ -464,8 +464,14 @@ void WebManager::handleOTAPage(AsyncWebServerRequest* request) {
     const char* pageTemplate = WebPageSelector::getOTAPage(currentLanguage);
     size_t templateLen = strlen_P(pageTemplate);
     
-    // Allocate buffer with extra space for replacements and zero it out
-    size_t bufferSize = templateLen + 1024; // More extra space
+    // Calculate size needed for replacements
+    size_t cssLen = strlen_P(COMMON_CSS);
+    size_t versionLen = strlen(FIRMWARE_VERSION);
+    size_t boardLen = strlen(TEENSY_BOARD_TYPE);
+    
+    // Allocate buffer with enough space for all replacements
+    // Add extra for safety and account for placeholder removal
+    size_t bufferSize = templateLen + cssLen + versionLen + boardLen + 512;
     char* buffer = new char[bufferSize];
     memset(buffer, 0, bufferSize); // Zero out the buffer
     strcpy_P(buffer, pageTemplate);

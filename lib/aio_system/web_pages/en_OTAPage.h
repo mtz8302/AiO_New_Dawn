@@ -15,18 +15,19 @@ const char EN_OTA_PAGE[] PROGMEM = R"rawliteral(
     <style>%CSS_STYLES%</style>
     <script>
         function uploadFile() {
-            const fileInput = document.getElementById('file');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                alert('Please select a firmware file');
-                return false;
-            }
-            
-            if (!file.name.endsWith('.hex')) {
-                alert('Please select a .hex firmware file');
-                return false;
-            }
+            try {
+                const fileInput = document.getElementById('file');
+                const file = fileInput.files[0];
+                
+                if (!file) {
+                    alert('Please select a firmware file');
+                    return false;
+                }
+                
+                if (!file.name.endsWith('.hex')) {
+                    alert('Please select a .hex firmware file');
+                    return false;
+                }
             
             const statusDiv = document.getElementById('status');
             const progressBar = document.getElementById('progress');
@@ -69,6 +70,12 @@ const char EN_OTA_PAGE[] PROGMEM = R"rawliteral(
             xhr.open('POST', '/api/ota/upload');
             xhr.send(formData);
             
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('Error: ' + error.message);
+                return false;
+            }
+            
             return false;
         }
     </script>
@@ -86,7 +93,7 @@ const char EN_OTA_PAGE[] PROGMEM = R"rawliteral(
             Incorrect firmware can brick your device. Only upload firmware built for Teensy 4.1.
         </div>
         
-        <form onsubmit='return uploadFile()'>
+        <form onsubmit='uploadFile(); return false;'>
             <h2>Select Firmware File</h2>
             
             <div class='form-group'>
