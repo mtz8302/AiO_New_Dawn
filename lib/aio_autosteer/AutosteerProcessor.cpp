@@ -10,6 +10,7 @@
 #include "HardwareManager.h"
 #include "WheelAngleFusion.h"
 #include "MotorDriverDetector.h"
+#include "KickoutMonitor.h"
 #include <cmath>  // For sin() function
 
 // External network function
@@ -142,6 +143,15 @@ bool AutosteerProcessor::init() {
     } else {
         LOG_ERROR(EventSource::AUTOSTEER, "PGNProcessor not initialized!");
         return false;
+    }
+    
+    // Initialize KickoutMonitor
+    kickoutMonitor = KickoutMonitor::getInstance();
+    if (kickoutMonitor) {
+        kickoutMonitor->init(motorPTR);
+        LOG_INFO(EventSource::AUTOSTEER, "KickoutMonitor initialized");
+    } else {
+        LOG_ERROR(EventSource::AUTOSTEER, "Failed to initialize KickoutMonitor");
     }
     
     LOG_INFO(EventSource::AUTOSTEER, "AutosteerProcessor initialized successfully");
@@ -281,6 +291,18 @@ void AutosteerProcessor::process() {
             LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Keya motor slip detected");
             emergencyStop();
             return;  // Skip the rest of this cycle
+        }
+    }
+    
+    // Process kickout monitoring
+    if (kickoutMonitor) {
+        kickoutMonitor->process();
+        
+        // Check if kickout is active
+        if (kickoutMonitor->hasKickout() && steerState == 0) {
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s", kickoutMonitor->getReasonString());
+            emergencyStop();
+            kickoutMonitor->clearKickout();  // Clear after handling
         }
     }
     

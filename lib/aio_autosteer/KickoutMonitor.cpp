@@ -1,13 +1,12 @@
 #include "KickoutMonitor.h"
 #include "ConfigManager.h"
 #include "ADProcessor.h"
-#include "HardwareManager.h"
+#include "HardwareManager.h"  // For KICKOUT_D_PIN and KICKOUT_A_PIN
 #include "EventLogger.h"
 
-// External global pointers
-extern ConfigManager* configPTR;
-extern ADProcessor* adPTR;
-extern HardwareManager* hardwarePTR;
+// External global objects
+extern ConfigManager configManager;
+extern ADProcessor adProcessor;
 
 // Singleton instance
 KickoutMonitor* KickoutMonitor::instance = nullptr;
@@ -17,6 +16,7 @@ KickoutMonitor* KickoutMonitor::instance = nullptr;
 KickoutMonitor::KickoutMonitor() : 
     configMgr(nullptr),
     adProcessor(nullptr),
+    motorDriver(nullptr),
     encoderPulseCount(0),
     lastPulseCheck(0),
     lastPulseCount(0),
@@ -39,12 +39,13 @@ KickoutMonitor* KickoutMonitor::getInstance() {
     return instance;
 }
 
-bool KickoutMonitor::init() {
+bool KickoutMonitor::init(MotorDriverInterface* driver) {
     LOG_INFO(EventSource::AUTOSTEER, "Initializing KickoutMonitor");
     
     // Get external dependencies
-    configMgr = configPTR;
-    adProcessor = adPTR;
+    configMgr = &configManager;
+    this->adProcessor = &::adProcessor;  // Use global scope
+    motorDriver = driver;
     
     if (!configMgr || !adProcessor) {
         LOG_ERROR(EventSource::AUTOSTEER, "KickoutMonitor - Missing dependencies");
@@ -80,16 +81,33 @@ void KickoutMonitor::process() {
             kickoutActive = true;
             kickoutReason = ENCODER_OVERSPEED;
             kickoutTime = millis();
+            
+            // Notify motor driver
+            if (motorDriver) {
+                motorDriver->handleKickout(KickoutType::WHEEL_ENCODER, encoderPulseCount);
+            }
         }
         else if (configMgr->getPressureSensor() && checkPressureKickout()) {
             kickoutActive = true;
             kickoutReason = PRESSURE_HIGH;
             kickoutTime = millis();
+            
+            // Notify motor driver
+            if (motorDriver) {
+                float pressureVolts = (lastPressureReading * 3.3f) / 4095.0f;
+                motorDriver->handleKickout(KickoutType::PRESSURE_SENSOR, pressureVolts);
+            }
         }
         else if (configMgr->getCurrentSensor() && checkCurrentKickout()) {
             kickoutActive = true;
             kickoutReason = CURRENT_HIGH;
             kickoutTime = millis();
+            
+            // Notify motor driver with current in amps
+            if (motorDriver) {
+                float currentAmps = motorDriver->getCurrentDraw();
+                motorDriver->handleKickout(KickoutType::CURRENT_SENSOR, currentAmps);
+            }
         }
     }
 }
