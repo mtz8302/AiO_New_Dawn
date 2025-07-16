@@ -43,25 +43,52 @@ public:
     
     // Auto-detect motor type
     static MotorDriverType detectMotorType(CANManager* canMgr) {
+        LOG_INFO(EventSource::AUTOSTEER, "Starting motor driver detection...");
+        
         // Initialize the detector
         MotorDriverDetector* detector = MotorDriverDetector::getInstance();
         detector->init();
         
         // Wait for detection to complete (up to 2 seconds for Keya)
         uint32_t startTime = millis();
+        bool keyaChecked = false;
+        
         while (!detector->isDetectionComplete() && (millis() - startTime) < 2100) {
             // Check for Keya heartbeat
             bool keyaDetected = canMgr && canMgr->isKeyaDetected();
+            if (keyaDetected && !keyaChecked) {
+                LOG_INFO(EventSource::AUTOSTEER, "Keya CAN heartbeat detected");
+                keyaChecked = true;
+            }
             detector->detect(keyaDetected);
             delay(10);
         }
         
         // Force detection completion if timeout
         if (!detector->isDetectionComplete()) {
+            LOG_DEBUG(EventSource::AUTOSTEER, "Detection timeout - using configured/default driver");
             detector->detect(false);
         }
         
-        return detector->getDetectedType();
+        MotorDriverType detectedType = detector->getDetectedType();
+        const char* driverName = "Unknown";
+        
+        switch (detectedType) {
+            case MotorDriverType::KEYA_CAN:
+                driverName = "Keya CAN Motor";
+                break;
+            case MotorDriverType::DANFOSS:
+                driverName = "Danfoss Valve";
+                break;
+            case MotorDriverType::DRV8701:
+                driverName = "DRV8701 PWM";
+                break;
+            default:
+                break;
+        }
+        
+        LOG_INFO(EventSource::AUTOSTEER, "Motor driver detected: %s", driverName);
+        return detectedType;
     }
 };
 

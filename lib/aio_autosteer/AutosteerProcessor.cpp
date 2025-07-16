@@ -479,22 +479,21 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     
     LOG_DEBUG(EventSource::AUTOSTEER, "InvertWAS: %d", steerConfig.InvertWAS);
     LOG_DEBUG(EventSource::AUTOSTEER, "MotorDriveDirection: %d", steerConfig.MotorDriveDirection);
-    LOG_DEBUG(EventSource::AUTOSTEER, "CytronDriver: %d", steerConfig.CytronDriver);
     LOG_DEBUG(EventSource::AUTOSTEER, "SteerSwitch: %d", steerConfig.SteerSwitch);
     LOG_DEBUG(EventSource::AUTOSTEER, "SteerButton: %d", steerConfig.SteerButton);
     LOG_DEBUG(EventSource::AUTOSTEER, "PulseCountMax: %d", steerConfig.PulseCountMax);
     LOG_DEBUG(EventSource::AUTOSTEER, "MinSpeed: %d", steerConfig.MinSpeed);
     
     // Log all settings at INFO level in a single message so users see everything
-    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Cytron=%s Pressure=%s(max=%d)", 
+    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Pressure=%s(max=%d) MotorCfg=0x%02X", 
              steerConfig.InvertWAS ? "Inv" : "Norm",
              steerConfig.MotorDriveDirection ? "Rev" : "Norm",
              steerConfig.MinSpeed,
              steerConfig.SteerSwitch ? "On" : "Off",
              steerConfig.ShaftEncoder ? "Yes" : "No",
-             steerConfig.CytronDriver ? "Yes" : "No",
              steerConfig.PressureSensor ? "Yes" : "No",
-             steerConfig.PulseCountMax);
+             steerConfig.PulseCountMax,
+             steerConfig.MotorDriverConfig);
     
     // Save config to EEPROM
     configManager.setInvertWAS(steerConfig.InvertWAS);

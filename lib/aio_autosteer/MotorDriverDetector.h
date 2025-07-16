@@ -136,7 +136,17 @@ private:
         // Read from ConfigManager (EEPROM)
         extern ConfigManager configManager;
         motorConfigByte = configManager.getMotorDriverConfig();
-        LOG_DEBUG(EventSource::AUTOSTEER, "Read motor config from EEPROM: 0x%02X", motorConfigByte);
+        
+        const char* configDesc = "Unknown";
+        switch (motorConfigByte) {
+            case 0x00: configDesc = "DRV8701 + Wheel Encoder"; break;
+            case 0x01: configDesc = "Danfoss + Wheel Encoder"; break;
+            case 0x02: configDesc = "DRV8701 + Pressure Sensor"; break;
+            case 0x03: configDesc = "Danfoss + Pressure Sensor"; break;
+            case 0x04: configDesc = "DRV8701 + Current Sensor"; break;
+        }
+        
+        LOG_INFO(EventSource::AUTOSTEER, "Motor config from EEPROM: 0x%02X (%s)", motorConfigByte, configDesc);
     }
 };
 
