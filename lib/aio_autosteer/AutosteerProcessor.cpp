@@ -9,6 +9,8 @@
 #include "QNetworkBase.h"
 #include "HardwareManager.h"
 #include "WheelAngleFusion.h"
+#include "MotorDriverDetector.h"
+#include "KickoutMonitor.h"
 #include <cmath>  // For sin() function
 
 // External network function
@@ -141,6 +143,15 @@ bool AutosteerProcessor::init() {
     } else {
         LOG_ERROR(EventSource::AUTOSTEER, "PGNProcessor not initialized!");
         return false;
+    }
+    
+    // Initialize KickoutMonitor
+    kickoutMonitor = KickoutMonitor::getInstance();
+    if (kickoutMonitor) {
+        kickoutMonitor->init(motorPTR);
+        LOG_INFO(EventSource::AUTOSTEER, "KickoutMonitor initialized");
+    } else {
+        LOG_ERROR(EventSource::AUTOSTEER, "Failed to initialize KickoutMonitor");
     }
     
     LOG_INFO(EventSource::AUTOSTEER, "AutosteerProcessor initialized successfully");
@@ -283,6 +294,18 @@ void AutosteerProcessor::process() {
         }
     }
     
+    // Process kickout monitoring
+    if (kickoutMonitor) {
+        kickoutMonitor->process();
+        
+        // Check if kickout is active
+        if (kickoutMonitor->hasKickout() && steerState == 0) {
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s", kickoutMonitor->getReasonString());
+            emergencyStop();
+            kickoutMonitor->clearKickout();  // Clear after handling
+        }
+    }
+    
     // Update motor control
     updateMotorControl();
     
@@ -291,46 +314,21 @@ void AutosteerProcessor::process() {
     // Send PGN 253 status to AgOpenGPS
     sendPGN253();
     
-    // Update LED status using FSM with hysteresis
+    // Update LED status based on actual system state (no motor speed hysteresis)
     bool wasReady = true;  // ADProcessor is always available as an object
-    bool buttonEnabled = (steerState == 0);    // Button/OSB active
-    bool guidanceReady = shouldSteerBeActive(); // All conditions met for steering
+    bool armed = (steerState == 0);         // Button/OSB has armed autosteer
+    bool guidance = guidanceActive;         // AgOpenGPS has active guidance line
     
-    // Use hysteresis for motor active detection to prevent flickering
-    static bool lastMotorActive = false;
-    bool motorActive;
-    float motorSpeedAbs = abs(motorSpeed);
-    
-    // Higher thresholds for test mode oscillations (PWM 0-10 = 0-3.9%)
-    if (lastMotorActive) {
-        // Was active - need to drop below 2% to become inactive
-        motorActive = (motorSpeedAbs > 2.0f);
-    } else {
-        // Was inactive - need to rise above 5% to become active
-        motorActive = (motorSpeedAbs > 5.0f);
-    }
-    
-    // Debug logging for motor speed transitions
-    static float lastLoggedSpeed = -999.0f;
-    if (abs(motorSpeedAbs - lastLoggedSpeed) > 1.0f) {
-        LOG_DEBUG(EventSource::AUTOSTEER, "Motor speed: %.1f%% (active=%d)", motorSpeedAbs, motorActive);
-        lastLoggedSpeed = motorSpeedAbs;
-    }
-    
-    lastMotorActive = motorActive;
-    
-    // Convert to FSM states
+    // Map states to LED FSM states - simple and clear
     LEDManagerFSM::SteerState ledState;
     if (!wasReady) {
-        ledState = LEDManagerFSM::STEER_NOT_READY;
-    } else if (!buttonEnabled) {
-        ledState = LEDManagerFSM::STEER_DISABLED;  // Yellow - button/OSB not active
-    } else if (!guidanceReady) {
-        ledState = LEDManagerFSM::STEER_DISABLED;  // Yellow - waiting for conditions
-    } else if (!motorActive) {
-        ledState = LEDManagerFSM::STEER_STANDBY;   // Green blinking - ready but not steering
+        ledState = LEDManagerFSM::STEER_NOT_READY; // OFF - no sensor
+    } else if (!armed) {
+        ledState = LEDManagerFSM::STEER_DISABLED;   // Yellow solid - ready but not armed
+    } else if (!guidance) {
+        ledState = LEDManagerFSM::STEER_STANDBY;    // Green blinking - armed but no guidance
     } else {
-        ledState = LEDManagerFSM::STEER_ACTIVE;    // Green solid - actively steering
+        ledState = LEDManagerFSM::STEER_ACTIVE;     // Green solid - armed with active guidance
     }
     ledManagerFSM.transitionSteerState(ledState);
 }
@@ -401,9 +399,9 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     // PGN 251 - Steer Config
     // Expected length is 14 bytes total, but we get data after header
     
-    LOG_DEBUG(EventSource::AUTOSTEER, "PGN 251 (Steer Config) received, %d bytes", len);
+    LOG_INFO(EventSource::AUTOSTEER, "PGN 251 (Steer Config) received, %d bytes", len);
     
-    // Debug: dump entire PGN 251 packet
+    // Always show debug info first, regardless of packet validity
     char debugMsg[256];
     snprintf(debugMsg, sizeof(debugMsg), "Raw PGN 251 data:");
     for (int i = 0; i < len && strlen(debugMsg) < 200; i++) {
@@ -411,10 +409,10 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
         snprintf(buf, sizeof(buf), " [%d]=0x%02X(%d)", i, data[i], data[i]);
         strncat(debugMsg, buf, sizeof(debugMsg) - strlen(debugMsg) - 1);
     }
-    LOG_DEBUG(EventSource::AUTOSTEER, "%s", debugMsg);
+    LOG_INFO(EventSource::AUTOSTEER, "%s", debugMsg);
     
-    if (len < 4) {  // Changed from 5 to 4 since we only need up to index 3
-        LOG_ERROR(EventSource::AUTOSTEER, "PGN 251 too short!");
+    if (len < 4) {  // Minimum needed for basic config
+        LOG_ERROR(EventSource::AUTOSTEER, "PGN 251 too short! Got %d bytes", len);
         return;
     }
     
@@ -445,24 +443,32 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     steerConfig.CurrentSensor = bitRead(sett1, 2);
     steerConfig.IsUseY_Axis = bitRead(sett1, 3);
     
+    // Read motor driver configuration from byte 8 of the message (data array index 3)
+    // Message structure: Header(5) + Data(8) + CRC(1) = 14 bytes total
+    // Byte 8 of the message = data[3] (since data array starts after 5-byte header)
+    steerConfig.MotorDriverConfig = data[3];
+    LOG_INFO(EventSource::AUTOSTEER, "Motor driver config byte: 0x%02X", steerConfig.MotorDriverConfig);
+    
+    // Update motor driver detector with new configuration
+    MotorDriverDetector::getInstance()->updateMotorConfig(steerConfig.MotorDriverConfig);
+    
     LOG_DEBUG(EventSource::AUTOSTEER, "InvertWAS: %d", steerConfig.InvertWAS);
     LOG_DEBUG(EventSource::AUTOSTEER, "MotorDriveDirection: %d", steerConfig.MotorDriveDirection);
-    LOG_DEBUG(EventSource::AUTOSTEER, "CytronDriver: %d", steerConfig.CytronDriver);
     LOG_DEBUG(EventSource::AUTOSTEER, "SteerSwitch: %d", steerConfig.SteerSwitch);
     LOG_DEBUG(EventSource::AUTOSTEER, "SteerButton: %d", steerConfig.SteerButton);
     LOG_DEBUG(EventSource::AUTOSTEER, "PulseCountMax: %d", steerConfig.PulseCountMax);
     LOG_DEBUG(EventSource::AUTOSTEER, "MinSpeed: %d", steerConfig.MinSpeed);
     
     // Log all settings at INFO level in a single message so users see everything
-    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Cytron=%s Pressure=%s(max=%d)", 
+    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Pressure=%s(max=%d) MotorCfg=0x%02X", 
              steerConfig.InvertWAS ? "Inv" : "Norm",
              steerConfig.MotorDriveDirection ? "Rev" : "Norm",
              steerConfig.MinSpeed,
              steerConfig.SteerSwitch ? "On" : "Off",
              steerConfig.ShaftEncoder ? "Yes" : "No",
-             steerConfig.CytronDriver ? "Yes" : "No",
              steerConfig.PressureSensor ? "Yes" : "No",
-             steerConfig.PulseCountMax);
+             steerConfig.PulseCountMax,
+             steerConfig.MotorDriverConfig);
     
     // Save config to EEPROM
     configManager.setInvertWAS(steerConfig.InvertWAS);
@@ -675,8 +681,8 @@ void AutosteerProcessor::sendPGN253() {
     //          pwmDisplay,                     // byte 12: PWM value
     //          checksum}
     
-    // Get actual values
-    int16_t actualSteerAngle = (int16_t)(currentAngle * 100.0f);  // Current angle * 100
+    // Get actual values - use actualAngle which includes Ackerman correction
+    int16_t actualSteerAngle = (int16_t)(actualAngle * 100.0f);  // Actual angle * 100
     int16_t heading = 0;            // Deprecated - sent by GNSS
     int16_t roll = 0;               // Deprecated - sent by GNSS  
     uint8_t pwmDisplay = (uint8_t)(abs(motorSpeed) * 2.55f);  // Convert % to 0-255
@@ -781,7 +787,7 @@ void AutosteerProcessor::updateMotorControl() {
     }
     
     // Apply Ackerman fix to current angle if it's negative (left turn)
-    float actualAngle = currentAngle;
+    actualAngle = currentAngle;
     if (actualAngle < 0) {
         actualAngle = actualAngle * steerSettings.AckermanFix;
         
@@ -905,12 +911,12 @@ void AutosteerProcessor::updateMotorControl() {
     }
     
     // Final PWM limit check - ensure we never exceed highPWM setting
-    // Always log current settings for debugging
+    // Log current settings for debugging (DEBUG level to avoid spam)
     static uint32_t lastPWMSettingsLog = 0;
-    if (millis() - lastPWMSettingsLog > 5000) {  // Log every 5 seconds
+    if (millis() - lastPWMSettingsLog > 30000) {  // Log every 30 seconds
         lastPWMSettingsLog = millis();
-        LOG_INFO(EventSource::AUTOSTEER, "PWM Settings: highPWM=%d, lowPWM=%d, minPWM=%d", 
-                 steerSettings.highPWM, steerSettings.lowPWM, steerSettings.minPWM);
+        LOG_DEBUG(EventSource::AUTOSTEER, "PWM Settings: highPWM=%d, lowPWM=%d, minPWM=%d", 
+                  steerSettings.highPWM, steerSettings.lowPWM, steerSettings.minPWM);
     }
     
     if (steerSettings.highPWM > 0 && steerSettings.highPWM < 255) {
@@ -936,8 +942,11 @@ void AutosteerProcessor::updateMotorControl() {
     
     // Send to motor
     if (motorPTR) {
-        motorPTR->enable(true);
-        motorPTR->setSpeed(motorSpeed);
+        // Only enable motor if not in disabled state
+        if (motorState != MotorState::DISABLED) {
+            motorPTR->enable(true);
+            motorPTR->setSpeed(motorSpeed);
+        }
         
         // LOCK output control
         // For PWM motors, pin 4 is controlled by the motor driver

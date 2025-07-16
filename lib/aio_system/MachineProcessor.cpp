@@ -709,6 +709,12 @@ void MachineProcessor::setPinLow(uint8_t pin) {
     getSectionOutputs().setPWM(pin, 0, 4096);
 }
 
+void MachineProcessor::setPinPWM(uint8_t pin, uint16_t pwmValue) {
+    // For PCA9685: Set PWM value (0-4095)
+    // pwmValue should be 0-4095 (12-bit resolution)
+    getSectionOutputs().setPWM(pin, pwmValue, 0);
+}
+
 // EEPROM persistence methods
 void MachineProcessor::savePinConfig() {
     // Save pin configuration starting at MACHINE_CONFIG_ADDR + 50

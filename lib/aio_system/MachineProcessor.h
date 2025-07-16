@@ -96,6 +96,7 @@ public:
     bool initializeSectionOutputs();
     void setPinHigh(uint8_t pin);
     void setPinLow(uint8_t pin);
+    void setPinPWM(uint8_t pin, uint16_t pwmValue);  // For Danfoss valve control
     bool checkPCA9685();
 };
 

@@ -282,6 +282,14 @@ private:
     const char* getTypeName() const override { return "Keya CAN"; }
     bool hasCurrentSensing() const override { return false; }
     bool hasPositionFeedback() const override { return false; }
+    
+    // New interface methods
+    bool isDetected() override { return heartbeatValid; }
+    void handleKickout(KickoutType type, float value) override {
+        // Keya uses motor slip detection, not external kickout
+        // This is handled internally by checkMotorSlip()
+    }
+    float getCurrentDraw() override { return 0.0f; }  // Keya doesn't provide current via CAN
 };
 
 #endif // KEYA_CAN_DRIVER_H

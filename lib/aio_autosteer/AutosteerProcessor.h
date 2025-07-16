@@ -11,6 +11,8 @@ extern ADProcessor adProcessor;
 class MotorDriverInterface;
 extern MotorDriverInterface motorDriver;
 
+class KickoutMonitor;
+
 // Steer Config structure (PGN 251)
 struct SteerConfig {
     uint8_t InvertWAS;
@@ -27,6 +29,7 @@ struct SteerConfig {
     uint8_t PressureSensor;
     uint8_t CurrentSensor;
     uint8_t IsUseY_Axis;
+    uint8_t MotorDriverConfig;  // From PGN251 Byte 8
 };
 
 // Steer Settings structure (PGN 252)
@@ -82,6 +85,7 @@ private:
     
     // Motor control
     float currentAngle = 0.0f;           // Current WAS angle
+    float actualAngle = 0.0f;            // Ackerman-corrected angle
     float motorSpeed = 0.0f;             // Current motor speed command
     PIDController pid;                   // PID controller for steering
     
@@ -92,6 +96,7 @@ private:
     // Kickout
     uint32_t kickoutTime = 0;            // Time of last kickout
     static constexpr uint32_t KICKOUT_COOLDOWN_MS = 2000; // 2 second cooldown
+    KickoutMonitor* kickoutMonitor = nullptr;
     
     // Soft-start motor control
     enum class MotorState {

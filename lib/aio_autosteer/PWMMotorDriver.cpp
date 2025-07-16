@@ -1,13 +1,13 @@
-// PWMMotorDriver.cpp - PWM motor driver implementation for DRV8701
+// PWMMotorDriver.cpp - DRV8701 motor driver implementation with complementary PWM
 #include "PWMMotorDriver.h"
 #include <Arduino.h>
 #include "EventLogger.h"
 #include "HardwareManager.h"
 
-PWMMotorDriver::PWMMotorDriver(MotorDriverType type, uint8_t pwm, uint8_t dir, 
+PWMMotorDriver::PWMMotorDriver(MotorDriverType type, uint8_t pwm1, uint8_t pwm2, 
                                uint8_t enable, uint8_t current) 
-    : driverType(type), pwmPin(pwm), dirPin(dir), enablePin(enable), 
-      currentPin(current), hasCurrentSense(false), currentScale(1.0f), currentOffset(0.0f) {
+    : driverType(type), pwm1Pin(pwm1), pwm2Pin(pwm2), enablePin(enable), 
+      currentPin(current), hasCurrentSense(false), currentScale(0.5f), currentOffset(0.0f) {
     
     // Initialize status
     status = {
@@ -31,18 +31,15 @@ bool PWMMotorDriver::init() {
     LOG_INFO(EventSource::AUTOSTEER, "Initializing DRV8701 motor driver...");
     
     // Configure pins
-    pinMode(pwmPin, OUTPUT);
-    pinMode(dirPin, OUTPUT);
+    pinMode(pwm1Pin, OUTPUT);    // PWM1 (pin 5) for LEFT
+    pinMode(pwm2Pin, OUTPUT);    // PWM2 (pin 6) for RIGHT
     
     if (enablePin != 255) {
         pinMode(enablePin, OUTPUT);
-        // Send wake-up pulse for DRV8701 nSLEEP
-        digitalWrite(enablePin, LOW);   // Pull low
-        delay(1);                       // Hold for 1ms
-        digitalWrite(enablePin, HIGH);  // Rising edge wakes the driver
-        delayMicroseconds(100);         // Let it stabilize
-        digitalWrite(enablePin, LOW);   // Return to sleep/LOW (like NG-V6)
-        LOG_DEBUG(EventSource::AUTOSTEER, "Sent wake-up pulse on nSLEEP pin %d, now LOW", enablePin);
+        // DRV8701 nSLEEP: LOW = sleep, HIGH = awake
+        // Start in sleep mode (LOW) - will be enabled when needed
+        digitalWrite(enablePin, LOW);
+        LOG_DEBUG(EventSource::AUTOSTEER, "DRV8701 nSLEEP pin %d initialized to LOW (sleep mode)", enablePin);
     }
     
     if (hasCurrentSense) {
@@ -50,21 +47,17 @@ bool PWMMotorDriver::init() {
         LOG_DEBUG(EventSource::AUTOSTEER, "Current sensing enabled on pin A%d", currentPin - A0);
     }
     
-    // Set initial state
-    analogWrite(pwmPin, 0);
-    digitalWrite(dirPin, LOW);
+    // Set initial state - both PWM outputs to LOW
+    analogWrite(pwm1Pin, 0);
+    analogWrite(pwm2Pin, 0);
     
-    // Configure PWM frequency for DRV8701
-    // Teensy 4.1 default is fine for DRV8701
-    analogWriteFrequency(pwmPin, PWM_FREQUENCY);
+    // Configure PWM for DRV8701
+    analogWriteResolution(8);  // 8-bit resolution (0-255)
+    analogWriteFrequency(pwm1Pin, PWM_FREQUENCY);
+    analogWriteFrequency(pwm2Pin, PWM_FREQUENCY);
     
-    if (enablePin != 255) {
-        LOG_DEBUG(EventSource::AUTOSTEER, "PWM on pin %d, DIR on pin %d, EN on pin %d", pwmPin, dirPin, enablePin);
-    } else {
-        LOG_DEBUG(EventSource::AUTOSTEER, "PWM on pin %d, DIR on pin %d", pwmPin, dirPin);
-    }
+    LOG_INFO(EventSource::AUTOSTEER, "DRV8701 initialized with complementary PWM on pins %d (LEFT) and %d (RIGHT)", pwm1Pin, pwm2Pin);
     
-    LOG_INFO(EventSource::AUTOSTEER, "PWM motor driver initialized successfully");
     return true;
 }
 
@@ -86,8 +79,10 @@ void PWMMotorDriver::enable(bool en) {
     }
     
     if (!en) {
-        // Stop motor when disabling
-        analogWrite(pwmPin, 0);
+        // Stop motor when disabling - set both outputs to LOW
+        analogWrite(pwm1Pin, 0);
+        analogWrite(pwm2Pin, 0);
+        
         status.targetSpeed = 0.0f;
         status.actualSpeed = 0.0f;
     }
@@ -103,40 +98,55 @@ void PWMMotorDriver::setSpeed(float speedPercent) {
     speedPercent = constrain(speedPercent, -100.0f, 100.0f);
     status.targetSpeed = speedPercent;
     
-    // Set direction based on sign
-    if (speedPercent >= 0) {
-        digitalWrite(dirPin, HIGH);  // Forward
+    // DRV8701 complementary PWM mode: PWM1 = LEFT, PWM2 = RIGHT
+    // Inactive pin is set to 0, active pin gets PWM value (0-256)
+    // Note: On Teensy, analogWrite(pin, 256) puts the pin in Hi-Z mode
+    
+    uint16_t pwmValue = (uint16_t)(abs(speedPercent) * 256.0f / 100.0f);
+    pwmValue = constrain(pwmValue, 0, 256);
+    
+    if (speedPercent < 0) {
+        // LEFT: PWM1 active, PWM2 low
+        analogWrite(pwm1Pin, pwmValue);     // PWM1 active for LEFT (0-256)
+        analogWrite(pwm2Pin, 0);            // PWM2 LOW
+    } else if (speedPercent > 0) {
+        // RIGHT: PWM2 active, PWM1 low
+        analogWrite(pwm1Pin, 0);            // PWM1 LOW
+        analogWrite(pwm2Pin, pwmValue);     // PWM2 active for RIGHT (0-256)
     } else {
-        digitalWrite(dirPin, LOW);   // Reverse
+        // Stop: both outputs LOW
+        analogWrite(pwm1Pin, 0);
+        analogWrite(pwm2Pin, 0);
     }
-    
-    // Convert percentage to PWM value (0-255)
-    uint8_t pwmValue = (uint8_t)(abs(speedPercent) * PWM_MAX / 100.0f);
-    analogWrite(pwmPin, pwmValue);
-    
-    // For PWM motors, actual speed follows target immediately
-    status.actualSpeed = speedPercent;
-    status.lastUpdateMs = millis();
     
     // Debug output
     static uint32_t lastDebug = 0;
     if (millis() - lastDebug > 1000) {
         lastDebug = millis();
         if (hasCurrentSense) {
-            LOG_DEBUG(EventSource::AUTOSTEER, "Speed: %.1f%% -> PWM: %d, DIR: %s, Current: %.2fA", 
-                     speedPercent, pwmValue, 
-                     digitalRead(dirPin) ? "FWD" : "REV",
+            LOG_DEBUG(EventSource::AUTOSTEER, "Speed: %.1f%% -> PWM1=%d, PWM2=%d, Current: %.2fA", 
+                     speedPercent, 
+                     speedPercent < 0 ? pwmValue : 0,
+                     speedPercent > 0 ? pwmValue : 0,
                      getCurrent());
         } else {
-            LOG_DEBUG(EventSource::AUTOSTEER, "Speed: %.1f%% -> PWM: %d, DIR: %s", 
-                     speedPercent, pwmValue, 
-                     digitalRead(dirPin) ? "FWD" : "REV");
+            LOG_DEBUG(EventSource::AUTOSTEER, "Speed: %.1f%% -> PWM1=%d, PWM2=%d", 
+                     speedPercent, 
+                     speedPercent < 0 ? pwmValue : 0,
+                     speedPercent > 0 ? pwmValue : 0);
         }
     }
+    
+    // For PWM motors, actual speed follows target immediately
+    status.actualSpeed = speedPercent;
+    status.lastUpdateMs = millis();
 }
 
 void PWMMotorDriver::stop() {
-    analogWrite(pwmPin, 0);
+    // Set both outputs to LOW
+    analogWrite(pwm1Pin, 0);
+    analogWrite(pwm2Pin, 0);
+    
     status.targetSpeed = 0.0f;
     status.actualSpeed = 0.0f;
     status.lastUpdateMs = millis();
@@ -145,16 +155,19 @@ void PWMMotorDriver::stop() {
 float PWMMotorDriver::getCurrent() const {
     if (!hasCurrentSense) return 0.0f;
     
-    // Read ADC value
+    // Read ADC value (Teensy 4.1 has 12-bit ADC)
     int adcValue = analogRead(currentPin);
     
-    // Convert to current using scale and offset
-    // For DRV8701: Vout = offset + (current * scale)
-    // Default values would need calibration for specific board
+    // Convert to voltage (3.3V reference)
     float voltage = (adcValue * 3.3f) / 4095.0f;
+    
+    // Convert to current using scale and offset
+    // For DRV8701: Typical current sense is 0.5V/A
+    // Default scale = 0.5V/A, offset = 0V (no current = 0V output)
     float current = (voltage - currentOffset) / currentScale;
     
-    return current;
+    // Ensure non-negative (current sensor should only report positive values)
+    return max(0.0f, current);
 }
 
 void PWMMotorDriver::resetErrors() {
@@ -181,6 +194,28 @@ void PWMMotorDriver::setCurrentScaling(float scale, float offset) {
 }
 
 void PWMMotorDriver::setPWMFrequency(uint32_t freq) {
-    analogWriteFrequency(pwmPin, freq);
+    analogWriteFrequency(pwm1Pin, freq);
+    analogWriteFrequency(pwm2Pin, freq);
     LOG_INFO(EventSource::AUTOSTEER, "PWM frequency set to %lu Hz", freq);
+}
+
+void PWMMotorDriver::handleKickout(KickoutType type, float value) {
+    // Handle kickout based on type
+    switch (type) {
+        case KickoutType::WHEEL_ENCODER:
+            LOG_WARNING(EventSource::AUTOSTEER, "PWM motor kickout: Wheel encoder count %d", (int)value);
+            break;
+        case KickoutType::PRESSURE_SENSOR:
+            LOG_WARNING(EventSource::AUTOSTEER, "PWM motor kickout: Pressure %.1f", value);
+            break;
+        case KickoutType::CURRENT_SENSOR:
+            LOG_WARNING(EventSource::AUTOSTEER, "PWM motor kickout: Current %.2fA", value);
+            break;
+        default:
+            break;
+    }
+    
+    // Disable the motor
+    enable(false);
+    stop();
 }

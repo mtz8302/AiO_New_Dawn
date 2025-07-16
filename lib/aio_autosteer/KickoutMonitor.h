@@ -2,9 +2,11 @@
 #define KICKOUT_MONITOR_H
 
 #include <Arduino.h>
+#include "MotorDriverInterface.h"
 
 class ConfigManager;
 class ADProcessor;
+class MotorDriverInterface;
 
 class KickoutMonitor {
 public:
@@ -22,8 +24,11 @@ public:
     // Get singleton instance
     static KickoutMonitor* getInstance();
     
-    // Initialize kickout monitoring
-    bool init();
+    // Initialize kickout monitoring with motor driver reference
+    bool init(MotorDriverInterface* driver = nullptr);
+    
+    // Set motor driver (can be called after init)
+    void setMotorDriver(MotorDriverInterface* driver) { motorDriver = driver; }
     
     // Process kickout checks (call frequently)
     void process();
@@ -48,6 +53,7 @@ private:
     // External dependencies
     ConfigManager* configMgr;
     ADProcessor* adProcessor;
+    MotorDriverInterface* motorDriver;
     
     // Encoder monitoring
     uint32_t encoderPulseCount;

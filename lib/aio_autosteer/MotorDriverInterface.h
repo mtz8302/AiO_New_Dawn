@@ -11,7 +11,16 @@ enum class MotorDriverType {
     IBT2,              // PWM-based IBT-2 
     DRV8701,           // PWM-based DRV8701
     KEYA_CAN,          // CAN-based Keya motor
+    DANFOSS,           // Danfoss valve driver
     GENERIC_PWM        // Generic PWM driver
+};
+
+// Kickout types supported
+enum class KickoutType {
+    NONE,
+    WHEEL_ENCODER,     // Physical wheel encoder
+    PRESSURE_SENSOR,   // Hydraulic pressure sensor
+    CURRENT_SENSOR     // Motor current sensor
 };
 
 // Motor status information
@@ -51,6 +60,13 @@ public:
     
     // Process function for drivers that need regular updates
     virtual void process() { }
+    
+    // Detection and identification
+    virtual bool isDetected() = 0;
+    
+    // Kickout handling
+    virtual void handleKickout(KickoutType type, float value) = 0;
+    virtual float getCurrentDraw() = 0;
 };
 
 #endif // MOTOR_DRIVER_INTERFACE_H

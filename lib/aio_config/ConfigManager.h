@@ -25,6 +25,7 @@ private:
     bool isUseYAxis;
     uint8_t pulseCountMax;
     uint8_t minSpeed;
+    uint8_t motorDriverConfig;  // From PGN251 Byte 8
 
     // Steer settings (EEPROM 300-399)
     float kp;
@@ -112,6 +113,8 @@ public:
     void setPulseCountMax(uint8_t value) { pulseCountMax = value; }
     uint8_t getMinSpeed() const { return minSpeed; }
     void setMinSpeed(uint8_t value) { minSpeed = value; }
+    uint8_t getMotorDriverConfig() const { return motorDriverConfig; }
+    void setMotorDriverConfig(uint8_t value) { motorDriverConfig = value; }
 
     // Steer settings methods
     float getKp() const { return kp; }
