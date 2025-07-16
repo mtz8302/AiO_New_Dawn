@@ -706,8 +706,8 @@ void AutosteerProcessor::sendPGN253() {
     //          pwmDisplay,                     // byte 12: PWM value
     //          checksum}
     
-    // Get actual values
-    int16_t actualSteerAngle = (int16_t)(currentAngle * 100.0f);  // Current angle * 100
+    // Get actual values - use actualAngle which includes Ackerman correction
+    int16_t actualSteerAngle = (int16_t)(actualAngle * 100.0f);  // Actual angle * 100
     int16_t heading = 0;            // Deprecated - sent by GNSS
     int16_t roll = 0;               // Deprecated - sent by GNSS  
     uint8_t pwmDisplay = (uint8_t)(abs(motorSpeed) * 2.55f);  // Convert % to 0-255
@@ -812,7 +812,7 @@ void AutosteerProcessor::updateMotorControl() {
     }
     
     // Apply Ackerman fix to current angle if it's negative (left turn)
-    float actualAngle = currentAngle;
+    actualAngle = currentAngle;
     if (actualAngle < 0) {
         actualAngle = actualAngle * steerSettings.AckermanFix;
         

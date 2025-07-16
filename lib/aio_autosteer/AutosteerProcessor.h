@@ -85,6 +85,7 @@ private:
     
     // Motor control
     float currentAngle = 0.0f;           // Current WAS angle
+    float actualAngle = 0.0f;            // Ackerman-corrected angle
     float motorSpeed = 0.0f;             // Current motor speed command
     PIDController pid;                   // PID controller for steering
     

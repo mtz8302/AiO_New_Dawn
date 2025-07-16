@@ -36,13 +36,10 @@ bool PWMMotorDriver::init() {
     
     if (enablePin != 255) {
         pinMode(enablePin, OUTPUT);
-        // Send wake-up pulse for DRV8701 nSLEEP
-        digitalWrite(enablePin, LOW);   // Pull low
-        delay(1);                       // Hold for 1ms
-        digitalWrite(enablePin, HIGH);  // Rising edge wakes the driver
-        delayMicroseconds(100);         // Let it stabilize
-        digitalWrite(enablePin, LOW);   // Return to sleep/LOW (like NG-V6)
-        LOG_DEBUG(EventSource::AUTOSTEER, "Sent wake-up pulse on nSLEEP pin %d, now LOW", enablePin);
+        // DRV8701 nSLEEP: LOW = sleep, HIGH = awake
+        // Start in sleep mode (LOW) - will be enabled when needed
+        digitalWrite(enablePin, LOW);
+        LOG_DEBUG(EventSource::AUTOSTEER, "DRV8701 nSLEEP pin %d initialized to LOW (sleep mode)", enablePin);
     }
     
     if (hasCurrentSense) {
@@ -54,7 +51,8 @@ bool PWMMotorDriver::init() {
     analogWrite(pwmPin, 0);
     analogWrite(dirPin, 0);
     
-    // Configure PWM frequency for DRV8701 on both pins
+    // Configure PWM for DRV8701
+    analogWriteResolution(8);  // 8-bit resolution (0-255)
     analogWriteFrequency(pwmPin, PWM_FREQUENCY);
     analogWriteFrequency(dirPin, PWM_FREQUENCY);
     
