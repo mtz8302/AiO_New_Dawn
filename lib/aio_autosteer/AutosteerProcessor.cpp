@@ -915,12 +915,12 @@ void AutosteerProcessor::updateMotorControl() {
     }
     
     // Final PWM limit check - ensure we never exceed highPWM setting
-    // Always log current settings for debugging
+    // Log current settings for debugging (DEBUG level to avoid spam)
     static uint32_t lastPWMSettingsLog = 0;
-    if (millis() - lastPWMSettingsLog > 5000) {  // Log every 5 seconds
+    if (millis() - lastPWMSettingsLog > 30000) {  // Log every 30 seconds
         lastPWMSettingsLog = millis();
-        LOG_INFO(EventSource::AUTOSTEER, "PWM Settings: highPWM=%d, lowPWM=%d, minPWM=%d", 
-                 steerSettings.highPWM, steerSettings.lowPWM, steerSettings.minPWM);
+        LOG_DEBUG(EventSource::AUTOSTEER, "PWM Settings: highPWM=%d, lowPWM=%d, minPWM=%d", 
+                  steerSettings.highPWM, steerSettings.lowPWM, steerSettings.minPWM);
     }
     
     if (steerSettings.highPWM > 0 && steerSettings.highPWM < 255) {

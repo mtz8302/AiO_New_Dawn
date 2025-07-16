@@ -1,10 +1,10 @@
-// PWMMotorDriver.h - PWM-based motor driver implementation
+// PWMMotorDriver.h - DRV8701 motor driver implementation
 #ifndef PWM_MOTOR_DRIVER_H
 #define PWM_MOTOR_DRIVER_H
 
 #include "MotorDriverInterface.h"
 
-// PWM motor driver for Cytron, IBT-2, DRV8701, etc.
+// DRV8701 motor driver with complementary PWM
 class PWMMotorDriver : public MotorDriverInterface {
 private:
     MotorDriverType driverType;
@@ -17,8 +17,9 @@ private:
     uint8_t currentPin;  // Optional current sense
     
     // PWM parameters  
-    static constexpr uint32_t PWM_FREQUENCY = 18310;  // Hz - DRV8701 recommended
-    static constexpr uint8_t PWM_MAX = 255;
+    static constexpr uint32_t PWM_FREQUENCY = 75;  // Hz - Matching test code frequency
+    static constexpr uint16_t PWM_MAX = 256;  // Note: 256 is special - puts pin in Hi-Z
+    
     
     // Current sensing
     bool hasCurrentSense;
