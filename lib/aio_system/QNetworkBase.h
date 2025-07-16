@@ -31,11 +31,11 @@ public:
     static void onLinkStateChanged(bool state) {
         linkState = state;
         if (state) {
-            Serial.printf("\r\n[LINK] Ethernet link UP: %d Mbps, %s duplex", 
+            Serial.printf("\r\n[LINK] Ethernet link UP: %d Mbps, %s duplex\r\n", 
                          Ethernet.linkSpeed(),
                          Ethernet.linkIsFullDuplex() ? "full" : "half");
         } else {
-            Serial.println("\r\n[LINK] Ethernet link DOWN");
+            Serial.println("\r\n[LINK] Ethernet link DOWN\r\n");
         }
         
         // Update LED immediately on link change
