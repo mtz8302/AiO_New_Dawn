@@ -314,46 +314,21 @@ void AutosteerProcessor::process() {
     // Send PGN 253 status to AgOpenGPS
     sendPGN253();
     
-    // Update LED status using FSM with hysteresis
+    // Update LED status based on actual system state (no motor speed hysteresis)
     bool wasReady = true;  // ADProcessor is always available as an object
-    bool buttonEnabled = (steerState == 0);    // Button/OSB active
-    bool guidanceReady = shouldSteerBeActive(); // All conditions met for steering
+    bool armed = (steerState == 0);         // Button/OSB has armed autosteer
+    bool guidance = guidanceActive;         // AgOpenGPS has active guidance line
     
-    // Use hysteresis for motor active detection to prevent flickering
-    static bool lastMotorActive = false;
-    bool motorActive;
-    float motorSpeedAbs = abs(motorSpeed);
-    
-    // Higher thresholds for test mode oscillations (PWM 0-10 = 0-3.9%)
-    if (lastMotorActive) {
-        // Was active - need to drop below 2% to become inactive
-        motorActive = (motorSpeedAbs > 2.0f);
-    } else {
-        // Was inactive - need to rise above 5% to become active
-        motorActive = (motorSpeedAbs > 5.0f);
-    }
-    
-    // Debug logging for motor speed transitions
-    static float lastLoggedSpeed = -999.0f;
-    if (abs(motorSpeedAbs - lastLoggedSpeed) > 1.0f) {
-        LOG_DEBUG(EventSource::AUTOSTEER, "Motor speed: %.1f%% (active=%d)", motorSpeedAbs, motorActive);
-        lastLoggedSpeed = motorSpeedAbs;
-    }
-    
-    lastMotorActive = motorActive;
-    
-    // Convert to FSM states
+    // Map states to LED FSM states - simple and clear
     LEDManagerFSM::SteerState ledState;
     if (!wasReady) {
-        ledState = LEDManagerFSM::STEER_NOT_READY;
-    } else if (!buttonEnabled) {
-        ledState = LEDManagerFSM::STEER_DISABLED;  // Yellow - button/OSB not active
-    } else if (!guidanceReady) {
-        ledState = LEDManagerFSM::STEER_DISABLED;  // Yellow - waiting for conditions
-    } else if (!motorActive) {
-        ledState = LEDManagerFSM::STEER_STANDBY;   // Green blinking - ready but not steering
+        ledState = LEDManagerFSM::STEER_NOT_READY; // OFF - no sensor
+    } else if (!armed) {
+        ledState = LEDManagerFSM::STEER_DISABLED;   // Yellow solid - ready but not armed
+    } else if (!guidance) {
+        ledState = LEDManagerFSM::STEER_STANDBY;    // Green blinking - armed but no guidance
     } else {
-        ledState = LEDManagerFSM::STEER_ACTIVE;    // Green solid - actively steering
+        ledState = LEDManagerFSM::STEER_ACTIVE;     // Green solid - armed with active guidance
     }
     ledManagerFSM.transitionSteerState(ledState);
 }
