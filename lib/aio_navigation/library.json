@@ -1,0 +1,18 @@
+{
+  "name": "aio_navigation",
+  "version": "1.0.0",
+  "description": "AiO New Dawn Navigation Components",
+  "keywords": ["gnss", "imu", "navigation"],
+  "authors": {
+    "name": "AiO New Dawn Team"
+  },
+  "dependencies": [
+    {"name": "aio_system"},
+    {"name": "aio_communications"},
+    {"name": "UBXParser"},
+    {"name": "BNOAiOParser"},
+    {"name": "TM171AiOParser"}
+  ],
+  "frameworks": "arduino",
+  "platforms": "teensy"
+}

@@ -1,0 +1,18 @@
+{
+  "name": "aio_system",
+  "version": "1.0.0",
+  "description": "AiO New Dawn System Components",
+  "keywords": ["system", "logging", "network"],
+  "authors": {
+    "name": "AiO New Dawn Team"
+  },
+  "dependencies": [
+    {"name": "QNEthernet"},
+    {"name": "AsyncWebServer_Teensy41"},
+    {"name": "AsyncUDP_Teensy41"},
+    {"name": "ArduinoJson"},
+    {"name": "FlasherX"}
+  ],
+  "frameworks": "arduino",
+  "platforms": "teensy"
+}

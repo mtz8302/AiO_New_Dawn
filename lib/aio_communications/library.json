@@ -1,0 +1,15 @@
+{
+  "name": "aio_communications",
+  "version": "1.0.0",
+  "description": "AiO New Dawn Communication Interfaces",
+  "keywords": ["can", "serial", "i2c", "communication"],
+  "authors": {
+    "name": "AiO New Dawn Team"
+  },
+  "dependencies": [
+    {"name": "aio_system"},
+    {"name": "FlexCAN_T4"}
+  ],
+  "frameworks": "arduino",
+  "platforms": "teensy"
+}
