@@ -17,3 +17,7 @@ No module should register for PGN 200 or 202 - they're broadcast to everyone aut
 
 ## Version Control
 - When commiting fixes, increment the patch version number in ./sys/version.h
+
+## File Tree
+- File tree for the project is stored in./file_tree.json
+- The bash command 'tree -J' will output the latest tree in JSON format

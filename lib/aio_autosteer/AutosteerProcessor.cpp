@@ -253,6 +253,8 @@ void AutosteerProcessor::process() {
         steerState = !steerState;
         LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via physical button", 
                  steerState == 0 ? "ARMED" : "DISARMED");
+        // Pulse blue LED for button press
+        ledManagerFSM.pulseButton();
     }
     lastButtonReading = buttonReading;
     
@@ -322,13 +324,11 @@ void AutosteerProcessor::process() {
     // Map states to LED FSM states - simple and clear
     LEDManagerFSM::SteerState ledState;
     if (!wasReady) {
-        ledState = LEDManagerFSM::STEER_NOT_READY; // OFF - no sensor
+        ledState = LEDManagerFSM::STEER_MALFUNCTION; // Red - hardware malfunction
     } else if (!armed) {
-        ledState = LEDManagerFSM::STEER_DISABLED;   // Yellow solid - ready but not armed
-    } else if (!guidance) {
-        ledState = LEDManagerFSM::STEER_STANDBY;    // Green blinking - armed but no guidance
+        ledState = LEDManagerFSM::STEER_READY;       // Amber - ready but not armed
     } else {
-        ledState = LEDManagerFSM::STEER_ACTIVE;     // Green solid - armed with active guidance
+        ledState = LEDManagerFSM::STEER_ENGAGED;     // Green - engaged
     }
     ledManagerFSM.transitionSteerState(ledState);
 }
