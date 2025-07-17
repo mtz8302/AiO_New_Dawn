@@ -20,7 +20,8 @@ public:
         OFF = 0,
         RED = 1,
         YELLOW = 2,
-        GREEN = 3
+        GREEN = 3,
+        BLUE = 4
     };
     
     // LED modes
@@ -31,34 +32,30 @@ public:
     
     // Power/Ethernet LED states
     enum PowerState {
-        PWR_NO_ETHERNET,      // No ethernet connection
-        PWR_NO_AGIO,         // Ethernet OK, no AgIO
-        PWR_CONNECTED        // Fully connected
+        PWR_BOOTING,         // System booting - Red
+        PWR_ETHERNET_OK,     // Booted & Ethernet connected - Amber
+        PWR_AGIO_CONNECTED   // Data connection to/from AgIO - Green
     };
     
     // GPS LED states
     enum GPSState {
-        GPS_NO_DATA,         // No GPS data
-        GPS_NO_FIX,          // GPS data but no fix
-        GPS_BASIC_FIX,       // GPS or DGPS fix
-        GPS_RTK_FLOAT,       // RTK float
-        GPS_RTK_FIXED        // RTK fixed
+        GPS_NO_DATA,         // No GNSS data received - Red
+        GPS_DATA_RECEIVED,   // GNSS data received & parsed - Amber
+        GPS_RTK_FIXED        // RTK Fixed solution - Green
     };
     
     // Steer LED states
     enum SteerState {
-        STEER_NOT_READY,     // WAS not ready
-        STEER_DISABLED,      // Ready but not enabled
-        STEER_STANDBY,       // Enabled but not active
-        STEER_ACTIVE         // Actively steering
+        STEER_MALFUNCTION,   // WAS or other hardware malfunction - Red
+        STEER_READY,         // Steering ready - Amber
+        STEER_ENGAGED        // Steering engaged - Green
     };
     
     // IMU/INS LED states
     enum IMUState {
-        IMU_NOT_DETECTED,    // No IMU detected
-        IMU_INITIALIZING,    // Detected but not initialized
-        IMU_NO_DATA,         // Initialized but no valid data
-        IMU_VALID            // Valid data
+        IMU_NOT_DETECTED,    // No IMU or INS detected - Red
+        IMU_DETECTED,        // IMU detected or INS aligning - Amber
+        IMU_VALID            // IMU providing data or INS aligned - Green
     };
     
     LEDManagerFSM();
@@ -93,6 +90,10 @@ public:
     // Call this periodically (e.g., every 100ms) from main loop
     void updateAll();
     
+    // Pulse functions for blue overlay
+    void pulseRTCM();      // 50ms blue pulse for RTCM packet
+    void pulseButton();    // 50ms blue pulse for button press
+    
 private:
     // PCA9685 controller
     Adafruit_PWMServoDriver* pwm;
@@ -102,7 +103,7 @@ private:
     static const uint8_t LED_PINS[4][3];  // [LED_ID][R,G,B]
     
     // Color definitions (PWM values at 100% brightness)
-    static const uint16_t COLOR_VALUES[4][3];  // [COLOR][R,G,B]
+    static const uint16_t COLOR_VALUES[5][3];  // [COLOR][R,G,B] - includes BLUE
     
     // Brightness control
     uint8_t brightness;
@@ -120,11 +121,14 @@ private:
         LED_MODE mode;
         bool blinkState;
         uint32_t lastBlinkTime;
+        bool pulseActive;        // Blue pulse overlay active
+        uint32_t pulseStartTime; // When pulse started
     };
     LEDState leds[4];
     
     // Blink timing
     static const uint32_t BLINK_INTERVAL_MS = 500;
+    static const uint32_t PULSE_DURATION_MS = 50;   // Blue pulse duration
     
     // State-to-LED mapping tables
     static const struct PowerStateMap {

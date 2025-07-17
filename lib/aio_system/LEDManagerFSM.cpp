@@ -29,48 +29,45 @@ const uint8_t LEDManagerFSM::LED_PINS[4][3] = {
 };
 
 // Color definitions at 100% brightness (12-bit PWM: 0-4095)
-const uint16_t LEDManagerFSM::COLOR_VALUES[4][3] = {
+const uint16_t LEDManagerFSM::COLOR_VALUES[5][3] = {
     {0, 0, 0},           // OFF
     {4095, 0, 0},        // RED
     {4095, 2048, 0},     // YELLOW (Red + half Green)
-    {0, 4095, 0}         // GREEN
+    {0, 4095, 0},        // GREEN
+    {0, 0, 4095}         // BLUE
 };
 
 // State-to-LED mapping tables
 const LEDManagerFSM::PowerStateMap LEDManagerFSM::powerStateMap[] = {
-    {PWR_NO_ETHERNET,  RED,    SOLID},
-    {PWR_NO_AGIO,      YELLOW, BLINKING},
-    {PWR_CONNECTED,    GREEN,  SOLID}
+    {PWR_BOOTING,        RED,    SOLID},
+    {PWR_ETHERNET_OK,    YELLOW, SOLID},
+    {PWR_AGIO_CONNECTED, GREEN,  SOLID}
 };
 
 const LEDManagerFSM::GPSStateMap LEDManagerFSM::gpsStateMap[] = {
-    {GPS_NO_DATA,     OFF,    SOLID},
-    {GPS_NO_FIX,      RED,    SOLID},
-    {GPS_BASIC_FIX,   YELLOW, SOLID},
-    {GPS_RTK_FLOAT,   YELLOW, BLINKING},
-    {GPS_RTK_FIXED,   GREEN,  SOLID}
+    {GPS_NO_DATA,         RED,    SOLID},
+    {GPS_DATA_RECEIVED,   YELLOW, SOLID},
+    {GPS_RTK_FIXED,       GREEN,  SOLID}
 };
 
 const LEDManagerFSM::SteerStateMap LEDManagerFSM::steerStateMap[] = {
-    {STEER_NOT_READY, OFF,    SOLID},
-    {STEER_DISABLED,  YELLOW, SOLID},
-    {STEER_STANDBY,   GREEN,  BLINKING},
-    {STEER_ACTIVE,    GREEN,  SOLID}
+    {STEER_MALFUNCTION, RED,    SOLID},
+    {STEER_READY,       YELLOW, SOLID},
+    {STEER_ENGAGED,     GREEN,  SOLID}
 };
 
 const LEDManagerFSM::IMUStateMap LEDManagerFSM::imuStateMap[] = {
-    {IMU_NOT_DETECTED,  OFF,    SOLID},
-    {IMU_INITIALIZING,  RED,    BLINKING},
-    {IMU_NO_DATA,       YELLOW, SOLID},
+    {IMU_NOT_DETECTED,  RED,    SOLID},
+    {IMU_DETECTED,      YELLOW, SOLID},
     {IMU_VALID,         GREEN,  SOLID}
 };
 
 LEDManagerFSM::LEDManagerFSM() : 
     pwm(nullptr), 
     brightness(DEFAULT_BRIGHTNESS),
-    powerState(PWR_NO_ETHERNET),
+    powerState(PWR_BOOTING),
     gpsState(GPS_NO_DATA),
-    steerState(STEER_NOT_READY),
+    steerState(STEER_READY),
     imuState(IMU_NOT_DETECTED) {
     
     // Initialize LED states
@@ -79,6 +76,8 @@ LEDManagerFSM::LEDManagerFSM() :
         leds[i].mode = SOLID;
         leds[i].blinkState = false;
         leds[i].lastBlinkTime = 0;
+        leds[i].pulseActive = false;
+        leds[i].pulseStartTime = 0;
     }
 }
 
@@ -152,6 +151,14 @@ void LEDManagerFSM::update() {
             }
         }
     }
+    
+    // Check for pulse timeout
+    for (int i = 0; i < 4; i++) {
+        if (leds[i].pulseActive && (now - leds[i].pulseStartTime >= PULSE_DURATION_MS)) {
+            leds[i].pulseActive = false;
+            updateSingleLED((LED_ID)i);
+        }
+    }
 }
 
 void LEDManagerFSM::setBrightness(uint8_t percent) {
@@ -186,7 +193,7 @@ void LEDManagerFSM::transitionGPSState(GPSState newState) {
 
 void LEDManagerFSM::transitionSteerState(SteerState newState) {
     if (steerState != newState) {
-        const char* stateNames[] = {"NOT_READY", "DISABLED", "STANDBY", "ACTIVE"};
+        const char* stateNames[] = {"MALFUNCTION", "READY", "ENGAGED"};
         LOG_DEBUG(EventSource::SYSTEM, "Steer LED state transition: %s -> %s", 
                  stateNames[steerState], stateNames[newState]);
         steerState = newState;
@@ -254,11 +261,21 @@ void LEDManagerFSM::setLED(LED_ID id, LED_COLOR color, LED_MODE mode) {
         leds[id].blinkState = false; // Will sync on next update
     }
     
-    updateSingleLED(id);
+    // Don't update if pulse is active - let the pulse complete
+    if (!leds[id].pulseActive) {
+        updateSingleLED(id);
+    }
 }
 
 void LEDManagerFSM::updateSingleLED(LED_ID id) {
     if (!pwm || id > INS) return;
+    
+    // Check if pulse is active - blue pulse overrides normal color
+    if (leds[id].pulseActive) {
+        uint16_t b = scalePWM(COLOR_VALUES[BLUE][2]);
+        setLEDPins(id, 0, 0, b);
+        return;
+    }
     
     // Determine if LED should be on
     bool ledOn = (leds[id].mode == SOLID) || 
@@ -340,16 +357,26 @@ void LEDManagerFSM::testLEDs() {
 
 void LEDManagerFSM::updateAll() {
     // Power/Ethernet LED state determination
+    static bool bootComplete = false;
+    static uint32_t bootTime = millis();
+    
+    // Consider boot complete after 5 seconds
+    if (!bootComplete && (millis() - bootTime > 5000)) {
+        bootComplete = true;
+    }
+    
     bool ethernetUp = QNetworkBase::isConnected();
     bool hasAgIO = PGNProcessor::instance && PGNProcessor::instance->isReceivingFromAgIO();
     
     PowerState newPowerState;
-    if (!ethernetUp) {
-        newPowerState = PWR_NO_ETHERNET;
-    } else if (!hasAgIO) {
-        newPowerState = PWR_NO_AGIO;
+    if (!bootComplete) {
+        newPowerState = PWR_BOOTING;
+    } else if (ethernetUp && hasAgIO) {
+        newPowerState = PWR_AGIO_CONNECTED;
+    } else if (ethernetUp) {
+        newPowerState = PWR_ETHERNET_OK;
     } else {
-        newPowerState = PWR_CONNECTED;
+        newPowerState = PWR_BOOTING;  // Red for no ethernet
     }
     transitionPowerState(newPowerState);
     
@@ -359,23 +386,10 @@ void LEDManagerFSM::updateAll() {
         newGPSState = GPS_NO_DATA;
     } else {
         uint8_t fixQuality = gnssProcessor.getData().fixQuality;
-        switch (fixQuality) {
-            case 0:  // No fix
-                newGPSState = GPS_NO_FIX;
-                break;
-            case 1:  // GPS
-            case 2:  // DGPS
-                newGPSState = GPS_BASIC_FIX;
-                break;
-            case 5:  // RTK Float
-                newGPSState = GPS_RTK_FLOAT;
-                break;
-            case 4:  // RTK Fixed
-                newGPSState = GPS_RTK_FIXED;
-                break;
-            default:
-                newGPSState = GPS_BASIC_FIX;
-                break;
+        if (fixQuality == 4) {  // RTK Fixed
+            newGPSState = GPS_RTK_FIXED;
+        } else {
+            newGPSState = GPS_DATA_RECEIVED;  // All other states show amber
         }
     }
     transitionGPSState(newGPSState);
@@ -387,28 +401,22 @@ void LEDManagerFSM::updateAll() {
     IMUState newIMUState;
     if (imuProcessor.getIMUType() != IMUType::NONE) {
         // Separate IMU detected (BNO08x or TM171)
-        if (!imuProcessor.isIMUInitialized()) {
-            newIMUState = IMU_INITIALIZING;
-        } else if (!imuProcessor.hasValidData()) {
-            newIMUState = IMU_NO_DATA;
+        if (!imuProcessor.isIMUInitialized() || !imuProcessor.hasValidData()) {
+            newIMUState = IMU_DETECTED;  // Amber for detected but not ready
         } else {
-            newIMUState = IMU_VALID;
+            newIMUState = IMU_VALID;      // Green for valid data
         }
     } else if (gnssProcessor.getData().hasINS) {
         // UM981 INS system
         const auto& gpsData = gnssProcessor.getData();
-        if (gpsData.insAlignmentStatus == 0) {
-            newIMUState = IMU_INITIALIZING;
-        } else if (gpsData.insAlignmentStatus == 7) { // INS_ALIGNING
-            newIMUState = IMU_NO_DATA;
-        } else if (gpsData.insAlignmentStatus == 3) { // Solution good
-            newIMUState = IMU_VALID;
+        if (gpsData.insAlignmentStatus == 3) { // Solution good
+            newIMUState = IMU_VALID;      // Green for aligned
         } else {
-            newIMUState = IMU_NO_DATA;
+            newIMUState = IMU_DETECTED;   // Amber for aligning
         }
     } else {
         // No IMU/INS detected
-        newIMUState = IMU_NOT_DETECTED;
+        newIMUState = IMU_NOT_DETECTED;  // Red
     }
     transitionIMUState(newIMUState);
     
@@ -422,4 +430,35 @@ void LEDManagerFSM::updateAll() {
                  powerState, gpsState, steerState, imuState);
         lastDebugTime = millis();
     }
+}
+
+void LEDManagerFSM::pulseRTCM() {
+    // Pulse GPS LED blue for 50ms when RTCM packet received
+    if (!pwm) return;
+    
+    // Don't start a new pulse if one is already active
+    if (leds[GPS].pulseActive) {
+        return;
+    }
+    
+    // Minimum 200ms between pulses for visual clarity
+    static uint32_t lastPulseTime = 0;
+    uint32_t now = millis();
+    if (now - lastPulseTime < 200) {
+        return;
+    }
+    
+    lastPulseTime = now;
+    leds[GPS].pulseActive = true;
+    leds[GPS].pulseStartTime = now;
+    updateSingleLED(GPS);
+}
+
+void LEDManagerFSM::pulseButton() {
+    // Pulse STEER LED blue for 50ms when button pressed
+    if (!pwm) return;
+    
+    leds[STEER].pulseActive = true;
+    leds[STEER].pulseStartTime = millis();
+    updateSingleLED(STEER);
 }
