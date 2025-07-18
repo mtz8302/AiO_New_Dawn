@@ -2,8 +2,11 @@
   {"type":"directory","name":".","contents":[
     {"type":"file","name":"AiO_New_Dawn_v0.1.28-alpha.hex"},
     {"type":"file","name":"AiO_New_Dawn_v0.1.29-alpha.hex"},
+    {"type":"file","name":"AiO_New_Dawn_v0.1.30-alpha.hex"},
+    {"type":"file","name":"AiO_New_Dawn_v0.1.31-alpha.hex"},
     {"type":"file","name":"CLAUDE.md"},
     {"type":"file","name":"copy_hex.py"},
+    {"type":"file","name":"dependency_analysis.md"},
     {"type":"directory","name":"docs","contents":[
       {"type":"file","name":"ADC_OPTIMIZATION_NOTES.md"},
       {"type":"file","name":"ARCHITECTURE_OVERVIEW.md"},
@@ -17,6 +20,7 @@
       {"type":"file","name":"sensor_fusion_proposal.md"},
       {"type":"file","name":"WEB_NAVIGATION_STANDARDIZATION.md"}
     ]},
+    {"type":"file","name":"file_tree.json"},
     {"type":"directory","name":"include","contents":[
       {"type":"file","name":"README"}
     ]},
@@ -36,6 +40,7 @@
       {"type":"file","name":"QNETHERNET_README.md"},
       {"type":"file","name":"test_motor_detection.md"}
     ]},
+    {"type":"file","name":"ldf.rst"},
     {"type":"directory","name":"lib","contents":[
       {"type":"directory","name":"Adafruit_BusIO","contents":[
         {"type":"file","name":"Adafruit_GenericDevice.cpp"},
@@ -57,11 +62,10 @@
         {"type":"file","name":"KeyaCANDriver.h"},
         {"type":"file","name":"KickoutMonitor.cpp"},
         {"type":"file","name":"KickoutMonitor.h"},
-        {"type":"file","name":"MotorDriverDetector.cpp"},
-        {"type":"file","name":"MotorDriverDetector.h"},
-        {"type":"file","name":"MotorDriverFactory.h"},
+        {"type":"file","name":"library.json"},
         {"type":"file","name":"MotorDriverInterface.h"},
-        {"type":"file","name":"PIDController.h"},
+        {"type":"file","name":"MotorDriverManager.cpp"},
+        {"type":"file","name":"MotorDriverManager.h"},
         {"type":"file","name":"PWMMotorDriver.cpp"},
         {"type":"file","name":"PWMMotorDriver.h"},
         {"type":"file","name":"PWMProcessor.cpp"},
@@ -76,6 +80,7 @@
         {"type":"file","name":"CANManager.h"},
         {"type":"file","name":"I2CManager.cpp"},
         {"type":"file","name":"I2CManager.h"},
+        {"type":"file","name":"library.json"},
         {"type":"file","name":"SerialManager.cpp"},
         {"type":"file","name":"SerialManager.h"}
       ]},
@@ -84,7 +89,8 @@
         {"type":"file","name":"ConfigManager.h"},
         {"type":"file","name":"EEPROMLayout.h"},
         {"type":"file","name":"HardwareManager.cpp"},
-        {"type":"file","name":"HardwareManager.h"}
+        {"type":"file","name":"HardwareManager.h"},
+        {"type":"file","name":"library.json"}
       ]},
       {"type":"directory","name":"aio_navigation","contents":[
         {"type":"file","name":"calc_crc32.h"},
@@ -92,6 +98,7 @@
         {"type":"file","name":"GNSSProcessor.h"},
         {"type":"file","name":"IMUProcessor.cpp"},
         {"type":"file","name":"IMUProcessor.h"},
+        {"type":"file","name":"library.json"},
         {"type":"file","name":"NavigationTypes.h"},
         {"type":"file","name":"NAVProcessor.cpp"},
         {"type":"file","name":"NAVProcessor.h"}
@@ -104,10 +111,9 @@
         {"type":"file","name":"ConfigGlobals.h"},
         {"type":"file","name":"EventLogger.cpp"},
         {"type":"file","name":"EventLogger.h"},
-        {"type":"file","name":"LEDManager.cpp"},
-        {"type":"file","name":"LEDManager.h"},
         {"type":"file","name":"LEDManagerFSM.cpp"},
         {"type":"file","name":"LEDManagerFSM.h"},
+        {"type":"file","name":"library.json"},
         {"type":"file","name":"MachineProcessor.cpp"},
         {"type":"file","name":"MachineProcessor.h"},
         {"type":"file","name":"OTAHandler.h"},
@@ -119,8 +125,6 @@
         {"type":"file","name":"RTCMProcessor.cpp"},
         {"type":"file","name":"RTCMProcessor.h"},
         {"type":"file","name":"SerialGlobals.h"},
-        {"type":"file","name":"SubnetManager.cpp"},
-        {"type":"file","name":"SubnetManager.h"},
         {"type":"file","name":"Version.h"},
         {"type":"directory","name":"web_pages","contents":[
           {"type":"file","name":"CommonStyles.h"},
@@ -996,5 +1000,5 @@
     {"type":"file","name":"to_bin.py"}
   ]}
 ,
-  {"type":"report","directories":161,"files":675}
+  {"type":"report","directories":161,"files":679}
 ]
