@@ -26,8 +26,8 @@ enum class KickoutType {
 // Motor status information
 struct MotorStatus {
     bool enabled;
-    float targetSpeed;     // -100% to +100%
-    float actualSpeed;     // -100% to +100% (if feedback available)
+    int16_t targetPWM;     // -255 to +255
+    int16_t actualPWM;     // -255 to +255 (if feedback available)
     float currentDraw;     // Amps (if available)
     uint32_t errorCount;
     uint32_t lastUpdateMs;
@@ -43,7 +43,7 @@ public:
     // Core motor control
     virtual bool init() = 0;
     virtual void enable(bool en) = 0;
-    virtual void setSpeed(float speedPercent) = 0;  // -100 to +100
+    virtual void setPWM(int16_t pwm) = 0;  // -255 to +255
     virtual void stop() = 0;
     
     // Status and diagnostics  

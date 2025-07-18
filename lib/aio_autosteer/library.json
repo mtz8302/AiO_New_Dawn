@@ -1,0 +1,17 @@
+{
+  "name": "aio_autosteer",
+  "version": "1.0.0",
+  "description": "AiO New Dawn Autosteer Components",
+  "keywords": ["autosteer", "motor", "pid", "control"],
+  "authors": {
+    "name": "AiO New Dawn Team"
+  },
+  "dependencies": [
+    {"name": "aio_system"},
+    {"name": "aio_config"},
+    {"name": "aio_communications"},
+    {"name": "Teensy_ADC"}
+  ],
+  "frameworks": "arduino",
+  "platforms": "teensy"
+}

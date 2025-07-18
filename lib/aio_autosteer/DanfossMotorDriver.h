@@ -30,8 +30,8 @@ public:
         // Initialize status
         status = {
             false,    // enabled
-            0.0f,     // targetSpeed
-            0.0f,     // actualSpeed  
+            0,        // targetPWM
+            0,        // actualPWM  
             0.0f,     // currentDraw
             0,        // errorCount
             0,        // lastUpdateMs
@@ -75,49 +75,49 @@ public:
         if (!en) {
             // Return to center when disabled
             setOutputPWM(CONTROL_OUTPUT, PWM_CENTER);
-            status.targetSpeed = 0.0f;
-            status.actualSpeed = 0.0f;
+            status.targetPWM = 0;
+            status.actualPWM = 0;
         }
         
         LOG_INFO(EventSource::AUTOSTEER, "Danfoss valve %s", en ? "ENABLED" : "DISABLED");
     }
     
-    void setSpeed(float speedPercent) override {
+    void setPWM(int16_t pwm) override {
         if (!status.enabled) {
-            return;  // Ignore speed commands when disabled
+            return;  // Ignore PWM commands when disabled
         }
         
         // Constrain input
-        speedPercent = constrain(speedPercent, -100.0f, 100.0f);
-        status.targetSpeed = speedPercent;
+        pwm = constrain(pwm, -255, 255);
+        status.targetPWM = pwm;
         
-        // Map -100% to +100% speed to 25%-75% PWM duty cycle
-        // -100% = PWM 64 (25%)
-        //    0% = PWM 128 (50%)
-        // +100% = PWM 192 (75%)
-        float scaledSpeed = speedPercent / 100.0f;  // -1.0 to +1.0
-        uint8_t pwmValue = PWM_CENTER + (int16_t)(scaledSpeed * PWM_RANGE);
+        // Map -255 to +255 PWM to 25%-75% PWM duty cycle
+        // -255 = PWM 64 (25%)
+        //    0 = PWM 128 (50%)
+        // +255 = PWM 192 (75%)
+        float scaledPWM = (float)pwm / 255.0f;  // -1.0 to +1.0
+        uint8_t pwmValue = PWM_CENTER + (int16_t)(scaledPWM * PWM_RANGE);
         
         // Apply to output
         setOutputPWM(CONTROL_OUTPUT, pwmValue);
         
-        // For Danfoss, actual speed follows target immediately
-        status.actualSpeed = speedPercent;
+        // For Danfoss, actual PWM follows target immediately
+        status.actualPWM = pwm;
         status.lastUpdateMs = millis();
         
         // Debug logging
         static uint32_t lastDebug = 0;
         if (millis() - lastDebug > 1000) {
             lastDebug = millis();
-            LOG_DEBUG(EventSource::AUTOSTEER, "Danfoss: Speed %.1f%% -> PWM %d (%.1f%% duty)", 
-                     speedPercent, pwmValue, (pwmValue / 255.0f) * 100.0f);
+            LOG_DEBUG(EventSource::AUTOSTEER, "Danfoss PWM: %d -> output %d (%.1f%% duty)", 
+                     pwm, pwmValue, (pwmValue / 255.0f) * 100.0f);
         }
     }
     
     void stop() override {
         setOutputPWM(CONTROL_OUTPUT, PWM_CENTER);
-        status.targetSpeed = 0.0f;
-        status.actualSpeed = 0.0f;
+        status.targetPWM = 0;
+        status.actualPWM = 0;
         status.lastUpdateMs = millis();
     }
     

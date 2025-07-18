@@ -2,7 +2,7 @@
 #define AUTOSTEER_PROCESSOR_H
 
 #include <Arduino.h>
-#include "PIDController.h"
+// PIDController removed - functionality absorbed into AutosteerProcessor
 
 // External pointers
 class ADProcessor;
@@ -86,8 +86,7 @@ private:
     // Motor control
     float currentAngle = 0.0f;           // Current WAS angle
     float actualAngle = 0.0f;            // Ackerman-corrected angle
-    float motorSpeed = 0.0f;             // Current motor speed command
-    PIDController pid;                   // PID controller for steering
+    int16_t motorPWM = 0;                // Current motor PWM command (-255 to +255)
     
     // Watchdog
     uint32_t lastCommandTime = 0;        // Last time we received PGN 254

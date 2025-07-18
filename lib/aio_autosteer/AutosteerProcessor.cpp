@@ -9,7 +9,7 @@
 #include "QNetworkBase.h"
 #include "HardwareManager.h"
 #include "WheelAngleFusion.h"
-#include "MotorDriverDetector.h"
+#include "MotorDriverManager.h"
 #include "KickoutMonitor.h"
 #include <cmath>  // For sin() function
 
@@ -118,10 +118,7 @@ bool AutosteerProcessor::init() {
     adProcessor.setWASOffset(steerSettings.wasOffset);
     adProcessor.setWASCountsPerDegree(steerSettings.steerSensorCounts);
     
-    // Initialize PID controller with loaded Kp value
-    pid.setKp(steerSettings.Kp);
-    pid.setOutputLimit(100.0f);  // Motor speed limit (±100%)
-    LOG_DEBUG(EventSource::AUTOSTEER, "PID controller initialized with Kp=%d", steerSettings.Kp);
+    // PID functionality is now integrated directly in updateMotorControl()
     
     // Register PGN handlers with PGNProcessor
     if (PGNProcessor::instance) {
@@ -285,14 +282,24 @@ void AutosteerProcessor::process() {
         }
     }
     
-    // Check Keya motor slip if steering is active
-    if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN && 
-        steerState == 0 && guidanceActive) {
-        KeyaCANDriver* keya = static_cast<KeyaCANDriver*>(motorPTR);
-        if (keya->checkMotorSlip()) {
-            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Keya motor slip detected");
+    // Check motor status for errors (including CAN connection loss)
+    if (motorPTR) {
+        MotorStatus motorStatus = motorPTR->getStatus();
+        if (motorStatus.hasError && steerState == 0 && guidanceActive) {
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Motor error detected");
             emergencyStop();
             return;  // Skip the rest of this cycle
+        }
+        
+        // Check Keya-specific motor slip
+        if (motorPTR->getType() == MotorDriverType::KEYA_CAN && 
+            steerState == 0 && guidanceActive) {
+            KeyaCANDriver* keya = static_cast<KeyaCANDriver*>(motorPTR);
+            if (keya->checkMotorSlip()) {
+                LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Keya motor slip detected");
+                emergencyStop();
+                return;  // Skip the rest of this cycle
+            }
         }
     }
     
@@ -449,8 +456,8 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     steerConfig.MotorDriverConfig = data[3];
     LOG_INFO(EventSource::AUTOSTEER, "Motor driver config byte: 0x%02X", steerConfig.MotorDriverConfig);
     
-    // Update motor driver detector with new configuration
-    MotorDriverDetector::getInstance()->updateMotorConfig(steerConfig.MotorDriverConfig);
+    // Update motor driver manager with new configuration
+    MotorDriverManager::getInstance()->updateMotorConfig(steerConfig.MotorDriverConfig);
     
     LOG_DEBUG(EventSource::AUTOSTEER, "InvertWAS: %d", steerConfig.InvertWAS);
     LOG_DEBUG(EventSource::AUTOSTEER, "MotorDriveDirection: %d", steerConfig.MotorDriveDirection);
@@ -504,7 +511,7 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     // [5-6] = wasOffset (int16)
     // [7] = ackermanFix
     
-    steerSettings.Kp = data[0];  // Note: V6 doesn't divide by 10 here
+    steerSettings.Kp = data[0];  // Raw byte value from AgOpenGPS
     steerSettings.highPWM = data[1];
     steerSettings.lowPWM = data[2];
     steerSettings.minPWM = data[3];
@@ -521,9 +528,8 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     steerSettings.AckermanFix = (float)data[7] * 0.01f;
     
     
-    // Update PID controller with new Kp
-    pid.setKp(steerSettings.Kp);
-    LOG_DEBUG(EventSource::AUTOSTEER, "PID updated with Kp=%d", steerSettings.Kp);
+    // Kp is used directly in updateMotorControl()
+    LOG_DEBUG(EventSource::AUTOSTEER, "Kp updated to %d", steerSettings.Kp);
     
     // Update ADProcessor with WAS calibration values
     adProcessor.setWASOffset(steerSettings.wasOffset);
@@ -685,7 +691,7 @@ void AutosteerProcessor::sendPGN253() {
     int16_t actualSteerAngle = (int16_t)(actualAngle * 100.0f);  // Actual angle * 100
     int16_t heading = 0;            // Deprecated - sent by GNSS
     int16_t roll = 0;               // Deprecated - sent by GNSS  
-    uint8_t pwmDisplay = (uint8_t)(abs(motorSpeed) * 2.55f);  // Convert % to 0-255
+    uint8_t pwmDisplay = (uint8_t)abs(motorPWM);  // Already in 0-255 range
     
     // Build switch byte
     // Bit 0: work switch (inverted)
@@ -750,10 +756,10 @@ void AutosteerProcessor::updateMotorControl() {
     else if (!shouldBeActive && motorState != MotorState::DISABLED) {
         // Transition: Disable motor
         motorState = MotorState::DISABLED;
-        motorSpeed = 0.0f;
+        motorPWM = 0;
         if (motorPTR) {
             motorPTR->enable(false);
-            motorPTR->setSpeed(0.0f);
+            motorPTR->setPWM(0);
             
             // LOCK output control
             if (motorPTR->getType() == MotorDriverType::KEYA_CAN) {
@@ -819,48 +825,30 @@ void AutosteerProcessor::updateMotorControl() {
             pwmDrive += steerSettings.minPWM;
         } else {
             // Dead zone
-            motorSpeed = 0.0f;
+            motorPWM = 0;
             return;
         }
         
-        // Calculate dynamic PWM limit based on error magnitude
-        int16_t newHighPWM;
-        const float LOW_HIGH_DEGREES = 3.0f;  // 0-3 degree range for scaling
-        
-        if (errorAbs < LOW_HIGH_DEGREES) {
-            // Scale linearly from lowPWM to highPWM based on error (0-3 degrees)
-            float highLowPerDeg = ((float)(steerSettings.highPWM - steerSettings.lowPWM)) / LOW_HIGH_DEGREES;
-            newHighPWM = (errorAbs * highLowPerDeg) + steerSettings.lowPWM;
-        } else {
-            // For errors >= 3 degrees, use full highPWM
-            newHighPWM = steerSettings.highPWM;
+        // Limit the PWM drive to highPWM setting
+        if (pwmDrive > steerSettings.highPWM) {
+            pwmDrive = steerSettings.highPWM;
+        } else if (pwmDrive < -steerSettings.highPWM) {
+            pwmDrive = -steerSettings.highPWM;
         }
         
-        // Limit the PWM drive to the calculated maximum
-        if (pwmDrive > newHighPWM) {
-            pwmDrive = newHighPWM;
-        } else if (pwmDrive < -newHighPWM) {
-            pwmDrive = -newHighPWM;
-        }
-        
-        // Convert to percentage for motor driver (0-100%)
-        motorSpeed = (abs(pwmDrive) / 255.0f) * 100.0f;
-        
-        // Preserve direction
-        if (pwmDrive < 0) {
-            motorSpeed = -motorSpeed;
-        }
+        // Store final PWM value
+        motorPWM = pwmDrive;
         
         // Log the PWM calculation
-        LOG_DEBUG(EventSource::AUTOSTEER, "PWM calc: actual=%.1f° - target=%.1f° = error=%.1f° * Kp=%d = %d, +minPWM=%d, limit=%d, final=%d (%.1f%%)", 
-                 actualAngle, targetAngle, angleError, steerSettings.Kp, pValue, steerSettings.minPWM, newHighPWM, pwmDrive, motorSpeed);
+        LOG_DEBUG(EventSource::AUTOSTEER, "PWM calc: actual=%.1f° - target=%.1f° = error=%.1f° * Kp=%d = %d, +minPWM=%d, limit=%d, final=%d", 
+                 actualAngle, targetAngle, angleError, steerSettings.Kp, pValue, steerSettings.minPWM, steerSettings.highPWM, pwmDrive);
         
-        // Debug log final motor speed periodically
-        static uint32_t lastMotorSpeedLog = 0;
-        if (millis() - lastMotorSpeedLog > 1000 && abs(motorSpeed) > 10.0f) {
-            lastMotorSpeedLog = millis();
-            LOG_DEBUG(EventSource::AUTOSTEER, "Motor speed: %.1f%% (highPWM=%d, pwmDrive=%.1f)", 
-                      motorSpeed, steerSettings.highPWM, pwmDrive);
+        // Debug log final motor PWM periodically
+        static uint32_t lastMotorPWMLog = 0;
+        if (millis() - lastMotorPWMLog > 1000 && abs(motorPWM) > 10) {
+            lastMotorPWMLog = millis();
+            LOG_DEBUG(EventSource::AUTOSTEER, "Motor PWM: %d (highPWM=%d)", 
+                      motorPWM, steerSettings.highPWM);
         }
         
         // Apply soft-start if active
@@ -879,35 +867,35 @@ void AutosteerProcessor::updateMotorControl() {
                     float sineRamp = sin(rampProgress * PI / 2.0f);
                     
                     // Calculate soft-start limit based on lowPWM
-                    float softStartLimit = (steerSettings.lowPWM / 255.0f) * 100.0f * softStartMaxPWM * sineRamp;
+                    int16_t softStartLimit = (int16_t)(steerSettings.lowPWM * softStartMaxPWM * sineRamp);
                     
-                    // Apply limit in direction of motor speed
-                    if (motorSpeed > 0) {
-                        motorSpeed = min(motorSpeed, softStartLimit);
-                    } else if (motorSpeed < 0) {
-                        motorSpeed = max(motorSpeed, -softStartLimit);
+                    // Apply limit in direction of motor PWM
+                    if (motorPWM > 0) {
+                        motorPWM = min(motorPWM, softStartLimit);
+                    } else if (motorPWM < 0) {
+                        motorPWM = max(motorPWM, -softStartLimit);
                     }
                     
-                    softStartRampValue = softStartLimit;
+                    softStartRampValue = (float)softStartLimit;
                     
                     // Debug logging every 50ms during soft-start
                     static uint32_t lastSoftStartDebug = 0;
                     if (millis() - lastSoftStartDebug > 50) {
                         lastSoftStartDebug = millis();
-                        LOG_DEBUG(EventSource::AUTOSTEER, "Soft-start: elapsed=%dms, progress=%.2f, limit=%.1f%%, speed=%.1f%%", 
-                                  elapsed, rampProgress, softStartLimit, motorSpeed);
+                        LOG_DEBUG(EventSource::AUTOSTEER, "Soft-start: elapsed=%dms, progress=%.2f, limit=%d, pwm=%d", 
+                                  elapsed, rampProgress, softStartLimit, motorPWM);
                     }
                 }
             }
     } else {
         // No valid PWM config
-        motorSpeed = 0.0f;
+        motorPWM = 0;
         LOG_ERROR(EventSource::AUTOSTEER, "Invalid PWM configuration");
     }
     
     // Apply motor direction from config
     if (configManager.getMotorDriveDirection()) {
-        motorSpeed = -motorSpeed;  // Invert if configured
+        motorPWM = -motorPWM;  // Invert if configured
     }
     
     // Final PWM limit check - ensure we never exceed highPWM setting
@@ -919,25 +907,8 @@ void AutosteerProcessor::updateMotorControl() {
                   steerSettings.highPWM, steerSettings.lowPWM, steerSettings.minPWM);
     }
     
-    if (steerSettings.highPWM > 0 && steerSettings.highPWM < 255) {
-        float maxMotorSpeed = (steerSettings.highPWM / 255.0f) * 100.0f;
-        float originalSpeed = motorSpeed;
-        motorSpeed = constrain(motorSpeed, -maxMotorSpeed, maxMotorSpeed);
-        
-        // Log only if we hit the limit
-        if (abs(originalSpeed) > maxMotorSpeed) {
-            LOG_INFO(EventSource::AUTOSTEER, "PWM LIMITED: %.1f%% -> %.1f%% (max=%.1f%%, highPWM=%d)", 
-                     originalSpeed, motorSpeed, maxMotorSpeed, steerSettings.highPWM);
-        }
-    } else {
-        // Log why limiting is not applied
-        static bool loggedNoLimit = false;
-        if (!loggedNoLimit && abs(motorSpeed) > 50.0f) {
-            loggedNoLimit = true;
-            LOG_WARNING(EventSource::AUTOSTEER, "PWM limiting NOT active: highPWM=%d (must be 1-254)", 
-                        steerSettings.highPWM);
-        }
-    }
+    // Motor speed is now properly scaled to respect highPWM limit
+    // No additional limiting needed here since we scale by newHighPWM above
     
     
     // Send to motor
@@ -945,7 +916,7 @@ void AutosteerProcessor::updateMotorControl() {
         // Only enable motor if not in disabled state
         if (motorState != MotorState::DISABLED) {
             motorPTR->enable(true);
-            motorPTR->setSpeed(motorSpeed);
+            motorPTR->setPWM(motorPWM);
         }
         
         // LOCK output control
@@ -1008,9 +979,9 @@ void AutosteerProcessor::emergencyStop() {
     motorState = MotorState::DISABLED;
     
     // Disable motor immediately
-    motorSpeed = 0.0f;
+    motorPWM = 0;
     if (motorPTR) {
-        motorPTR->setSpeed(0.0f);
+        motorPTR->setPWM(0);
         motorPTR->enable(false);
         
         // Ensure LOCK is OFF on kickout

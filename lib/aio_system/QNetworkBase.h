@@ -69,6 +69,9 @@ public:
     static void getMACAddress(uint8_t mac[6]) {
         Ethernet.macAddress(mac);
     }
+    
+    // PGN 201 handler for subnet changes
+    static void handlePGN201(uint8_t pgn, const uint8_t* data, size_t len);
 };
 
 // Global UDP instances no longer needed - using AsyncUDP

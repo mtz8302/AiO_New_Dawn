@@ -1,0 +1,14 @@
+{
+  "name": "aio_config",
+  "version": "1.0.0",
+  "description": "AiO New Dawn Configuration Management",
+  "keywords": ["config", "eeprom", "hardware"],
+  "authors": {
+    "name": "AiO New Dawn Team"
+  },
+  "dependencies": [
+    {"name": "aio_system"}
+  ],
+  "frameworks": "arduino",
+  "platforms": "teensy"
+}

@@ -12,7 +12,7 @@ private:
     FlexCAN_T4<CAN3, RX_SIZE_256, TX_SIZE_256>* can3;
     
     bool enabled = false;
-    float targetSpeed = 0.0f;
+    int16_t targetPWM = 0;
     uint32_t lastSendTime = 0;
     
     // Heartbeat-based feedback (from 0x07000001)
@@ -52,18 +52,18 @@ public:
         enabled = en;
     }
     
-    void setSpeed(float percent) override {
-        float newSpeed = constrain(percent, -100.0f, 100.0f);
+    void setPWM(int16_t pwm) override {
+        pwm = constrain(pwm, -255, 255);
         
         
-        targetSpeed = newSpeed;
-        // For a 100 RPM motor: -100% to +100% = -100 RPM to +100 RPM
+        targetPWM = pwm;
+        // Map PWM to RPM: 255 PWM = 100 RPM
         // The CAN command multiplies by 10, so -1000 to +1000 = -100 RPM to +100 RPM
-        commandedRPM = targetSpeed;  // 100% = 100 RPM
+        commandedRPM = (float)pwm * 100.0f / 255.0f;  // 255 PWM = 100 RPM
     }
     
     void stop() override {
-        targetSpeed = 0.0f;
+        targetPWM = 0;
     }
     
     void process() override {
@@ -101,7 +101,7 @@ public:
                 case SEND_SPEED:
                     {
                         // Send speed command
-                        int32_t speedValue = (int32_t)(targetSpeed * 10.0f);  // -1000 to +1000 as 32-bit
+                        int32_t speedValue = (int32_t)(commandedRPM * 10.0f);  // -1000 to +1000 as 32-bit
                         msg.buf[0] = 0x23;
                         msg.buf[1] = 0x00;  // Speed command
                         msg.buf[2] = 0x20;
@@ -154,10 +154,13 @@ public:
     MotorStatus getStatus() const override {
         MotorStatus status;
         status.enabled = enabled;
-        status.targetSpeed = targetSpeed;
-        status.actualSpeed = heartbeatValid ? (actualRPM / 100.0f * 100.0f) : targetSpeed;
+        status.targetPWM = targetPWM;
+        status.actualPWM = heartbeatValid ? (int16_t)(actualRPM * 255.0f / 100.0f) : targetPWM;
         status.currentDraw = 0.0f;
-        status.hasError = (motorErrorCode != 0 && motorErrorCode != 0x4001);  // 0x4001 = normal
+        
+        // Simple: no heartbeat = error
+        status.hasError = !heartbeatValid;
+        
         return status;
     }
     
@@ -266,6 +269,11 @@ private:
                 // Extract error code (high byte first)
                 motorErrorCode = (uint16_t)((rxMsg.buf[6] << 8) | rxMsg.buf[7]);
                 
+                // Log when connection is restored
+                if (!heartbeatValid) {
+                    LOG_INFO(EventSource::AUTOSTEER, "Keya CAN connection restored");
+                }
+                
                 heartbeatValid = true;
                 lastHeartbeat = millis();
                 
@@ -275,6 +283,7 @@ private:
         // Invalidate heartbeat if not received for 500ms
         if (heartbeatValid && millis() - lastHeartbeat > 500) {
             heartbeatValid = false;
+            LOG_ERROR(EventSource::AUTOSTEER, "Keya CAN connection lost - no heartbeat for 500ms");
         }
     }
     
