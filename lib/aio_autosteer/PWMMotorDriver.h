@@ -34,7 +34,7 @@ public:
     // MotorDriverInterface implementation
     bool init() override;
     void enable(bool en) override;
-    void setSpeed(float speedPercent) override;
+    void setPWM(int16_t pwm) override;
     void stop() override;
     
     MotorStatus getStatus() const override { return status; }

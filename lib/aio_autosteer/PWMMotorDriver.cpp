@@ -12,8 +12,8 @@ PWMMotorDriver::PWMMotorDriver(MotorDriverType type, uint8_t pwm1, uint8_t pwm2,
     // Initialize status
     status = {
         false,    // enabled
-        0.0f,     // targetSpeed
-        0.0f,     // actualSpeed  
+        0,        // targetPWM
+        0,        // actualPWM  
         0.0f,     // currentDraw
         0,        // errorCount
         0,        // lastUpdateMs
@@ -83,33 +83,34 @@ void PWMMotorDriver::enable(bool en) {
         analogWrite(pwm1Pin, 0);
         analogWrite(pwm2Pin, 0);
         
-        status.targetSpeed = 0.0f;
-        status.actualSpeed = 0.0f;
+        status.targetPWM = 0;
+        status.actualPWM = 0;
     }
     
 }
 
-void PWMMotorDriver::setSpeed(float speedPercent) {
+void PWMMotorDriver::setPWM(int16_t pwm) {
     if (!status.enabled) {
-        return;  // Ignore speed commands when disabled
+        return;  // Ignore PWM commands when disabled
     }
     
     // Constrain to valid range
-    speedPercent = constrain(speedPercent, -100.0f, 100.0f);
-    status.targetSpeed = speedPercent;
+    pwm = constrain(pwm, -255, 255);
+    status.targetPWM = pwm;
     
     // DRV8701 complementary PWM mode: PWM1 = LEFT, PWM2 = RIGHT
     // Inactive pin is set to 0, active pin gets PWM value (0-256)
     // Note: On Teensy, analogWrite(pin, 256) puts the pin in Hi-Z mode
     
-    uint16_t pwmValue = (uint16_t)(abs(speedPercent) * 256.0f / 100.0f);
-    pwmValue = constrain(pwmValue, 0, 256);
+    uint16_t pwmValue = abs(pwm);
+    // Map 0-255 to 0-256 for Teensy (256 = Hi-Z)
+    if (pwmValue == 255) pwmValue = 256;
     
-    if (speedPercent < 0) {
+    if (pwm < 0) {
         // LEFT: PWM1 active, PWM2 low
         analogWrite(pwm1Pin, pwmValue);     // PWM1 active for LEFT (0-256)
         analogWrite(pwm2Pin, 0);            // PWM2 LOW
-    } else if (speedPercent > 0) {
+    } else if (pwm > 0) {
         // RIGHT: PWM2 active, PWM1 low
         analogWrite(pwm1Pin, 0);            // PWM1 LOW
         analogWrite(pwm2Pin, pwmValue);     // PWM2 active for RIGHT (0-256)
@@ -124,21 +125,21 @@ void PWMMotorDriver::setSpeed(float speedPercent) {
     if (millis() - lastDebug > 1000) {
         lastDebug = millis();
         if (hasCurrentSense) {
-            LOG_DEBUG(EventSource::AUTOSTEER, "Speed: %.1f%% -> PWM1=%d, PWM2=%d, Current: %.2fA", 
-                     speedPercent, 
-                     speedPercent < 0 ? pwmValue : 0,
-                     speedPercent > 0 ? pwmValue : 0,
+            LOG_DEBUG(EventSource::AUTOSTEER, "PWM: %d -> PWM1=%d, PWM2=%d, Current: %.2fA", 
+                     pwm, 
+                     pwm < 0 ? pwmValue : 0,
+                     pwm > 0 ? pwmValue : 0,
                      getCurrent());
         } else {
-            LOG_DEBUG(EventSource::AUTOSTEER, "Speed: %.1f%% -> PWM1=%d, PWM2=%d", 
-                     speedPercent, 
-                     speedPercent < 0 ? pwmValue : 0,
-                     speedPercent > 0 ? pwmValue : 0);
+            LOG_DEBUG(EventSource::AUTOSTEER, "PWM: %d -> PWM1=%d, PWM2=%d", 
+                     pwm, 
+                     pwm < 0 ? pwmValue : 0,
+                     pwm > 0 ? pwmValue : 0);
         }
     }
     
-    // For PWM motors, actual speed follows target immediately
-    status.actualSpeed = speedPercent;
+    // For PWM motors, actual PWM follows target immediately
+    status.actualPWM = pwm;
     status.lastUpdateMs = millis();
 }
 
@@ -147,8 +148,8 @@ void PWMMotorDriver::stop() {
     analogWrite(pwm1Pin, 0);
     analogWrite(pwm2Pin, 0);
     
-    status.targetSpeed = 0.0f;
-    status.actualSpeed = 0.0f;
+    status.targetPWM = 0;
+    status.actualPWM = 0;
     status.lastUpdateMs = millis();
 }
 

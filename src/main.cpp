@@ -15,7 +15,7 @@
 #include "ADProcessor.h"
 #include "PWMProcessor.h"
 #include "MotorDriverInterface.h"
-#include "MotorDriverFactory.h"
+#include "MotorDriverManager.h"
 #include "CANGlobals.h"
 #include "AutosteerProcessor.h"
 #include "KeyaCANDriver.h"
@@ -250,8 +250,7 @@ void setup()
   LOG_INFO(EventSource::SYSTEM, "NAVProcessor initialized");
 
   // Initialize Motor Driver
-  MotorDriverType detectedType = MotorDriverFactory::detectMotorType(&canManager);
-  motorPTR = MotorDriverFactory::createMotorDriver(detectedType, &hardwareManager, &canManager);
+  motorPTR = MotorDriverManager::getInstance()->detectAndCreateMotorDriver(&hardwareManager, &canManager);
   
   if (motorPTR && motorPTR->init()) {
     LOG_INFO(EventSource::SYSTEM, "Motor driver initialized");
