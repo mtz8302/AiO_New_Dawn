@@ -6,6 +6,7 @@
 #include <EEPROM.h>
 #include "EEPROMLayout.h"
 #include "EventLogger.h"
+#include "PGNProcessor.h"
 
 using namespace qindesign::network;
 
@@ -92,9 +93,94 @@ void QNetworkBase::init() {
     } else {
         Serial.print("\r\n- ERROR: No Ethernet link detected!\r\n");
     }
+    
+    // Register PGN 201 handler for subnet changes
+    if (PGNProcessor::instance) {
+        PGNProcessor::instance->registerCallback(201, handlePGN201, "QNetworkBase");
+        LOG_INFO(EventSource::NETWORK, "Registered PGN 201 handler for subnet changes");
+    }
 }
 
 // Initialize UDP services - handled by AsyncUDPHandler
 void QNetworkBase::udpSetup() {
     // UDP setup is now handled by AsyncUDPHandler::init()
+}
+
+// Handle PGN 201 - Subnet change request
+void QNetworkBase::handlePGN201(uint8_t pgn, const uint8_t* data, size_t len) {
+    // PGN 201 format after header removal:
+    // [0] = 201 (magic byte)
+    // [1] = 201 (magic byte)
+    // [2] = new subnet octet 1
+    // [3] = new subnet octet 2
+    // [4] = new subnet octet 3
+    
+    if (pgn != 201) {
+        return;
+    }
+
+    // Verify packet length (need at least 5 bytes after header)
+    if (len < 5) {
+        LOG_ERROR(EventSource::NETWORK, "PGN 201 packet too short: %d bytes", len);
+        return;
+    }
+    
+    // Check magic bytes for safety
+    if (data[0] != 201 || data[1] != 201) {
+        LOG_ERROR(EventSource::NETWORK, "PGN 201 invalid magic bytes: %d,%d", 
+                  data[0], data[1]);
+        return;
+    }
+    
+    // Extract new subnet
+    uint8_t newSubnet[3] = { data[2], data[3], data[4] };
+    
+    // Check if subnet actually changed
+    if (netConfig.currentIP[0] == newSubnet[0] && 
+        netConfig.currentIP[1] == newSubnet[1] && 
+        netConfig.currentIP[2] == newSubnet[2]) {
+        LOG_INFO(EventSource::NETWORK, "Subnet unchanged (%d.%d.%d.x), ignoring PGN 201",
+                 newSubnet[0], newSubnet[1], newSubnet[2]);
+        return;
+    }
+    
+    LOG_INFO(EventSource::NETWORK, "IP change requested via PGN 201: %d.%d.%d.%d -> %d.%d.%d.%d", 
+             netConfig.currentIP[0], netConfig.currentIP[1], 
+             netConfig.currentIP[2], netConfig.currentIP[3],
+             newSubnet[0], newSubnet[1], newSubnet[2], netConfig.currentIP[3]);
+    
+    // Update subnet (keep last octet)
+    netConfig.currentIP[0] = newSubnet[0];
+    netConfig.currentIP[1] = newSubnet[1];
+    netConfig.currentIP[2] = newSubnet[2];
+    
+    // Update ipAddress array too
+    netConfig.ipAddress[0] = newSubnet[0];
+    netConfig.ipAddress[1] = newSubnet[1];
+    netConfig.ipAddress[2] = newSubnet[2];
+    
+    // Update gateway to .1
+    netConfig.gateway[0] = newSubnet[0];
+    netConfig.gateway[1] = newSubnet[1];
+    netConfig.gateway[2] = newSubnet[2];
+    netConfig.gateway[3] = 1;
+    
+    // Update broadcast to .255
+    netConfig.broadcastIP[0] = newSubnet[0];
+    netConfig.broadcastIP[1] = newSubnet[1];
+    netConfig.broadcastIP[2] = newSubnet[2];
+    netConfig.broadcastIP[3] = 255;
+    
+    // Update destIP too
+    netConfig.destIP[0] = newSubnet[0];
+    netConfig.destIP[1] = newSubnet[1];
+    netConfig.destIP[2] = newSubnet[2];
+    netConfig.destIP[3] = 255;
+    
+    LOG_WARNING(EventSource::NETWORK, "Saving network config to EEPROM and rebooting...");
+    
+    // Save to EEPROM
+    save_current_net();
+    delay(20);
+    SCB_AIRCR = 0x05FA0004; // Teensy Reset
 }

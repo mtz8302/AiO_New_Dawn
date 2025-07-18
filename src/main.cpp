@@ -21,7 +21,7 @@
 #include "KeyaCANDriver.h"
 #include "LEDManagerFSM.h"
 #include "MachineProcessor.h"
-#include "SubnetManager.h"
+// SubnetManager functionality moved to QNetworkBase
 #include "EventLogger.h"
 #include "CommandHandler.h"
 #include "PGNProcessor.h"
@@ -76,7 +76,11 @@ void setup()
   Serial.print(" ===\r\n");
   Serial.print("Initializing subsystems...");
 
-  // Network and communication setup FIRST
+  // Initialize PGNProcessor first (needed by QNetworkBase)
+  PGNProcessor::init();
+  Serial.print("\r\n- PGNProcessor initialized\r\n");
+
+  // Network and communication setup
   QNetworkBase::init();
   
   // Wait for network speed to stabilize (some switches negotiate in steps)
@@ -128,10 +132,6 @@ void setup()
   EventLogger::init();
   Serial.print("\r\n- EventLogger initialized (startup mode)\r\n");
   delay(10);  // Small delay to ensure EventLogger is fully initialized
-  
-  // Initialize PGNProcessor early (needed by many modules)
-  PGNProcessor::init();
-  LOG_INFO(EventSource::SYSTEM, "PGNProcessor initialized");
   
   // Initialize RTCMProcessor
   RTCMProcessor::init();
@@ -279,12 +279,7 @@ void setup()
     LOG_ERROR(EventSource::SYSTEM, "MachineProcessor FAILED");
   }
 
-  // Initialize SubnetManager for PGN 201 handling
-  if (SubnetManager::init()) {
-    LOG_INFO(EventSource::SYSTEM, "SubnetManager initialized");
-  } else {
-    LOG_ERROR(EventSource::SYSTEM, "SubnetManager FAILED");
-  }
+  // PGN 201 handling is now done by QNetworkBase
 
   // Initialize CommandHandler
   CommandHandler::init();

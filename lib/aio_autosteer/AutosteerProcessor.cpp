@@ -282,14 +282,24 @@ void AutosteerProcessor::process() {
         }
     }
     
-    // Check Keya motor slip if steering is active
-    if (motorPTR && motorPTR->getType() == MotorDriverType::KEYA_CAN && 
-        steerState == 0 && guidanceActive) {
-        KeyaCANDriver* keya = static_cast<KeyaCANDriver*>(motorPTR);
-        if (keya->checkMotorSlip()) {
-            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Keya motor slip detected");
+    // Check motor status for errors (including CAN connection loss)
+    if (motorPTR) {
+        MotorStatus motorStatus = motorPTR->getStatus();
+        if (motorStatus.hasError && steerState == 0 && guidanceActive) {
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Motor error detected");
             emergencyStop();
             return;  // Skip the rest of this cycle
+        }
+        
+        // Check Keya-specific motor slip
+        if (motorPTR->getType() == MotorDriverType::KEYA_CAN && 
+            steerState == 0 && guidanceActive) {
+            KeyaCANDriver* keya = static_cast<KeyaCANDriver*>(motorPTR);
+            if (keya->checkMotorSlip()) {
+                LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Keya motor slip detected");
+                emergencyStop();
+                return;  // Skip the rest of this cycle
+            }
         }
     }
     

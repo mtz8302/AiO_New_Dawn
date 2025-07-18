@@ -157,7 +157,10 @@ public:
         status.targetPWM = targetPWM;
         status.actualPWM = heartbeatValid ? (int16_t)(actualRPM * 255.0f / 100.0f) : targetPWM;
         status.currentDraw = 0.0f;
-        status.hasError = (motorErrorCode != 0 && motorErrorCode != 0x4001);  // 0x4001 = normal
+        
+        // Simple: no heartbeat = error
+        status.hasError = !heartbeatValid;
+        
         return status;
     }
     
@@ -266,6 +269,11 @@ private:
                 // Extract error code (high byte first)
                 motorErrorCode = (uint16_t)((rxMsg.buf[6] << 8) | rxMsg.buf[7]);
                 
+                // Log when connection is restored
+                if (!heartbeatValid) {
+                    LOG_INFO(EventSource::AUTOSTEER, "Keya CAN connection restored");
+                }
+                
                 heartbeatValid = true;
                 lastHeartbeat = millis();
                 
@@ -275,6 +283,7 @@ private:
         // Invalidate heartbeat if not received for 500ms
         if (heartbeatValid && millis() - lastHeartbeat > 500) {
             heartbeatValid = false;
+            LOG_ERROR(EventSource::AUTOSTEER, "Keya CAN connection lost - no heartbeat for 500ms");
         }
     }
     
