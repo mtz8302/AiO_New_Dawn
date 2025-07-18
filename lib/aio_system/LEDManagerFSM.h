@@ -53,9 +53,10 @@ public:
     
     // IMU/INS LED states
     enum IMUState {
-        IMU_NOT_DETECTED,    // No IMU or INS detected - Red
-        IMU_DETECTED,        // IMU detected or INS aligning - Amber
-        IMU_VALID            // IMU providing data or INS aligned - Green
+        IMU_OFF,             // No data on serial port - LED OFF
+        IMU_INVALID_DATA,    // Data received but not valid IMU format - Red
+        IMU_DETECTED,        // IMU detected but not yet providing valid data - Amber
+        IMU_VALID            // IMU providing valid data - Green
     };
     
     LEDManagerFSM();

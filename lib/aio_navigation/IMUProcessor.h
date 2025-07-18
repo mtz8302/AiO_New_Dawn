@@ -47,6 +47,10 @@ private:
 
     // Timing
     elapsedMillis timeSinceLastPacket;
+    
+    // Serial data tracking
+    uint32_t lastSerialDataTime = 0;
+    bool serialDataReceived = false;
 
     // Private methods
     bool initBNO085();
@@ -77,6 +81,9 @@ public:
     const char *getIMUTypeName() const;
     uint32_t getTimeSinceLastPacket() const { return timeSinceLastPacket; }
 
+    // Serial data status
+    bool hasSerialData() const { return serialDataReceived && (millis() - lastSerialDataTime < 1000); }
+    
     // Debug
     void printStatus();
     void printCurrentData();

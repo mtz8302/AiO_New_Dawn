@@ -179,6 +179,23 @@ bool IMUProcessor::initTM171()
 
 void IMUProcessor::process()
 {
+    // If no IMU detected, still check for serial data to detect invalid data
+    if (!isInitialized && serialMgr && imuSerial)
+    {
+        // Check if any data is coming in on the IMU serial port
+        if (imuSerial->available())
+        {
+            // Read and discard the data, but mark that we received something
+            while (imuSerial->available())
+            {
+                imuSerial->read();
+                serialDataReceived = true;
+                lastSerialDataTime = millis();
+            }
+        }
+        return;
+    }
+    
     if (!isInitialized)
         return;
 
@@ -206,6 +223,8 @@ void IMUProcessor::processBNO085Data()
     while (imuSerial->available())
     {
         uint8_t byte = imuSerial->read();
+        serialDataReceived = true;
+        lastSerialDataTime = millis();
         bnoParser->processByte(byte);
     }
     
@@ -240,6 +259,8 @@ void IMUProcessor::processTM171Data()
     while (imuSerial->available())
     {
         uint8_t byte = imuSerial->read();
+        serialDataReceived = true;
+        lastSerialDataTime = millis();
         tm171Parser->processByte(byte);
 
         // Check if we have new valid data

@@ -57,7 +57,8 @@ const LEDManagerFSM::SteerStateMap LEDManagerFSM::steerStateMap[] = {
 };
 
 const LEDManagerFSM::IMUStateMap LEDManagerFSM::imuStateMap[] = {
-    {IMU_NOT_DETECTED,  RED,    SOLID},
+    {IMU_OFF,           OFF,    SOLID},
+    {IMU_INVALID_DATA,  RED,    SOLID},
     {IMU_DETECTED,      YELLOW, SOLID},
     {IMU_VALID,         GREEN,  SOLID}
 };
@@ -68,7 +69,7 @@ LEDManagerFSM::LEDManagerFSM() :
     powerState(PWR_BOOTING),
     gpsState(GPS_NO_DATA),
     steerState(STEER_READY),
-    imuState(IMU_NOT_DETECTED) {
+    imuState(IMU_OFF) {
     
     // Initialize LED states
     for (int i = 0; i < 4; i++) {
@@ -414,9 +415,12 @@ void LEDManagerFSM::updateAll() {
         } else {
             newIMUState = IMU_DETECTED;   // Amber for aligning
         }
+    } else if (imuProcessor.hasSerialData()) {
+        // Data coming in but not recognized as valid IMU format
+        newIMUState = IMU_INVALID_DATA;  // Red - invalid data
     } else {
-        // No IMU/INS detected
-        newIMUState = IMU_NOT_DETECTED;  // Red
+        // No data on serial port - LED OFF
+        newIMUState = IMU_OFF;
     }
     transitionIMUState(newIMUState);
     
