@@ -115,6 +115,11 @@ private:
     // Link state tracking
     bool linkWasDown = false;               // Track if link was down
     
+    // Motor config change tracking
+    uint8_t previousMotorConfig = 0xFF;     // Previous motor config byte
+    int8_t previousCytronDriver = -1;       // Previous Cytron bit state
+    bool motorConfigInitialized = false;    // Track if we've initialized from EEPROM
+    
     
 public:
     // Singleton access

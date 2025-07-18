@@ -152,12 +152,7 @@ bool MotorDriverManager::performDetection(bool keyaHeartbeatDetected) {
 void MotorDriverManager::updateMotorConfig(uint8_t configByte) {
     if (motorConfigByte != configByte) {
         motorConfigByte = configByte;
-        LOG_INFO(EventSource::AUTOSTEER, "Motor config updated to 0x%02X - restart required for changes to take effect", configByte);
-        
-        // Save to EEPROM
-        extern ConfigManager configManager;
-        configManager.setMotorDriverConfig(configByte);
-        configManager.saveSteerConfig();
+        // AutosteerProcessor handles the logging and EEPROM save
     }
 }
 

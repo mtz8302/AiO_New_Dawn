@@ -83,9 +83,17 @@ bool AutosteerProcessor::init() {
     steerConfig.PressureSensor = configManager.getPressureSensor();
     steerConfig.PulseCountMax = configManager.getPulseCountMax();
     steerConfig.MinSpeed = configManager.getMinSpeed();
+    steerConfig.MotorDriverConfig = configManager.getMotorDriverConfig();
     LOG_DEBUG(EventSource::AUTOSTEER, "Loaded steer config from EEPROM: Pressure=%s, PulseMax=%d, RelayActive=%s", 
               steerConfig.PressureSensor ? "Yes" : "No", steerConfig.PulseCountMax,
               steerConfig.IsRelayActiveHigh ? "HIGH" : "LOW");
+    
+    // Initialize motor config tracking from EEPROM values
+    previousMotorConfig = steerConfig.MotorDriverConfig;
+    previousCytronDriver = steerConfig.CytronDriver ? 1 : 0;
+    motorConfigInitialized = true;
+    LOG_INFO(EventSource::AUTOSTEER, "Motor config tracking initialized: Config=0x%02X, Cytron=%d", 
+             previousMotorConfig, previousCytronDriver);
     
     // Initialize Virtual WAS if enabled
     if (configManager.getINSUseFusion()) {
@@ -217,12 +225,38 @@ void AutosteerProcessor::process() {
         wheelAngleFusionPtr->update(dt);
     }
     
-    // Read button state with debouncing
-    static bool lastButtonReading = HIGH;
-    bool buttonReading = digitalRead(2);  // HIGH when not pressed, LOW when pressed
+    // === BUTTON/SWITCH LOGIC ===
+    if (steerConfig.SteerButton || steerConfig.SteerSwitch) {
+        if (steerConfig.SteerButton) {
+            // BUTTON MODE - Toggle on press
+            static bool lastButtonReading = HIGH;
+            bool buttonReading = adProcessor.isSteerSwitchOn() ? LOW : HIGH;  // Convert to active low
+            
+            if (buttonReading == LOW && lastButtonReading == HIGH) {
+                // Button was just pressed - toggle state
+                steerState = !steerState;
+                LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via button press", 
+                         steerState == 0 ? "ARMED" : "DISARMED");
+                // Pulse blue LED for button press
+                ledManagerFSM.pulseButton();
+            }
+            lastButtonReading = buttonReading;
+        } else {
+            // SWITCH MODE - Follow switch position
+            bool switchOn = adProcessor.isSteerSwitchOn();
+            static bool lastSwitchState = false;
+            
+            if (switchOn != lastSwitchState) {
+                // Switch state changed
+                steerState = switchOn ? 0 : 1;  // 0 = armed, 1 = disarmed
+                LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via switch", 
+                         steerState == 0 ? "ARMED" : "DISARMED");
+                lastSwitchState = switchOn;
+            }
+        }
+    }
     
-    // === BUTTON LOGIC ===
-    // 1. Check if guidance status changed from AgOpenGPS
+    // Check if guidance status changed from AgOpenGPS
     if (guidanceStatusChanged) {
         if (guidanceActive) {
             // Guidance turned ON in AgOpenGPS
@@ -232,9 +266,12 @@ void AutosteerProcessor::process() {
         guidanceStatusChanged = false;  // Clear flag
     }
     
-    // 2. If AgOpenGPS has stopped steering, turn off after delay
+    // If AgOpenGPS has stopped steering, turn off after delay
+    // BUT only if not using a physical switch in switch mode
     static int switchCounter = 0;
-    if (steerState == 0 && !guidanceActive) {
+    bool physicalSwitchActive = steerConfig.SteerSwitch && adProcessor.isSteerSwitchOn();
+    
+    if (steerState == 0 && !guidanceActive && !physicalSwitchActive) {
         if (switchCounter++ > 30) {  // 30 * 10ms = 300ms delay
             steerState = 1;
             switchCounter = 0;
@@ -243,17 +280,6 @@ void AutosteerProcessor::process() {
     } else {
         switchCounter = 0;
     }
-    
-    // 3. Physical button press toggles state
-    if (buttonReading == LOW && lastButtonReading == HIGH) {
-        // Button was just pressed
-        steerState = !steerState;
-        LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via physical button", 
-                 steerState == 0 ? "ARMED" : "DISARMED");
-        // Pulse blue LED for button press
-        ledManagerFSM.pulseButton();
-    }
-    lastButtonReading = buttonReading;
     
     // Check for work switch changes and log them
     static bool lastWorkState = false;
@@ -406,7 +432,7 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     // PGN 251 - Steer Config
     // Expected length is 14 bytes total, but we get data after header
     
-    LOG_INFO(EventSource::AUTOSTEER, "PGN 251 (Steer Config) received, %d bytes", len);
+    LOG_DEBUG(EventSource::AUTOSTEER, "PGN 251 (Steer Config) received, %d bytes", len);
     
     // Always show debug info first, regardless of packet validity
     char debugMsg[256];
@@ -416,7 +442,7 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
         snprintf(buf, sizeof(buf), " [%d]=0x%02X(%d)", i, data[i], data[i]);
         strncat(debugMsg, buf, sizeof(debugMsg) - strlen(debugMsg) - 1);
     }
-    LOG_INFO(EventSource::AUTOSTEER, "%s", debugMsg);
+    LOG_DEBUG(EventSource::AUTOSTEER, "%s", debugMsg);
     
     if (len < 4) {  // Minimum needed for basic config
         LOG_ERROR(EventSource::AUTOSTEER, "PGN 251 too short! Got %d bytes", len);
@@ -454,7 +480,12 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     // Message structure: Header(5) + Data(8) + CRC(1) = 14 bytes total
     // Byte 8 of the message = data[3] (since data array starts after 5-byte header)
     steerConfig.MotorDriverConfig = data[3];
-    LOG_INFO(EventSource::AUTOSTEER, "Motor driver config byte: 0x%02X", steerConfig.MotorDriverConfig);
+    
+    // Workaround: Clear Cytron bit when Danfoss is selected
+    // AgOpenGPS doesn't always clear this bit when switching to Danfoss
+    if (steerConfig.IsDanfoss || (steerConfig.MotorDriverConfig & 0x01)) {
+        steerConfig.CytronDriver = false;
+    }
     
     // Update motor driver manager with new configuration
     MotorDriverManager::getInstance()->updateMotorConfig(steerConfig.MotorDriverConfig);
@@ -466,16 +497,35 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     LOG_DEBUG(EventSource::AUTOSTEER, "PulseCountMax: %d", steerConfig.PulseCountMax);
     LOG_DEBUG(EventSource::AUTOSTEER, "MinSpeed: %d", steerConfig.MinSpeed);
     
+    // Determine motor type from config
+    const char* motorType = "Unknown";
+    switch (steerConfig.MotorDriverConfig) {
+        case 0x00: motorType = steerConfig.CytronDriver ? "Cytron IBT2" : "DRV8701"; break;
+        case 0x01: motorType = "Danfoss"; break;
+        case 0x02: motorType = steerConfig.CytronDriver ? "Cytron IBT2" : "DRV8701"; break;
+        case 0x03: motorType = "Danfoss"; break;
+        case 0x04: motorType = steerConfig.CytronDriver ? "Cytron IBT2" : "DRV8701"; break;
+        default: motorType = "Unknown"; break;
+    }
+    
+    // Determine steer enable type
+    const char* steerType = "None";
+    if (steerConfig.SteerButton) {
+        steerType = "Button";
+    } else if (steerConfig.SteerSwitch) {
+        steerType = "Switch";
+    }
+    
     // Log all settings at INFO level in a single message so users see everything
-    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Pressure=%s(max=%d) MotorCfg=0x%02X", 
+    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Pressure=%s(max=%d) MotorType=%s", 
              steerConfig.InvertWAS ? "Inv" : "Norm",
              steerConfig.MotorDriveDirection ? "Rev" : "Norm",
              steerConfig.MinSpeed,
-             steerConfig.SteerSwitch ? "On" : "Off",
+             steerType,
              steerConfig.ShaftEncoder ? "Yes" : "No",
              steerConfig.PressureSensor ? "Yes" : "No",
              steerConfig.PulseCountMax,
-             steerConfig.MotorDriverConfig);
+             motorType);
     
     // Save config to EEPROM
     configManager.setInvertWAS(steerConfig.InvertWAS);
@@ -487,8 +537,42 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     configManager.setPressureSensor(steerConfig.PressureSensor);
     configManager.setPulseCountMax(steerConfig.PulseCountMax);
     configManager.setMinSpeed(steerConfig.MinSpeed);
+    configManager.setMotorDriverConfig(steerConfig.MotorDriverConfig);
+    
+    // Check for motor type changes
+    bool motorTypeChanged = false;
+    int8_t currentCytronDriver = steerConfig.CytronDriver ? 1 : 0;
+    
+    // Only check for changes if we've initialized from EEPROM
+    if (motorConfigInitialized) {
+        LOG_DEBUG(EventSource::AUTOSTEER, "Current motor state: Config=0x%02X, Cytron=%d (previous: Config=0x%02X, Cytron=%d)",
+                  steerConfig.MotorDriverConfig, currentCytronDriver,
+                  previousMotorConfig, previousCytronDriver);
+        
+        if (previousMotorConfig != steerConfig.MotorDriverConfig ||
+            previousCytronDriver != currentCytronDriver) {
+            LOG_INFO(EventSource::AUTOSTEER, "Motor change detected: Config 0x%02X->0x%02X, Cytron %d->%d",
+                     previousMotorConfig, steerConfig.MotorDriverConfig,
+                     previousCytronDriver, currentCytronDriver);
+            motorTypeChanged = true;
+        }
+    } else {
+        // First PGN 251 received, but we should already be initialized from init()
+        LOG_WARNING(EventSource::AUTOSTEER, "Motor config not initialized - this shouldn't happen!");
+    }
+    
+    // Update tracked values
+    previousMotorConfig = steerConfig.MotorDriverConfig;
+    previousCytronDriver = currentCytronDriver;
+    
     configManager.saveSteerConfig();
     LOG_INFO(EventSource::AUTOSTEER, "Steer config saved to EEPROM");
+    
+    if (motorTypeChanged) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Motor type changed - rebooting in 2 seconds...");
+        delay(2000);
+        SCB_AIRCR = 0x05FA0004; // Teensy Reset
+    }
 }
 
 void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, size_t len) {
