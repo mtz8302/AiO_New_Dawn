@@ -118,10 +118,7 @@ bool AutosteerProcessor::init() {
     adProcessor.setWASOffset(steerSettings.wasOffset);
     adProcessor.setWASCountsPerDegree(steerSettings.steerSensorCounts);
     
-    // Initialize PID controller with loaded Kp value
-    pid.setKp(steerSettings.Kp);
-    pid.setOutputLimit(100.0f);  // Motor speed limit (±100%)
-    LOG_DEBUG(EventSource::AUTOSTEER, "PID controller initialized with Kp=%d", steerSettings.Kp);
+    // PID functionality is now integrated directly in updateMotorControl()
     
     // Register PGN handlers with PGNProcessor
     if (PGNProcessor::instance) {
@@ -521,9 +518,8 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     steerSettings.AckermanFix = (float)data[7] * 0.01f;
     
     
-    // Update PID controller with new Kp
-    pid.setKp(steerSettings.Kp);
-    LOG_DEBUG(EventSource::AUTOSTEER, "PID updated with Kp=%d", steerSettings.Kp);
+    // Kp is used directly in updateMotorControl()
+    LOG_DEBUG(EventSource::AUTOSTEER, "Kp updated to %d", steerSettings.Kp);
     
     // Update ADProcessor with WAS calibration values
     adProcessor.setWASOffset(steerSettings.wasOffset);
