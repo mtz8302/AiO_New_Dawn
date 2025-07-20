@@ -24,6 +24,10 @@ private:
     
     // Menu display function
     void showMenu();
+    
+    // Test functions
+    void testCurrentSensor();
+    void continuousCurrentMonitor();
 
 public:
     ~CommandHandler();

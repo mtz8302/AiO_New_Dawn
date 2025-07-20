@@ -98,10 +98,11 @@ bool HardwareManager::initializeADC()
 {
     LOG_DEBUG(EventSource::SYSTEM, "Configuring ADC");
 
-    analogReadResolution(12);
-    analogReadAveraging(16);
+    // Comment out to use Teensy defaults like the test sketch
+    //analogReadResolution(12);
+    //analogReadAveraging(1);  // No averaging
 
-    LOG_DEBUG(EventSource::SYSTEM, "ADC: 12-bit resolution, 16x averaging");
+    LOG_DEBUG(EventSource::SYSTEM, "ADC: Using Teensy defaults");
     return true;
 }
 

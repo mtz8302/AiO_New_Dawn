@@ -18,6 +18,7 @@
 #include "MotorDriverManager.h"
 #include "CANGlobals.h"
 #include "AutosteerProcessor.h"
+#include "EncoderProcessor.h"
 #include "KeyaCANDriver.h"
 #include "LEDManagerFSM.h"
 #include "MachineProcessor.h"
@@ -270,6 +271,14 @@ void setup()
   } else {
     LOG_ERROR(EventSource::SYSTEM, "AutosteerProcessor FAILED");
   }
+  
+  // Initialize EncoderProcessor
+  EncoderProcessor* encoderPTR = EncoderProcessor::getInstance();
+  if (encoderPTR->init()) {
+    LOG_INFO(EventSource::SYSTEM, "EncoderProcessor initialized");
+  } else {
+    LOG_ERROR(EventSource::SYSTEM, "EncoderProcessor FAILED");
+  }
 
   // Initialize MachineProcessor
   MachineProcessor* machinePTR = MachineProcessor::getInstance();
@@ -354,14 +363,17 @@ void loop()
   // Poll CAN messages - DISABLED (Motor driver handles CAN3)
   // canManager.pollForDevices();
   
-  // Process motor driver (must be called regularly for CAN motors)
+  // Process autosteer FIRST - calculate new motor commands
+  AutosteerProcessor::getInstance()->process();
+  
+  // Process motor driver AFTER autosteer has set new PWM values
   if (motorPTR)
   {
     motorPTR->process();
   }
   
-  // Process autosteer
-  AutosteerProcessor::getInstance()->process();
+  // Process encoder
+  EncoderProcessor::getInstance()->process();
   
   // Process machine
   MachineProcessor::getInstance()->process();

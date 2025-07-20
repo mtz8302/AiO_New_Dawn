@@ -55,6 +55,11 @@ public:
     void setPWM(int16_t pwm) override {
         pwm = constrain(pwm, -255, 255);
         
+        // Log when PWM changes significantly
+        if (abs(pwm - targetPWM) > 5) {
+            LOG_DEBUG(EventSource::AUTOSTEER, "Keya setPWM: %d -> %d (RPM: %.1f -> %.1f)", 
+                      targetPWM, pwm, commandedRPM, (float)pwm * 100.0f / 255.0f);
+        }
         
         targetPWM = pwm;
         // Map PWM to RPM: 255 PWM = 100 RPM
@@ -64,6 +69,7 @@ public:
     
     void stop() override {
         targetPWM = 0;
+        commandedRPM = 0.0f;  // Make sure commanded speed is also zeroed
     }
     
     void process() override {
@@ -102,6 +108,18 @@ public:
                     {
                         // Send speed command
                         int32_t speedValue = (int32_t)(commandedRPM * 10.0f);  // -1000 to +1000 as 32-bit
+                        
+                        // Log speed commands periodically
+                        static uint32_t lastSpeedLog = 0;
+                        if (millis() - lastSpeedLog > 1000 || speedValue == 0 || abs(speedValue) < 50) {
+                            LOG_DEBUG(EventSource::AUTOSTEER, "Keya speed cmd: %.1f RPM (raw=%d, 0x%02X %02X %02X %02X) actual=%.1f", 
+                                      commandedRPM, speedValue,
+                                      (speedValue >> 24) & 0xFF, (speedValue >> 16) & 0xFF,
+                                      (speedValue >> 8) & 0xFF, speedValue & 0xFF,
+                                      actualRPM);
+                            lastSpeedLog = millis();
+                        }
+                        
                         msg.buf[0] = 0x23;
                         msg.buf[1] = 0x00;  // Speed command
                         msg.buf[2] = 0x20;
@@ -197,6 +215,20 @@ public:
     bool checkMotorSlip() {
         // Static counter persists between calls
         static uint8_t slipCounter = 0;
+        static float lastCommandedRPM = 0;
+        static uint32_t lastSpeedChangeTime = 0;
+        
+        // Check if speed command changed significantly
+        if (abs(commandedRPM - lastCommandedRPM) > 5.0f) {
+            lastSpeedChangeTime = millis();
+            lastCommandedRPM = commandedRPM;
+            slipCounter = 0;  // Reset counter on speed change
+        }
+        
+        // Give motor 50ms to respond to speed changes
+        if (millis() - lastSpeedChangeTime < 50) {
+            return false;  // Grace period for motor to catch up
+        }
         
         if (!heartbeatValid || !enabled) {
             slipCounter = 0;

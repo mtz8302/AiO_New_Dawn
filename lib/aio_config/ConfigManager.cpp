@@ -353,6 +353,7 @@ void ConfigManager::loadAllConfigs()
     loadMachineConfig();
     loadKWASConfig();
     loadINSConfig();
+    loadTurnSensorConfig();
 }
 
 void ConfigManager::saveAllConfigs()
@@ -363,6 +364,7 @@ void ConfigManager::saveAllConfigs()
     saveMachineConfig();
     saveKWASConfig();
     saveINSConfig();
+    saveTurnSensorConfig();
 }
 
 void ConfigManager::resetToDefaults()
@@ -429,6 +431,14 @@ void ConfigManager::resetToDefaults()
     
     // LED defaults
     ledBrightness = 25;  // 25% default brightness
+    
+    // Turn sensor defaults
+    turnSensorType = 0;      // None
+    encoderType = 1;         // Single channel
+    turnMaxPulseCount = 5;   // Same as pulseCountMax default
+    pressureThreshold = 100; // Middle of range
+    currentThreshold = 100;  // Middle of range
+    currentZeroOffset = 90;  // From NG-V6 code
 
     eeVersion = CURRENT_EE_VERSION;
 }
@@ -460,4 +470,42 @@ void ConfigManager::updateVersion()
     EEPROM.get(EE_VERSION_ADDR, verifyVersion);
     LOG_DEBUG(EventSource::CONFIG, "Version write verification: wrote=%d, read back=%d", 
                   CURRENT_EE_VERSION, verifyVersion);
+}
+
+void ConfigManager::saveTurnSensorConfig()
+{
+    LOG_DEBUG(EventSource::CONFIG, "Saving turn sensor config: Type=%d, EncoderType=%d", 
+              turnSensorType, encoderType);
+    
+    int addr = TURN_SENSOR_CONFIG_ADDR;
+    EEPROM.put(addr, turnSensorType);
+    addr += sizeof(turnSensorType);
+    EEPROM.put(addr, encoderType);
+    addr += sizeof(encoderType);
+    EEPROM.put(addr, turnMaxPulseCount);
+    addr += sizeof(turnMaxPulseCount);
+    EEPROM.put(addr, pressureThreshold);
+    addr += sizeof(pressureThreshold);
+    EEPROM.put(addr, currentThreshold);
+    addr += sizeof(currentThreshold);
+    EEPROM.put(addr, currentZeroOffset);
+}
+
+void ConfigManager::loadTurnSensorConfig()
+{
+    int addr = TURN_SENSOR_CONFIG_ADDR;
+    EEPROM.get(addr, turnSensorType);
+    addr += sizeof(turnSensorType);
+    EEPROM.get(addr, encoderType);
+    addr += sizeof(encoderType);
+    EEPROM.get(addr, turnMaxPulseCount);
+    addr += sizeof(turnMaxPulseCount);
+    EEPROM.get(addr, pressureThreshold);
+    addr += sizeof(pressureThreshold);
+    EEPROM.get(addr, currentThreshold);
+    addr += sizeof(currentThreshold);
+    EEPROM.get(addr, currentZeroOffset);
+    
+    LOG_DEBUG(EventSource::CONFIG, "Loaded turn sensor config: Type=%d, EncoderType=%d", 
+              turnSensorType, encoderType);
 }

@@ -81,11 +81,14 @@ bool AutosteerProcessor::init() {
     steerConfig.SteerSwitch = configManager.getSteerSwitch();
     steerConfig.SteerButton = configManager.getSteerButton();
     steerConfig.PressureSensor = configManager.getPressureSensor();
+    steerConfig.CurrentSensor = configManager.getCurrentSensor();
     steerConfig.PulseCountMax = configManager.getPulseCountMax();
     steerConfig.MinSpeed = configManager.getMinSpeed();
     steerConfig.MotorDriverConfig = configManager.getMotorDriverConfig();
-    LOG_DEBUG(EventSource::AUTOSTEER, "Loaded steer config from EEPROM: Pressure=%s, PulseMax=%d, RelayActive=%s", 
-              steerConfig.PressureSensor ? "Yes" : "No", steerConfig.PulseCountMax,
+    LOG_DEBUG(EventSource::AUTOSTEER, "Loaded steer config from EEPROM: Pressure=%s, Current=%s, PulseMax=%d, RelayActive=%s", 
+              steerConfig.PressureSensor ? "Yes" : "No", 
+              steerConfig.CurrentSensor ? "Yes" : "No",
+              steerConfig.PulseCountMax,
               steerConfig.IsRelayActiveHigh ? "HIGH" : "LOW");
     
     // Initialize motor config tracking from EEPROM values
@@ -290,22 +293,12 @@ void AutosteerProcessor::process() {
         lastWorkState = currentWorkState;
     }
     
-    // Check pressure sensor kickout if enabled
+    // Pressure sensor kickout is now handled by KickoutMonitor
     static bool lastPressureSensorState = false;
     if (steerConfig.PressureSensor != lastPressureSensorState) {
         LOG_INFO(EventSource::AUTOSTEER, "Pressure sensor kickout %s", 
                  steerConfig.PressureSensor ? "ENABLED" : "DISABLED");
         lastPressureSensorState = steerConfig.PressureSensor;
-    }
-    
-    if (steerConfig.PressureSensor && steerState == 0) {
-        float pressure = adProcessor.getPressureReading();
-        if (pressure >= steerConfig.PulseCountMax) {
-            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Pressure %.1f exceeded limit %d", 
-                        pressure, steerConfig.PulseCountMax);
-            emergencyStop();
-            return;  // Skip the rest of this cycle
-        }
     }
     
     // Check motor status for errors (including CAN connection loss)
@@ -333,11 +326,13 @@ void AutosteerProcessor::process() {
     if (kickoutMonitor) {
         kickoutMonitor->process();
         
-        // Check if kickout is active
+        // Check if kickout is active while steering is armed
         if (kickoutMonitor->hasKickout() && steerState == 0) {
-            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s", kickoutMonitor->getReasonString());
+            // Disarm steering - this will stop the motor
+            steerState = 1;  // Disarmed
             emergencyStop();
-            kickoutMonitor->clearKickout();  // Clear after handling
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s - steering disarmed", kickoutMonitor->getReasonString());
+            // Don't clear kickout here - let KickoutMonitor auto-clear when conditions return to normal
         }
     }
     
@@ -476,6 +471,24 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     steerConfig.CurrentSensor = bitRead(sett1, 2);
     steerConfig.IsUseY_Axis = bitRead(sett1, 3);
     
+    // When current sensor is enabled, data[1] (pulseCountMax) is repurposed as current threshold
+    if (steerConfig.CurrentSensor) {
+        uint8_t currentThreshold = data[1];
+        LOG_INFO(EventSource::AUTOSTEER, "Current sensor enabled - threshold=%d (%.1f%%)", 
+                  currentThreshold, (currentThreshold * 100.0f) / 255.0f);
+        configManager.setCurrentThreshold(currentThreshold);
+    } else if (steerConfig.PressureSensor) {
+        // When pressure sensor is enabled, data[1] might be pressure threshold
+        uint8_t pressureThreshold = data[1];
+        LOG_INFO(EventSource::AUTOSTEER, "Pressure sensor enabled - threshold=%d (%.1f%%)", 
+                  pressureThreshold, (pressureThreshold * 100.0f) / 255.0f);
+        configManager.setPressureThreshold(pressureThreshold);
+    } else if (steerConfig.ShaftEncoder) {
+        // When encoder is enabled, data[1] is pulse count max
+        LOG_INFO(EventSource::AUTOSTEER, "Shaft encoder enabled - pulseCountMax=%d", 
+                  steerConfig.PulseCountMax);
+    }
+    
     // Read motor driver configuration from byte 8 of the message (data array index 3)
     // Message structure: Header(5) + Data(8) + CRC(1) = 14 bytes total
     // Byte 8 of the message = data[3] (since data array starts after 5-byte header)
@@ -535,6 +548,7 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     configManager.setSteerSwitch(steerConfig.SteerSwitch);
     configManager.setSteerButton(steerConfig.SteerButton);
     configManager.setPressureSensor(steerConfig.PressureSensor);
+    configManager.setCurrentSensor(steerConfig.CurrentSensor);
     configManager.setPulseCountMax(steerConfig.PulseCountMax);
     configManager.setMinSpeed(steerConfig.MinSpeed);
     configManager.setMotorDriverConfig(steerConfig.MotorDriverConfig);
@@ -908,9 +922,8 @@ void AutosteerProcessor::updateMotorControl() {
         } else if (pwmDrive > 0) {
             pwmDrive += steerSettings.minPWM;
         } else {
-            // Dead zone
-            motorPWM = 0;
-            return;
+            // Dead zone - set pwmDrive to 0
+            pwmDrive = 0;
         }
         
         // Limit the PWM drive to highPWM setting
@@ -923,9 +936,13 @@ void AutosteerProcessor::updateMotorControl() {
         // Store final PWM value
         motorPWM = pwmDrive;
         
-        // Log the PWM calculation
-        LOG_DEBUG(EventSource::AUTOSTEER, "PWM calc: actual=%.1f° - target=%.1f° = error=%.1f° * Kp=%d = %d, +minPWM=%d, limit=%d, final=%d", 
-                 actualAngle, targetAngle, angleError, steerSettings.Kp, pValue, steerSettings.minPWM, steerSettings.highPWM, pwmDrive);
+        // Log the PWM calculation periodically
+        static uint32_t lastPWMCalcLog = 0;
+        if (millis() - lastPWMCalcLog > 5000) {  // Every 5 seconds
+            lastPWMCalcLog = millis();
+            LOG_DEBUG(EventSource::AUTOSTEER, "PWM calc: actual=%.1f° - target=%.1f° = error=%.1f° * Kp=%d = %d, +minPWM=%d, limit=%d, final=%d", 
+                     actualAngle, targetAngle, angleError, steerSettings.Kp, pValue, steerSettings.minPWM, steerSettings.highPWM, pwmDrive);
+        }
         
         // Debug log final motor PWM periodically
         static uint32_t lastMotorPWMLog = 0;
@@ -1001,6 +1018,14 @@ void AutosteerProcessor::updateMotorControl() {
         if (motorState != MotorState::DISABLED) {
             motorPTR->enable(true);
             motorPTR->setPWM(motorPWM);
+            
+            // Debug log to confirm PWM is being sent
+            static uint32_t lastMotorCmdLog = 0;
+            if (millis() - lastMotorCmdLog > 1000) {
+                lastMotorCmdLog = millis();
+                LOG_DEBUG(EventSource::AUTOSTEER, "Sending to motor: PWM=%d, State=%d", 
+                          motorPWM, (int)motorState);
+            }
         }
         
         // LOCK output control
