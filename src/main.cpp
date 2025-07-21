@@ -61,9 +61,9 @@ void toggleLoopTiming() {
     // Reset counters when enabling
     loopCount = 0;
     timingPeriod = 0;
-    Serial.println("Loop timing diagnostics ENABLED - first report in 30 seconds");
+    LOG_INFO(EventSource::SYSTEM, "Loop timing diagnostics ENABLED - first report in 30 seconds");
   } else {
-    Serial.println("Loop timing diagnostics DISABLED");
+    LOG_INFO(EventSource::SYSTEM, "Loop timing diagnostics DISABLED");
   }
 }
 
