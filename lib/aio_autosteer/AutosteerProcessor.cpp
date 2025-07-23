@@ -812,7 +812,7 @@ void AutosteerProcessor::sendPGN253() {
     
     uint8_t pgn253[] = {
         0x80, 0x81,                    // Header
-        0x7D,                          // Source: Steer module
+        0x7E,                          // Source: Steer module (126)
         0xFD,                          // PGN: 253
         8,                             // Length
         (uint8_t)(actualSteerAngle & 0xFF),      // Steer angle low

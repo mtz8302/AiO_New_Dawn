@@ -200,16 +200,22 @@ private:
     
     void setOutputPWM(uint8_t output, uint8_t pwmValue) {
         // Output 6 uses PCA9685 pin 9 for PWM control
+        static uint8_t lastPwmValue = 255;  // Invalid initial value to force first update
         
         if (output == 6) {
-            // Convert 0-255 PWM to PCA9685 12-bit value (0-4095)
-            uint16_t pcaValue = (uint16_t)((pwmValue * 4095UL) / 255);
-            
-            // Use the new setPinPWM method
-            MachineProcessor::getInstance()->setPinPWM(9, pcaValue);
-            
-            LOG_DEBUG(EventSource::AUTOSTEER, "Set Output %d (PCA pin 9) PWM = %d (PCA value %d)", 
-                     output, pwmValue, pcaValue);
+            // Only update if value has changed to avoid I2C traffic
+            if (pwmValue != lastPwmValue) {
+                // Convert 0-255 PWM to PCA9685 12-bit value (0-4095)
+                uint16_t pcaValue = (uint16_t)((pwmValue * 4095UL) / 255);
+                
+                // Use the new setPinPWM method
+                MachineProcessor::getInstance()->setPinPWM(9, pcaValue);
+                
+                LOG_DEBUG(EventSource::AUTOSTEER, "Set Output %d (PCA pin 9) PWM = %d (PCA value %d)", 
+                         output, pwmValue, pcaValue);
+                
+                lastPwmValue = pwmValue;
+            }
         }
     }
 };
