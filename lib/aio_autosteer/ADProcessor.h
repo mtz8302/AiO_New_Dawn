@@ -45,7 +45,11 @@ public:
     // Kickout sensor readings
     uint16_t getKickoutAnalog() const { return kickoutAnalogRaw; }
     float getPressureReading() const { return pressureReading; }
-    uint16_t getMotorCurrent() const { return motorCurrentRaw; }
+    uint16_t getMotorCurrent() const { 
+        // Return filtered current reading, clamped to positive values
+        // We clamp here instead of during filtering to preserve filter state
+        return (currentReading < 0) ? 0 : (uint16_t)currentReading;
+    }
     
     // Configuration
     void setWASOffset(int16_t offset) { wasOffset = offset; }
@@ -91,12 +95,18 @@ private:
     uint16_t kickoutAnalogRaw;
     float pressureReading;  // Filtered pressure sensor reading
     uint16_t motorCurrentRaw;
+    float currentReading;   // Filtered current sensor reading
     
     // Configuration
     uint16_t debounceDelay;
     
     // Timing
     uint32_t lastProcessTime;
+    
+    // Current sensor averaging buffer
+    static constexpr uint8_t CURRENT_BUFFER_SIZE = 50;  // Reduced for faster response
+    float currentBuffer[CURRENT_BUFFER_SIZE];
+    uint8_t currentBufferIndex;
     
     // Teensy ADC object
     ADC* teensyADC;

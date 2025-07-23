@@ -92,8 +92,10 @@ void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& 
                     const uint8_t* pgnData = &data[5];
                     size_t dataLen = len - 6; // Subtract header(5) + crc(1)
                     
-                    // Always log when debug is enabled - this is what debug mode is for
-                    LOG_DEBUG(EventSource::NETWORK, "Calling %s for PGN %d", registrations[i].name, pgn);
+                    // Log when debug is enabled, but skip PGN 254 as it comes too frequently (10Hz)
+                    if (pgn != 254) {
+                        LOG_DEBUG(EventSource::NETWORK, "Calling %s for PGN %d", registrations[i].name, pgn);
+                    }
                     registrations[i].callback(pgn, pgnData, dataLen);
                     break; // Only one handler per non-broadcast PGN
                 }

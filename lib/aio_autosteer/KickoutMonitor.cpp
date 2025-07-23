@@ -1,12 +1,19 @@
 #include "KickoutMonitor.h"
 #include "ConfigManager.h"
 #include "ADProcessor.h"
+#include "EncoderProcessor.h"
 #include "HardwareManager.h"  // For KICKOUT_D_PIN and KICKOUT_A_PIN
 #include "EventLogger.h"
+#include "TurnSensorTypes.h"
+#include "KeyaCANDriver.h"
 
 // External global objects
 extern ConfigManager configManager;
 extern ADProcessor adProcessor;
+extern EncoderProcessor* encoderProcessor;
+
+// External network function
+extern void sendUDPbytes(uint8_t* data, int len);
 
 // Singleton instance
 KickoutMonitor* KickoutMonitor::instance = nullptr;
@@ -17,10 +24,12 @@ KickoutMonitor::KickoutMonitor() :
     configMgr(nullptr),
     adProcessor(nullptr),
     motorDriver(nullptr),
+    encoderProc(nullptr),
     encoderPulseCount(0),
     lastPulseCheck(0),
     lastPulseCount(0),
     lastEncoderState(false),
+    lastPGN250Time(0),
     lastPressureReading(0),
     lastCurrentReading(0),
     kickoutActive(false),
@@ -46,10 +55,21 @@ bool KickoutMonitor::init(MotorDriverInterface* driver) {
     configMgr = &configManager;
     this->adProcessor = &::adProcessor;  // Use global scope
     motorDriver = driver;
+    encoderProc = encoderProcessor;
     
     if (!configMgr || !adProcessor) {
         LOG_ERROR(EventSource::AUTOSTEER, "KickoutMonitor - Missing dependencies");
         return false;
+    }
+    
+    // Log which sensors are relevant for this motor type
+    if (driver) {
+        if (driver->getType() == MotorDriverType::KEYA_CAN) {
+            LOG_INFO(EventSource::AUTOSTEER, "Keya motor detected - external sensors (encoder/pressure/current) will be ignored");
+            LOG_INFO(EventSource::AUTOSTEER, "Keya uses internal slip detection via CAN");
+        } else {
+            LOG_INFO(EventSource::AUTOSTEER, "PWM/Hydraulic motor - external sensors active if configured");
+        }
     }
     
     // Initialize encoder pin if enabled
@@ -64,33 +84,72 @@ bool KickoutMonitor::init(MotorDriverInterface* driver) {
 }
 
 void KickoutMonitor::process() {
-    // Poll encoder pin for pulses if enabled
-    if (configMgr->getShaftEncoder()) {
-        bool currentState = digitalRead(KICKOUT_D_PIN);
-        // Detect rising edge
-        if (currentState && !lastEncoderState) {
-            encoderPulseCount++;
-        }
-        lastEncoderState = currentState;
+    // Get encoder processor if we don't have it yet
+    if (!encoderProc) {
+        encoderProc = encoderProcessor;  // Try to get the global instance
     }
     
-    // Only check for kickouts if not already active
+    // Determine motor type for sensor relevance
+    bool isKeyaMotor = (motorDriver && motorDriver->getType() == MotorDriverType::KEYA_CAN);
+    
+    // Only read sensors relevant to the motor type
+    if (!isKeyaMotor) {
+        // Get encoder pulse count from EncoderProcessor (not relevant for Keya)
+        if (encoderProc && encoderProc->isEnabled()) {
+            int32_t newCount = encoderProc->getPulseCount();
+            
+            // Log significant changes in encoder count  
+            static int32_t lastLoggedCount = 0;
+            
+            if (abs(newCount - lastLoggedCount) >= 10) {  // Log every 10 counts
+                uint16_t maxPulses = configMgr->getPulseCountMax();
+                LOG_DEBUG(EventSource::AUTOSTEER, "Encoder count: %d (max: %u)", newCount, maxPulses);
+                lastLoggedCount = newCount;
+            }
+            
+            encoderPulseCount = newCount;
+        }
+        
+        // Get pressure and current readings from ADProcessor (not relevant for Keya)
+        lastPressureReading = (uint16_t)adProcessor->getPressureReading();  // Filtered value (0-255)
+        lastCurrentReading = adProcessor->getMotorCurrent();
+    }
+    
+    // Send PGN250 at regular intervals
+    uint32_t now = millis();
+    if (now - lastPGN250Time >= PGN250_INTERVAL_MS) {
+        // Update sensor readings right before sending to ensure fresh data
+        if (!isKeyaMotor) {
+            lastPressureReading = (uint16_t)adProcessor->getPressureReading();
+            lastCurrentReading = adProcessor->getMotorCurrent();
+        }
+        sendPGN250();
+        lastPGN250Time = now;
+    }
+    
+    // Check kickout conditions based on motor type
     if (!kickoutActive) {
-        // Check each kickout condition based on configuration
-        if (configMgr->getShaftEncoder() && checkEncoderKickout()) {
+        // Not currently in kickout - check if we should trigger one
+        
+        // External sensor checks - NOT for Keya motors
+        if (!isKeyaMotor && configMgr->getShaftEncoder() && checkEncoderKickout()) {
             kickoutActive = true;
             kickoutReason = ENCODER_OVERSPEED;
             kickoutTime = millis();
+            
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s", getReasonString());
             
             // Notify motor driver
             if (motorDriver) {
                 motorDriver->handleKickout(KickoutType::WHEEL_ENCODER, encoderPulseCount);
             }
         }
-        else if (configMgr->getPressureSensor() && checkPressureKickout()) {
+        else if (!isKeyaMotor && configMgr->getPressureSensor() && checkPressureKickout()) {
             kickoutActive = true;
             kickoutReason = PRESSURE_HIGH;
             kickoutTime = millis();
+            
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s", getReasonString());
             
             // Notify motor driver
             if (motorDriver) {
@@ -98,10 +157,12 @@ void KickoutMonitor::process() {
                 motorDriver->handleKickout(KickoutType::PRESSURE_SENSOR, pressureVolts);
             }
         }
-        else if (configMgr->getCurrentSensor() && checkCurrentKickout()) {
+        else if (!isKeyaMotor && configMgr->getCurrentSensor() && checkCurrentKickout()) {
             kickoutActive = true;
             kickoutReason = CURRENT_HIGH;
             kickoutTime = millis();
+            
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s", getReasonString());
             
             // Notify motor driver with current in amps
             if (motorDriver) {
@@ -109,30 +170,82 @@ void KickoutMonitor::process() {
                 motorDriver->handleKickout(KickoutType::CURRENT_SENSOR, currentAmps);
             }
         }
+        else if (isKeyaMotor && checkMotorSlipKickout()) {
+            kickoutActive = true;
+            // Determine specific reason based on motor type
+            if (motorDriver->getType() == MotorDriverType::KEYA_CAN) {
+                kickoutReason = KEYA_SLIP;  // checkMotorSlip handles both slip and errors
+            } else {
+                kickoutReason = MOTOR_SLIP;
+            }
+            kickoutTime = millis();
+            
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s", getReasonString());
+            
+            // Motor already knows about its own slip condition
+        }
+    } else {
+        // Currently in kickout - check if conditions have returned to normal
+        bool conditionsNormal = true;
+        
+        // Check the condition that caused the kickout
+        switch (kickoutReason) {
+            case ENCODER_OVERSPEED:
+                if (!isKeyaMotor && configMgr->getShaftEncoder() && checkEncoderKickout()) {
+                    conditionsNormal = false;
+                }
+                break;
+                
+            case PRESSURE_HIGH:
+                if (!isKeyaMotor && configMgr->getPressureSensor() && checkPressureKickout()) {
+                    conditionsNormal = false;
+                }
+                break;
+                
+            case CURRENT_HIGH:
+                if (!isKeyaMotor && configMgr->getCurrentSensor() && checkCurrentKickout()) {
+                    conditionsNormal = false;
+                }
+                break;
+                
+            case MOTOR_SLIP:
+            case KEYA_SLIP:
+            case KEYA_ERROR:
+                if (isKeyaMotor && checkMotorSlipKickout()) {
+                    conditionsNormal = false;
+                }
+                break;
+                
+            default:
+                break;
+        }
+        
+        // Auto-clear if conditions are back to normal
+        if (conditionsNormal) {
+            clearKickout();
+        }
     }
 }
 
 bool KickoutMonitor::checkEncoderKickout() {
-    // Check encoder pulses every 100ms
-    uint32_t now = millis();
-    if (now - lastPulseCheck < 100) {
-        return false;
-    }
-    
-    // Calculate pulses in the last period
-    uint32_t currentCount = encoderPulseCount;
-    uint32_t pulsesSinceLast = currentCount - lastPulseCount;
-    
-    lastPulseCheck = now;
-    lastPulseCount = currentCount;
-    
-    // Get max pulse count from config
+    // Get max pulse count from config - this is the absolute count threshold
     uint16_t maxPulses = configMgr->getPulseCountMax();
     
+    // Get absolute value of encoder count (handles both directions)
+    // encoderPulseCount is int32_t from EncoderProcessor
+    uint32_t absoluteCount = abs((int32_t)encoderPulseCount);
+    
     // Check if we exceeded the threshold
-    if (pulsesSinceLast > maxPulses) {
-        LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Encoder overspeed: %lu pulses (max %u)", 
-                      pulsesSinceLast, maxPulses);
+    if (absoluteCount > maxPulses) {
+        // Only log when first detecting kickout (not already active) or every 1 second
+        static uint32_t lastLogTime = 0;
+        uint32_t now = millis();
+        
+        if (!kickoutActive || (now - lastLogTime >= 1000)) {
+            LOG_INFO(EventSource::AUTOSTEER, "Encoder kickout: count=%d (max %u)", 
+                          encoderPulseCount, maxPulses);
+            lastLogTime = now;
+        }
         return true;
     }
     
@@ -140,16 +253,22 @@ bool KickoutMonitor::checkEncoderKickout() {
 }
 
 bool KickoutMonitor::checkPressureKickout() {
-    // Read pressure sensor on KICKOUT_A pin
-    lastPressureReading = adProcessor->getKickoutAnalog();
+    // Use the already-read pressure value from process()
+    // This is the filtered/scaled value (0-255 range)
     
-    // TODO: Get pressure threshold from config (not yet implemented)
-    // For now, use a reasonable default
-    const uint16_t PRESSURE_THRESHOLD = 800;  // ADC value
+    // Get pressure threshold from config
+    uint8_t threshold = configMgr->getPulseCountMax();
     
-    if (lastPressureReading > PRESSURE_THRESHOLD) {
-        LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Pressure high: %u (threshold %u)", 
-                      lastPressureReading, PRESSURE_THRESHOLD);
+    if (lastPressureReading > threshold) {
+        // Only log when first detecting kickout (not already active) or every 1 second
+        static uint32_t lastLogTime = 0;
+        uint32_t now = millis();
+        
+        if (!kickoutActive || (now - lastLogTime >= 1000)) {
+            LOG_DEBUG(EventSource::AUTOSTEER, "Pressure high: %u (threshold %u)", 
+                          lastPressureReading, threshold);
+            lastLogTime = now;
+        }
         return true;
     }
     
@@ -160,15 +279,44 @@ bool KickoutMonitor::checkCurrentKickout() {
     // Read current sensor
     lastCurrentReading = adProcessor->getMotorCurrent();
     
-    // TODO: Get current threshold from config (not yet implemented)
-    // For now, use a reasonable default
-    const uint16_t CURRENT_THRESHOLD = 900;  // ADC value
+    // Get threshold from config (0-255, same scale as PGN250)
+    uint8_t thresholdPercent = configMgr->getCurrentThreshold();
     
-    if (lastCurrentReading > CURRENT_THRESHOLD) {
-        LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Current high: %u (threshold %u)", 
-                      lastCurrentReading, CURRENT_THRESHOLD);
+    // Convert threshold to ADC counts
+    // Same scaling as PGN250: 200 counts/amp * 8.4A = 1680 counts for 255 (100%)
+    uint16_t thresholdCounts = (thresholdPercent * 1680) / 255;
+    
+    if (lastCurrentReading > thresholdCounts) {
+        // Only log when first detecting kickout (not already active)
+        if (!kickoutActive) {
+            LOG_DEBUG(EventSource::AUTOSTEER, "Current high: %u counts (%.1f%%) > threshold %u counts (%.1f%%)", 
+                          lastCurrentReading, (lastCurrentReading * 100.0f) / 1680.0f,
+                          thresholdCounts, (thresholdPercent * 100.0f) / 255.0f);
+        }
         return true;
     }
+    
+    return false;
+}
+
+bool KickoutMonitor::checkMotorSlipKickout() {
+    // Check if motor driver reports slip condition
+    if (!motorDriver) {
+        return false;
+    }
+    
+    // Check motor type
+    if (motorDriver->getType() == MotorDriverType::KEYA_CAN) {
+        // Cast to KeyaCANDriver to access slip detection
+        KeyaCANDriver* keyaDriver = static_cast<KeyaCANDriver*>(motorDriver);
+        if (keyaDriver->checkMotorSlip()) {
+            LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: Keya motor slip detected");
+            return true;
+        }
+    }
+    
+    // For other motor types, could check position feedback vs commanded
+    // This would require additional implementation
     
     return false;
 }
@@ -182,7 +330,10 @@ void KickoutMonitor::clearKickout() {
     kickoutReason = NONE;
     kickoutTime = 0;
     
-    // Reset encoder count
+    // Reset encoder count via EncoderProcessor
+    if (encoderProc) {
+        encoderProc->resetPulseCount();
+    }
     encoderPulseCount = 0;
     lastPulseCount = 0;
 }
@@ -195,6 +346,99 @@ const char* KickoutMonitor::getReasonString() const {
         case PRESSURE_HIGH: return "Pressure High";
         case CURRENT_HIGH: return "Current High";
         case MOTOR_SLIP: return "Motor Slip";
+        case KEYA_SLIP: return "Keya Motor Slip";
+        case KEYA_ERROR: return "Keya Motor Error";
         default: return "Unknown";
+    }
+}
+
+uint8_t KickoutMonitor::getTurnSensorReading() const {
+    // Determine which turn sensor type is active
+    TurnSensorType sensorType = TurnSensorType::NONE;
+    
+    if (configMgr->getShaftEncoder()) {
+        sensorType = TurnSensorType::ENCODER;
+    } else if (configMgr->getPressureSensor()) {
+        sensorType = TurnSensorType::PRESSURE;
+    } else if (configMgr->getCurrentSensor()) {
+        sensorType = TurnSensorType::CURRENT;
+    }
+    
+    // Return the appropriate sensor value
+    switch (sensorType) {
+        case TurnSensorType::ENCODER:
+            return (uint8_t)min(encoderPulseCount, 255);
+            
+        case TurnSensorType::PRESSURE:
+            return (uint8_t)lastPressureReading;
+            
+        case TurnSensorType::CURRENT: {
+            // Scale current reading to percentage of 8.4A max
+            // ~150-260 counts per amp, so 8.4A would be ~1260-2184 counts
+            // Scale to 0-255 where 255 = 8.4A (100%)
+            // Using conservative estimate: 200 counts/amp * 8.4A = 1680 counts for full scale
+            float scaledCurrent = (lastCurrentReading * 255.0f) / 1680.0f;
+            return (uint8_t)min(scaledCurrent, 255.0f);
+        }
+            
+        case TurnSensorType::NONE:
+        default:
+            return 0;
+    }
+}
+
+void KickoutMonitor::sendPGN250() {
+    // PGN 250 - Turn Sensor Data to AgOpenGPS
+    // Format per NG-V6: {header, source, pgn, length, sensorValue, 0, 0, 0, 0, 0, 0, 0, checksum}
+    uint8_t pgn250[] = {
+        0x80, 0x81,      // Header
+        126,             // Source: Steer module (0x7E)
+        0xFA,            // PGN: 250
+        8,               // Length
+        0,               // Sensor value (byte 5)
+        0,               // Reserved
+        0,               // Reserved
+        0,               // Reserved
+        0,               // Reserved
+        0,               // Reserved
+        0,               // Reserved
+        0,               // Reserved
+        0                // Checksum
+    };
+    
+    // Get the sensor reading based on active turn sensor type
+    pgn250[5] = getTurnSensorReading();
+    
+    // Calculate checksum
+    uint8_t checksum = 0;
+    for (int i = 2; i < sizeof(pgn250) - 1; i++) {
+        checksum += pgn250[i];
+    }
+    pgn250[sizeof(pgn250) - 1] = checksum;
+    
+    // Send via UDP
+    sendUDPbytes(pgn250, sizeof(pgn250));
+    
+    // Debug log periodically
+    static uint32_t lastDebugTime = 0;
+    if (millis() - lastDebugTime > 5000) {  // Every 5 seconds
+        lastDebugTime = millis();
+        
+        // Log which sensor type is active and its raw value
+        const char* sensorName = "None";
+        uint16_t rawValue = 0;
+        if (configMgr->getShaftEncoder()) {
+            sensorName = "Encoder";
+            rawValue = encoderPulseCount;
+        } else if (configMgr->getPressureSensor()) {
+            sensorName = "Pressure";
+            rawValue = lastPressureReading;
+        } else if (configMgr->getCurrentSensor()) {
+            sensorName = "Current";
+            rawValue = lastCurrentReading;
+        }
+        
+        LOG_DEBUG(EventSource::AUTOSTEER, "PGN250: Sensor=%s, Raw=%u, Sent=%d", 
+                  sensorName, rawValue, pgn250[5]);
     }
 }

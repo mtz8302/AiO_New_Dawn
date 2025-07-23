@@ -73,6 +73,14 @@ private:
     // LED settings
     uint8_t ledBrightness;
     
+    // Turn sensor configuration
+    uint8_t turnSensorType;      // 0=None, 1=Encoder, 2=Pressure, 3=Current
+    uint8_t encoderType;         // 1=Single, 2=Quadrature
+    uint8_t turnMaxPulseCount;   // Max encoder pulses before kickout
+    uint8_t pressureThreshold;   // Pressure sensor threshold
+    uint8_t currentThreshold;    // Current sensor threshold
+    uint16_t currentZeroOffset;  // Current sensor zero offset
+    
     // Version control
     uint16_t eeVersion;
 
@@ -198,6 +206,20 @@ public:
     float getINSVariancePitch() const { return insVariancePitch; }
     void setINSVariancePitch(float value) { insVariancePitch = value; }
 
+    // Turn sensor configuration methods
+    uint8_t getTurnSensorType() const { return turnSensorType; }
+    void setTurnSensorType(uint8_t value) { turnSensorType = value; }
+    uint8_t getEncoderType() const { return encoderType; }
+    void setEncoderType(uint8_t value) { encoderType = value; }
+    uint8_t getTurnMaxPulseCount() const { return turnMaxPulseCount; }
+    void setTurnMaxPulseCount(uint8_t value) { turnMaxPulseCount = value; }
+    uint8_t getPressureThreshold() const { return pressureThreshold; }
+    void setPressureThreshold(uint8_t value) { pressureThreshold = value; }
+    uint8_t getCurrentThreshold() const { return currentThreshold; }
+    void setCurrentThreshold(uint8_t value) { currentThreshold = value; }
+    uint16_t getCurrentZeroOffset() const { return currentZeroOffset; }
+    void setCurrentZeroOffset(uint16_t value) { currentZeroOffset = value; }
+
     // EEPROM operations
     void saveSteerConfig();
     void loadSteerConfig();
@@ -211,6 +233,8 @@ public:
     void loadKWASConfig();
     void saveINSConfig();
     void loadINSConfig();
+    void saveTurnSensorConfig();
+    void loadTurnSensorConfig();
     void loadAllConfigs();
     void saveAllConfigs();
     void resetToDefaults();

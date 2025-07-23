@@ -67,6 +67,8 @@ public:
             setOutput(ENABLE_OUTPUT, false);
         }
         
+        // Only log on state change
+        bool wasEnabled = status.enabled;
         status.enabled = en;
         
         // Set enable output
@@ -79,7 +81,10 @@ public:
             status.actualPWM = 0;
         }
         
-        LOG_INFO(EventSource::AUTOSTEER, "Danfoss valve %s", en ? "ENABLED" : "DISABLED");
+        // Only log if state actually changed
+        if (wasEnabled != en) {
+            LOG_INFO(EventSource::AUTOSTEER, "Danfoss valve %s", en ? "ENABLED" : "DISABLED");
+        }
     }
     
     void setPWM(int16_t pwm) override {

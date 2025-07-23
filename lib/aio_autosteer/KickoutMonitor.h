@@ -7,6 +7,7 @@
 class ConfigManager;
 class ADProcessor;
 class MotorDriverInterface;
+class EncoderProcessor;
 
 class KickoutMonitor {
 public:
@@ -15,7 +16,9 @@ public:
         ENCODER_OVERSPEED = 1,
         PRESSURE_HIGH = 2,
         CURRENT_HIGH = 3,
-        MOTOR_SLIP = 4
+        MOTOR_SLIP = 4,
+        KEYA_SLIP = 5,
+        KEYA_ERROR = 6
     };
 
     KickoutMonitor();
@@ -33,6 +36,9 @@ public:
     // Process kickout checks (call frequently)
     void process();
     
+    // Send PGN250 turn sensor data
+    void sendPGN250();
+    
     // Kickout status
     bool hasKickout() const { return kickoutActive; }
     KickoutReason getReason() const { return kickoutReason; }
@@ -40,6 +46,9 @@ public:
     
     // Clear kickout (after steering disabled)
     void clearKickout();
+    
+    // Get current sensor value for PGN250 based on active turn sensor type
+    uint8_t getTurnSensorReading() const;
     
     // Get current counts for debugging
     uint32_t getEncoderPulseCount() const { return encoderPulseCount; }
@@ -54,12 +63,17 @@ private:
     ConfigManager* configMgr;
     ADProcessor* adProcessor;
     MotorDriverInterface* motorDriver;
+    EncoderProcessor* encoderProc;
     
     // Encoder monitoring
     uint32_t encoderPulseCount;
     uint32_t lastPulseCheck;
     uint32_t lastPulseCount;
     bool lastEncoderState;
+    
+    // PGN250 timing
+    uint32_t lastPGN250Time;
+    static constexpr uint32_t PGN250_INTERVAL_MS = 100; // Send at 10Hz
     
     // Sensor readings
     uint16_t lastPressureReading;
@@ -74,6 +88,7 @@ private:
     bool checkEncoderKickout();
     bool checkPressureKickout();
     bool checkCurrentKickout();
+    bool checkMotorSlipKickout();
 };
 
 #endif // KICKOUT_MONITOR_H

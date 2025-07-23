@@ -2,7 +2,7 @@
 #define EEPROM_LAYOUT_H
 
 // EEPROM Version - increment this when EEPROM layout changes
-#define EEPROM_VERSION 106
+#define EEPROM_VERSION 107
 
 // EEPROM Address Map
 #define EE_VERSION_ADDR      1      // Version number (2 bytes)
@@ -15,5 +15,6 @@
 #define INS_CONFIG_ADDR      700    // INS configuration (700-799)
 #define EVENT_CONFIG_ADDR    800    // EventLogger configuration (800-899)
 #define WEB_CONFIG_ADDR      900    // Web interface configuration (900-999)
+#define TURN_SENSOR_CONFIG_ADDR 1000 // Turn sensor configuration (1000-1099)
 
 #endif // EEPROM_LAYOUT_H

@@ -11,13 +11,20 @@ ADProcessor::ADProcessor() :
     kickoutAnalogRaw(0),
     pressureReading(0.0f),
     motorCurrentRaw(0),
+    currentReading(0.0f),
     debounceDelay(50),  // 50ms default debounce
     lastProcessTime(0),
+    currentBufferIndex(0),
     teensyADC(nullptr)
 {
     // Initialize switch states
     workSwitch = {false, false, 0, false};
     steerSwitch = {false, false, 0, false};
+    
+    // Initialize current buffer
+    for (int i = 0; i < CURRENT_BUFFER_SIZE; i++) {
+        currentBuffer[i] = 0.0f;
+    }
     
     instance = this;
 }
@@ -54,7 +61,7 @@ bool ADProcessor::init()
     teensyADC->adc0->setSamplingSpeed(ADC_SAMPLING_SPEED::HIGH_SPEED);     // Faster than MED_SPEED
     
     // Configure ADC1 for other sensors if needed
-    teensyADC->adc1->setAveraging(4);
+    teensyADC->adc1->setAveraging(1);  // No averaging
     teensyADC->adc1->setResolution(12);
     teensyADC->adc1->setConversionSpeed(ADC_CONVERSION_SPEED::MED_SPEED);
     teensyADC->adc1->setSamplingSpeed(ADC_SAMPLING_SPEED::MED_SPEED);
@@ -82,9 +89,31 @@ void ADProcessor::process()
     // Always read WAS - critical for steering
     updateWAS();
     
+    // Fast current sensor sampling (every 1ms like test sketch)
+    static uint32_t lastCurrentSample = 0;
+    uint32_t now = millis();
+    
+    if (now - lastCurrentSample >= 1) {
+        lastCurrentSample = now;
+        
+        // Read current sensor and store in buffer
+        uint16_t reading = teensyADC->adc1->analogRead(AD_CURRENT_PIN);
+        
+        // Simple approach from test sketch - subtract baseline offset
+        float adjusted = (float)(reading - 77);  // 77 is our baseline
+        currentBuffer[currentBufferIndex] = (adjusted > 0) ? adjusted : 0.0f;
+        currentBufferIndex = (currentBufferIndex + 1) % CURRENT_BUFFER_SIZE;
+        
+        // Calculate average of buffer
+        float sum = 0;
+        for (int i = 0; i < CURRENT_BUFFER_SIZE; i++) {
+            sum += currentBuffer[i];
+        }
+        currentReading = sum / CURRENT_BUFFER_SIZE;
+    }
+    
     // Read other sensors at reduced rate (every 10ms = 100Hz)
     static uint32_t lastSlowRead = 0;
-    uint32_t now = millis();
     
     if (now - lastSlowRead >= 10) {
         lastSlowRead = now;
@@ -92,9 +121,17 @@ void ADProcessor::process()
         // Update switches
         updateSwitches();
         
-        // Read kickout sensors using ADC1 for parallel operation
-        kickoutAnalogRaw = teensyADC->adc1->analogRead(AD_KICKOUT_A_PIN);
-        motorCurrentRaw = teensyADC->adc1->analogRead(AD_CURRENT_PIN);
+        // Read kickout sensors
+        kickoutAnalogRaw = analogRead(AD_KICKOUT_A_PIN);
+        
+        // Debug current sensor reading
+        static uint32_t lastCurrentDebug = 0;
+        
+        if (millis() - lastCurrentDebug > 2000) {  // Every 2 seconds
+            lastCurrentDebug = millis();
+            LOG_DEBUG(EventSource::AUTOSTEER, "Current sensor: Averaged reading=%.1f (from %d samples)", 
+                      currentReading, CURRENT_BUFFER_SIZE);
+        }
         
         // Update pressure sensor reading with filtering
         // Scale 12-bit ADC (0-4095) to match NG-V6 behavior
@@ -173,11 +210,9 @@ float ADProcessor::getWASAngle() const
     // The WAS is expected to be centered at ~2048 (half of 12-bit range)
     // But AgOpenGPS expects values scaled by 3.23x, so center is ~6805
     
-    // Apply the 3.23x scaling to match AgOpenGPS expectations
-    float scaledWAS = wasRaw * 3.23f;
-    
-    // Apply center point (6805) and offset
-    float centeredWAS = scaledWAS - 6805.0f - wasOffset;
+    // Use raw ADC value directly (no 3.23x scaling here)
+    // The counts per degree from AgOpenGPS already accounts for the scaling
+    float centeredWAS = wasRaw - 2048.0f - wasOffset;
     
     // Calculate angle
     if (wasCountsPerDegree != 0) {
@@ -187,8 +222,8 @@ float ADProcessor::getWASAngle() const
         static uint32_t lastWASDebug = 0;
         if (millis() - lastWASDebug > 2000) {
             lastWASDebug = millis();
-            LOG_DEBUG(EventSource::AUTOSTEER, "WAS: raw=%d, scaled=%.0f, centered=%.0f, angle=%.2f°, offset=%d, CPD=%.1f", 
-                      wasRaw, scaledWAS, centeredWAS, angle, wasOffset, wasCountsPerDegree);
+            LOG_DEBUG(EventSource::AUTOSTEER, "WAS: raw=%d, centered=%.0f, angle=%.2f°, offset=%d, CPD=%.1f", 
+                      wasRaw, centeredWAS, angle, wasOffset, wasCountsPerDegree);
         }
         
         return angle;
