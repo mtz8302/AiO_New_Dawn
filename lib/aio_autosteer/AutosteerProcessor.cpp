@@ -1,6 +1,7 @@
 #include "AutosteerProcessor.h"
 #include "PGNProcessor.h"
 #include "ADProcessor.h"
+#include "EncoderProcessor.h"
 #include "MotorDriverInterface.h"
 #include "KeyaCANDriver.h"
 #include "ConfigManager.h"
@@ -265,6 +266,12 @@ void AutosteerProcessor::process() {
             // Guidance turned ON in AgOpenGPS
             steerState = 0;  // Activate steering
             LOG_INFO(EventSource::AUTOSTEER, "Autosteer ARMED via AgOpenGPS (OSB)");
+            
+            // Reset encoder count when autosteer engages
+            if (EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
+                EncoderProcessor::getInstance()->resetPulseCount();
+                LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
+            }
         }
         guidanceStatusChanged = false;  // Clear flag
     }

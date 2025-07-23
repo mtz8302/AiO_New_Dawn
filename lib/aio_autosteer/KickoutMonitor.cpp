@@ -84,6 +84,11 @@ bool KickoutMonitor::init(MotorDriverInterface* driver) {
 }
 
 void KickoutMonitor::process() {
+    // Get encoder processor if we don't have it yet
+    if (!encoderProc) {
+        encoderProc = encoderProcessor;  // Try to get the global instance
+    }
+    
     // Determine motor type for sensor relevance
     bool isKeyaMotor = (motorDriver && motorDriver->getType() == MotorDriverType::KEYA_CAN);
     
@@ -91,7 +96,18 @@ void KickoutMonitor::process() {
     if (!isKeyaMotor) {
         // Get encoder pulse count from EncoderProcessor (not relevant for Keya)
         if (encoderProc && encoderProc->isEnabled()) {
-            encoderPulseCount = encoderProc->getPulseCount();
+            int32_t newCount = encoderProc->getPulseCount();
+            
+            // Log significant changes in encoder count  
+            static int32_t lastLoggedCount = 0;
+            
+            if (abs(newCount - lastLoggedCount) >= 10) {  // Log every 10 counts
+                uint16_t maxPulses = configMgr->getPulseCountMax();
+                LOG_DEBUG(EventSource::AUTOSTEER, "Encoder count: %d (max: %u)", newCount, maxPulses);
+                lastLoggedCount = newCount;
+            }
+            
+            encoderPulseCount = newCount;
         }
         
         // Get pressure and current readings from ADProcessor (not relevant for Keya)
@@ -212,30 +228,22 @@ void KickoutMonitor::process() {
 }
 
 bool KickoutMonitor::checkEncoderKickout() {
-    // Check encoder pulses every 100ms
-    uint32_t now = millis();
-    if (now - lastPulseCheck < 100) {
-        return false;
-    }
-    
-    // Calculate pulses in the last period
-    uint32_t currentCount = encoderPulseCount;
-    uint32_t pulsesSinceLast = currentCount - lastPulseCount;
-    
-    lastPulseCheck = now;
-    lastPulseCount = currentCount;
-    
-    // Get max pulse count from config
+    // Get max pulse count from config - this is the absolute count threshold
     uint16_t maxPulses = configMgr->getPulseCountMax();
     
+    // Get absolute value of encoder count (handles both directions)
+    // encoderPulseCount is int32_t from EncoderProcessor
+    uint32_t absoluteCount = abs((int32_t)encoderPulseCount);
+    
     // Check if we exceeded the threshold
-    if (pulsesSinceLast > maxPulses) {
+    if (absoluteCount > maxPulses) {
         // Only log when first detecting kickout (not already active) or every 1 second
         static uint32_t lastLogTime = 0;
+        uint32_t now = millis();
         
         if (!kickoutActive || (now - lastLogTime >= 1000)) {
-            LOG_DEBUG(EventSource::AUTOSTEER, "Encoder overspeed: %lu pulses (max %u)", 
-                          pulsesSinceLast, maxPulses);
+            LOG_INFO(EventSource::AUTOSTEER, "Encoder kickout: count=%d (max %u)", 
+                          encoderPulseCount, maxPulses);
             lastLogTime = now;
         }
         return true;
