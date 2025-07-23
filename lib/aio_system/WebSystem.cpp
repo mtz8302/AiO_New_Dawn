@@ -511,7 +511,21 @@ void WebManager::setupOTARoutes() {
 }
 
 void WebManager::handleDeviceSettingsPage(AsyncWebServerRequest* request) {
-    String html = FPSTR(WebPageSelector::getDeviceSettingsPage(currentLanguage));
+    // Load page template with proper buffer handling
+    const char* pageTemplate = WebPageSelector::getDeviceSettingsPage(currentLanguage);
+    size_t templateLen = strlen_P(pageTemplate);
+    
+    // Allocate buffer with extra space for replacements and zero it out
+    size_t bufferSize = templateLen + 1024; // Extra space for CSS
+    char* buffer = new char[bufferSize];
+    memset(buffer, 0, bufferSize); // Zero out the buffer to prevent garbage
+    strcpy_P(buffer, pageTemplate);
+    
+    // Create String from buffer
+    String html(buffer);
+    delete[] buffer;
+    
+    // Perform replacements
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     
     AsyncWebServerResponse* response = request->beginResponse(200, "text/html; charset=UTF-8", html);
@@ -532,6 +546,7 @@ void WebManager::setupDeviceSettingsAPI() {
         extern ConfigManager configManager;
         doc["udpPassthrough"] = configManager.getGPSPassThrough();
         doc["sensorFusion"] = configManager.getINSUseFusion();
+        doc["pwmBrakeMode"] = configManager.getPWMBrakeMode();
         
         String response;
         serializeJson(doc, response);
@@ -563,13 +578,16 @@ void WebManager::setupDeviceSettingsAPI() {
                 // Update UDP passthrough setting
                 bool udpPassthrough = doc["udpPassthrough"] | false;
                 bool sensorFusion = doc["sensorFusion"] | false;
+                bool pwmBrakeMode = doc["pwmBrakeMode"] | false;
                 
                 // Update ConfigManager and save to EEPROM
                 extern ConfigManager configManager;
                 configManager.setGPSPassThrough(udpPassthrough);
                 configManager.setINSUseFusion(sensorFusion);
+                configManager.setPWMBrakeMode(pwmBrakeMode);
                 configManager.saveGPSConfig();  // Save GPS settings
                 configManager.saveINSConfig();  // Save INS/fusion settings
+                configManager.saveSteerConfig();  // Save steer settings (includes PWM brake mode)
                 
                 // Apply the UDP setting to GNSSProcessor
                 extern GNSSProcessor* gnssProcessorPtr;  // Defined in main.cpp
@@ -589,6 +607,8 @@ void WebManager::setupDeviceSettingsAPI() {
                          udpPassthrough ? "enabled" : "disabled");
                 LOG_INFO(EventSource::CONFIG, "Virtual WAS (VWAS) %s via web interface", 
                          sensorFusion ? "enabled" : "disabled");
+                LOG_INFO(EventSource::CONFIG, "PWM Motor Brake Mode %s via web interface", 
+                         pwmBrakeMode ? "enabled" : "disabled");
                 
                 // Send success response
                 JsonDocument response;

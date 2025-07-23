@@ -23,6 +23,7 @@ private:
     bool pressureSensor;
     bool currentSensor;
     bool isUseYAxis;
+    bool pwmBrakeMode;  // false = coast mode (default), true = brake mode
     uint8_t pulseCountMax;
     uint8_t minSpeed;
     uint8_t motorDriverConfig;  // From PGN251 Byte 8
@@ -117,6 +118,8 @@ public:
     void setCurrentSensor(bool value) { currentSensor = value; }
     bool getIsUseYAxis() const { return isUseYAxis; }
     void setIsUseYAxis(bool value) { isUseYAxis = value; }
+    bool getPWMBrakeMode() const { return pwmBrakeMode; }
+    void setPWMBrakeMode(bool value) { pwmBrakeMode = value; }
     uint8_t getPulseCountMax() const { return pulseCountMax; }
     void setPulseCountMax(uint8_t value) { pulseCountMax = value; }
     uint8_t getMinSpeed() const { return minSpeed; }

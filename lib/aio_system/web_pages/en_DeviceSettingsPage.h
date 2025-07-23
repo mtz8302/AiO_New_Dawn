@@ -17,7 +17,8 @@ const char EN_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
         function saveSettings() {
             const settings = {
                 udpPassthrough: document.getElementById('udpPassthrough').checked,
-                sensorFusion: document.getElementById('sensorFusion').checked
+                sensorFusion: document.getElementById('sensorFusion').checked,
+                pwmBrakeMode: document.getElementById('pwmBrakeMode').checked
             };
             
             fetch('/api/device/settings', {
@@ -49,6 +50,7 @@ const char EN_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                 .then(data => {
                     document.getElementById('udpPassthrough').checked = data.udpPassthrough || false;
                     document.getElementById('sensorFusion').checked = data.sensorFusion || false;
+                    document.getElementById('pwmBrakeMode').checked = data.pwmBrakeMode || false;
                 })
                 .catch((error) => {
                     console.error('Error loading settings:', error);
@@ -87,6 +89,18 @@ const char EN_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                 </label>
                 <div class='help-text' style='margin-left: 25px; margin-top: 5px;'>
                     Use Keya motor encoder and GPS/IMU to create a virtual wheel angle sensor. Requires Keya CAN motor and vehicle movement.
+                </div>
+            </div>
+            
+            <h2>Motor Configuration</h2>
+            
+            <div class='form-group'>
+                <label class='checkbox-container' style='display: inline-flex; align-items: center;'>
+                    <input type='checkbox' id='pwmBrakeMode' name='pwmBrakeMode' style='margin-right: 10px;'>
+                    <span class='checkbox-label' style='white-space: nowrap;'>PWM Motor Brake Mode</span>
+                </label>
+                <div class='help-text' style='margin-left: 25px; margin-top: 5px;'>
+                    When enabled, PWM motors use brake mode (active braking). When disabled, motors use coast mode (free-wheeling). Only affects PWM-based motor drivers.
                 </div>
             </div>
             

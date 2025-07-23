@@ -76,6 +76,8 @@ void ConfigManager::saveSteerConfig()
         configByte2 |= 0x04;
     if (isUseYAxis)
         configByte2 |= 0x08;
+    if (pwmBrakeMode)
+        configByte2 |= 0x10;
 
     LOG_DEBUG(EventSource::CONFIG, "Saving steer config: button=%d, switch=%d, byte1=0x%02X", 
                   steerButton, steerSwitch, configByte1);
@@ -127,6 +129,7 @@ void ConfigManager::loadSteerConfig()
     pressureSensor = (configByte2 & 0x02) != 0;
     currentSensor = (configByte2 & 0x04) != 0;
     isUseYAxis = (configByte2 & 0x08) != 0;
+    pwmBrakeMode = (configByte2 & 0x10) != 0;
 }
 
 void ConfigManager::saveSteerSettings()
@@ -382,6 +385,7 @@ void ConfigManager::resetToDefaults()
     pressureSensor = false;
     currentSensor = false;
     isUseYAxis = false;
+    pwmBrakeMode = false;  // Default to coast mode
     pulseCountMax = 5;
     minSpeed = 3;
     motorDriverConfig = 0x00;  // Default to DRV8701 with wheel encoder
