@@ -3,6 +3,10 @@
 #include <Arduino.h>
 #include "EventLogger.h"
 #include "HardwareManager.h"
+#include "ConfigManager.h"
+
+// External objects
+extern ConfigManager configManager;
 
 PWMMotorDriver::PWMMotorDriver(MotorDriverType type, uint8_t pwm1, uint8_t pwm2, 
                                uint8_t enable, uint8_t current) 
@@ -106,16 +110,33 @@ void PWMMotorDriver::setPWM(int16_t pwm) {
     // Map 0-255 to 0-256 for Teensy (256 = Hi-Z)
     if (pwmValue == 255) pwmValue = 256;
     
+    // Check if brake mode is enabled
+    bool brakeMode = configManager.getPWMBrakeMode();
+    
     if (pwm < 0) {
-        // LEFT: PWM1 active, PWM2 low
-        analogWrite(pwm1Pin, pwmValue);     // PWM1 active for LEFT (0-256)
-        analogWrite(pwm2Pin, 0);            // PWM2 LOW
+        // LEFT direction
+        if (brakeMode) {
+            // Brake mode: PWM2 at (256-pwmValue), PWM1 at 256 (Hi-Z)
+            analogWrite(pwm2Pin, 256 - pwmValue);  
+            analogWrite(pwm1Pin, 256);
+        } else {
+            // Coast mode: PWM1 active, PWM2 low
+            analogWrite(pwm1Pin, pwmValue);     
+            analogWrite(pwm2Pin, 0);            
+        }
     } else if (pwm > 0) {
-        // RIGHT: PWM2 active, PWM1 low
-        analogWrite(pwm1Pin, 0);            // PWM1 LOW
-        analogWrite(pwm2Pin, pwmValue);     // PWM2 active for RIGHT (0-256)
+        // RIGHT direction
+        if (brakeMode) {
+            // Brake mode: PWM1 at (256-pwmValue), PWM2 at 256 (Hi-Z)
+            analogWrite(pwm1Pin, 256 - pwmValue);  
+            analogWrite(pwm2Pin, 256);
+        } else {
+            // Coast mode: PWM2 active, PWM1 low
+            analogWrite(pwm1Pin, 0);            
+            analogWrite(pwm2Pin, pwmValue);     
+        }
     } else {
-        // Stop: both outputs LOW
+        // Stop: both outputs LOW (same for both modes)
         analogWrite(pwm1Pin, 0);
         analogWrite(pwm2Pin, 0);
     }
@@ -125,10 +146,11 @@ void PWMMotorDriver::setPWM(int16_t pwm) {
     if (millis() - lastDebug > 1000) {
         lastDebug = millis();
         if (hasCurrentSense) {
-            LOG_DEBUG(EventSource::AUTOSTEER, "PWM: %d -> PWM1=%d, PWM2=%d, Current: %.2fA", 
+            LOG_DEBUG(EventSource::AUTOSTEER, "PWM %s mode: %d -> PWM1=%d, PWM2=%d, Current: %.2fA", 
+                     brakeMode ? "BRAKE" : "COAST",
                      pwm, 
-                     pwm < 0 ? pwmValue : 0,
-                     pwm > 0 ? pwmValue : 0,
+                     analogRead(pwm1Pin),
+                     analogRead(pwm2Pin),
                      getCurrent());
         } else {
             LOG_DEBUG(EventSource::AUTOSTEER, "PWM: %d -> PWM1=%d, PWM2=%d", 
