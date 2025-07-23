@@ -154,6 +154,13 @@ bool MachineProcessor::initializeSectionOutputs() {
     getSectionOutputs().setPWMFreq(1526);  // Max frequency
     getSectionOutputs().setOutputMode(true);  // Push-pull outputs
     
+    // Set MODE2_OCH bit to update outputs on ACK instead of STOP
+    // This may help with missed pulses during rapid updates
+    Wire.beginTransmission(0x44);
+    Wire.write(0x01);  // MODE2 register
+    Wire.write(0x04 | 0x08);  // OUTDRV (push-pull) | OCH (update on ACK)
+    Wire.endTransmission();
+    
     // 5. Put all DRV8243s to sleep initially (including LOCK and AUX)
     LOG_DEBUG(EventSource::MACHINE, "Putting all DRV8243 drivers to sleep");
     for (uint8_t pin : SLEEP_PINS) {
@@ -176,10 +183,34 @@ bool MachineProcessor::initializeSectionOutputs() {
     machineState.tramline = 0;
     machineState.geoStop = 0;
     
+    // Check EEPROM for Danfoss configuration (the golden source)
+    uint8_t motorConfig = configManager.getMotorDriverConfig();
+    // 0x01 = Danfoss + Wheel Encoder, 0x03 = Danfoss + Pressure Sensor
+    bool isDanfossConfigured = (motorConfig == 0x01 || motorConfig == 0x03);
+    if (isDanfossConfigured) {
+        LOG_INFO(EventSource::MACHINE, "Danfoss configuration detected (EEPROM: 0x%02X)", motorConfig);
+    }
+    
     // For each output, determine the OFF state based on its assigned function
     for (int outputNum = 1; outputNum <= 6; outputNum++) {
         uint8_t pcaPin = SECTION_PINS[outputNum - 1];
         uint8_t assignedFunction = pinConfig.pinFunction[outputNum];
+        
+        // Special handling for Danfoss outputs
+        if (isDanfossConfigured) {
+            if (outputNum == 5) {
+                // Output 5 is Danfoss enable - start disabled (LOW)
+                getSectionOutputs().setPin(pcaPin, 0, 0);
+                LOG_INFO(EventSource::MACHINE, "Output 5 (Danfoss enable) set to LOW (disabled)");
+                continue;
+            } else if (outputNum == 6) {
+                // Output 6 is Danfoss PWM control - set to 50% (center position)
+                // 50% of 255 = 128, convert to 12-bit: (128 * 4095) / 255 = 2056
+                setPinPWM(SECTION_PINS[5], 2056);  // Output 6 uses pin index 5
+                LOG_INFO(EventSource::MACHINE, "Output 6 (Danfoss PWM) set to 50%% (centered)");
+                continue;
+            }
+        }
         
         // Default OFF state
         uint16_t offValue = 0;  // LOW for sections and active high machine functions
@@ -656,8 +687,23 @@ void MachineProcessor::updateFunctionStates() {
 void MachineProcessor::updateMachineOutputs() {
     // Phase 3: Full machine output control
     
+    // Check EEPROM for Danfoss configuration (the golden source)
+    uint8_t motorConfig = configManager.getMotorDriverConfig();
+    // 0x01 = Danfoss + Wheel Encoder, 0x03 = Danfoss + Pressure Sensor
+    bool isDanfossConfigured = (motorConfig == 0x01 || motorConfig == 0x03);
+    
     // Loop through our 6 physical outputs
     for (int outputNum = 1; outputNum <= 6; outputNum++) {
+        // Skip outputs 5 & 6 if Danfoss is configured - they're controlled by DanfossMotorDriver
+        if (isDanfossConfigured && (outputNum == 5 || outputNum == 6)) {
+            static bool loggedOnce = false;
+            if (!loggedOnce) {
+                LOG_INFO(EventSource::MACHINE, "Skipping output %d - reserved for Danfoss valve control", outputNum);
+                loggedOnce = true;
+            }
+            continue;
+        }
+        
         // Get the function assigned to this output pin
         uint8_t assignedFunction = pinConfig.pinFunction[outputNum];
         
@@ -712,7 +758,8 @@ void MachineProcessor::setPinLow(uint8_t pin) {
 void MachineProcessor::setPinPWM(uint8_t pin, uint16_t pwmValue) {
     // For PCA9685: Set PWM value (0-4095)
     // pwmValue should be 0-4095 (12-bit resolution)
-    getSectionOutputs().setPWM(pin, pwmValue, 0);
+    // Use standard PWM mode: ON at 0, OFF at pwmValue
+    getSectionOutputs().setPWM(pin, 0, pwmValue);
 }
 
 // EEPROM persistence methods

@@ -309,7 +309,7 @@ void LEDManagerFSM::setLEDPins(LED_ID id, uint16_t r, uint16_t g, uint16_t b) {
     // Use setPin with invert flag for common anode LEDs
     // The library will handle the inversion when invert=true
     pwm->setPin(LED_PINS[id][0], r, true);
-    delayMicroseconds(50);  // Small delay to prevent crosstalk
+    delayMicroseconds(50);  // Small delay to avoid crosstalk
     pwm->setPin(LED_PINS[id][1], g, true);
     delayMicroseconds(50);
     pwm->setPin(LED_PINS[id][2], b, true);

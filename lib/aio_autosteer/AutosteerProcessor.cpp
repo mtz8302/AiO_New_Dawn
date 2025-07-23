@@ -343,6 +343,29 @@ void AutosteerProcessor::process() {
         }
     }
     
+    // Always update current angle reading (needed for PGN253 even when autosteer is off)
+    // Get current steering angle - use VWAS if enabled and available
+    if (configManager.getINSUseFusion() && wheelAngleFusionPtr && wheelAngleFusionPtr->isHealthy()) {
+        currentAngle = wheelAngleFusionPtr->getFusedAngle();
+    } else {
+        // Fall back to physical WAS
+        currentAngle = adProcessor.getWASAngle();
+    }
+    
+    // Apply Ackerman fix to current angle if it's negative (left turn)
+    actualAngle = currentAngle;
+    if (actualAngle < 0) {
+        actualAngle = actualAngle * steerSettings.AckermanFix;
+        
+        // Log Ackerman fix application periodically
+        static uint32_t lastAckermanLog = 0;
+        if (millis() - lastAckermanLog > 5000 && abs(actualAngle) > 1.0f) {
+            lastAckermanLog = millis();
+            LOG_DEBUG(EventSource::AUTOSTEER, "Ackerman fix applied: %.2f° * %.2f = %.2f°", 
+                     currentAngle, steerSettings.AckermanFix, actualAngle);
+        }
+    }
+    
     // Update motor control
     updateMotorControl();
     
@@ -838,13 +861,7 @@ void AutosteerProcessor::sendPGN253() {
 }
 
 void AutosteerProcessor::updateMotorControl() {
-    // Get current steering angle - use VWAS if enabled and available
-    if (configManager.getINSUseFusion() && wheelAngleFusionPtr && wheelAngleFusionPtr->isHealthy()) {
-        currentAngle = wheelAngleFusionPtr->getFusedAngle();
-    } else {
-        // Fall back to physical WAS
-        currentAngle = adProcessor.getWASAngle();
-    }
+    // Current angle is now updated in process() before this function is called
     
     // Check if steering should be active
     bool shouldBeActive = shouldSteerBeActive();
@@ -897,19 +914,7 @@ void AutosteerProcessor::updateMotorControl() {
         return;
     }
     
-    // Apply Ackerman fix to current angle if it's negative (left turn)
-    actualAngle = currentAngle;
-    if (actualAngle < 0) {
-        actualAngle = actualAngle * steerSettings.AckermanFix;
-        
-        // Log Ackerman fix application periodically
-        static uint32_t lastAckermanLog = 0;
-        if (millis() - lastAckermanLog > 5000 && abs(actualAngle) > 1.0f) {
-            lastAckermanLog = millis();
-            LOG_DEBUG(EventSource::AUTOSTEER, "Ackerman fix applied: %.2f° * %.2f = %.2f°", 
-                     currentAngle, steerSettings.AckermanFix, actualAngle);
-        }
-    }
+    // Ackerman fix is now applied in process() before this function is called
     
     // Calculate angle error
     float angleError = actualAngle - targetAngle;
