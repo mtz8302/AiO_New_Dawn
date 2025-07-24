@@ -1,5 +1,6 @@
 #include "PWMProcessor.h"
 #include "EventLogger.h"
+#include "HardwareManager.h"
 
 // Static instance
 PWMProcessor* PWMProcessor::instance = nullptr;
@@ -33,12 +34,19 @@ bool PWMProcessor::init()
     // Remember: output is inverted through transistor
     digitalWrite(SPEED_PULSE_PIN, LOW);
     
-    // Configure PWM
-    // Teensy 4.1 PWM is very flexible
-    // analogWriteFrequency affects all pins on the same timer
-    // Pin 36 is on FlexPWM2_3_A
-    analogWriteFrequency(SPEED_PULSE_PIN, 100);  // Start at 100Hz
-    analogWriteResolution(12);  // 12-bit resolution (0-4095)
+    // Configure PWM through HardwareManager
+    HardwareManager* hwMgr = HardwareManager::getInstance();
+    
+    // Request 12-bit resolution for speed pulse
+    if (!hwMgr->requestPWMResolution(12, "PWMProcessor")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to set PWM resolution to 12-bit");
+        // Fall back to whatever resolution is set
+    }
+    
+    // Request initial frequency
+    if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, 100, "PWMProcessor")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to set initial PWM frequency");
+    }
     
     LOG_DEBUG(EventSource::AUTOSTEER, "Speed pulse pin (D33) configured");
     LOG_DEBUG(EventSource::AUTOSTEER, "PWM resolution: 12-bit");
@@ -57,7 +65,10 @@ void PWMProcessor::setSpeedPulseHz(float hz)
     pulseFrequency = hz;
     
     if (hz > 0.0f) {
-        analogWriteFrequency(SPEED_PULSE_PIN, (int)hz);
+        HardwareManager* hwMgr = HardwareManager::getInstance();
+        if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, (int)hz, "PWMProcessor")) {
+            LOG_WARNING(EventSource::AUTOSTEER, "Failed to change PWM frequency to %dHz", (int)hz);
+        }
     }
     
     updatePWM();

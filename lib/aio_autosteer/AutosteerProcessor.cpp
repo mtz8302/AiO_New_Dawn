@@ -586,6 +586,9 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     configManager.setMinSpeed(steerConfig.MinSpeed);
     configManager.setMotorDriverConfig(steerConfig.MotorDriverConfig);
     
+    // Note: Sensor configuration updates would go here if we want dynamic changes
+    // For now, sensor changes require reboot to ensure clean state
+    
     // Check for motor type changes
     bool motorTypeChanged = false;
     int8_t currentCytronDriver = steerConfig.CytronDriver ? 1 : 0;
@@ -596,10 +599,15 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
                   steerConfig.MotorDriverConfig, currentCytronDriver,
                   previousMotorConfig, previousCytronDriver);
         
-        if (previousMotorConfig != steerConfig.MotorDriverConfig ||
+        // Only check motor-relevant bits (bit 0 = Danfoss, CytronDriver is separate)
+        // Ignore sensor bits (bits 1-2) when checking for motor changes
+        uint8_t previousMotorBits = previousMotorConfig & 0x01;  // Danfoss bit only
+        uint8_t currentMotorBits = steerConfig.MotorDriverConfig & 0x01;
+        
+        if (previousMotorBits != currentMotorBits ||
             previousCytronDriver != currentCytronDriver) {
-            LOG_INFO(EventSource::AUTOSTEER, "Motor change detected: Config 0x%02X->0x%02X, Cytron %d->%d",
-                     previousMotorConfig, steerConfig.MotorDriverConfig,
+            LOG_INFO(EventSource::AUTOSTEER, "Motor change detected: Danfoss %d->%d, Cytron %d->%d",
+                     previousMotorBits, currentMotorBits,
                      previousCytronDriver, currentCytronDriver);
             motorTypeChanged = true;
         }
@@ -753,9 +761,21 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     
     
     // Track guidance status changes
-    prevGuidanceStatus = guidanceActive;
-    guidanceActive = (status & 0x01) != 0;           // Bit 0 is guidance active
-    guidanceStatusChanged = (guidanceActive != prevGuidanceStatus);
+    static bool firstBroadcast = true;
+    bool newGuidanceActive = (status & 0x01) != 0;   // Bit 0 is guidance active
+    
+    if (firstBroadcast) {
+        // On first broadcast, just set the status without triggering change
+        guidanceActive = newGuidanceActive;
+        prevGuidanceStatus = newGuidanceActive;
+        guidanceStatusChanged = false;
+        firstBroadcast = false;
+    } else {
+        // Normal operation - detect changes
+        prevGuidanceStatus = guidanceActive;
+        guidanceActive = newGuidanceActive;
+        guidanceStatusChanged = (guidanceActive != prevGuidanceStatus);
+    }
     // Extract steer angle
     int16_t angleRaw = (int16_t)(data[4] << 8 | data[3]);
     targetAngle = angleRaw / 100.0f;

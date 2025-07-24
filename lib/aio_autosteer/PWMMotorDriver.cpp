@@ -47,7 +47,7 @@ bool PWMMotorDriver::init() {
     }
     
     if (hasCurrentSense) {
-        pinMode(currentPin, INPUT);
+        pinMode(currentPin, INPUT_DISABLE);  // Analog input - no pull-up
         LOG_DEBUG(EventSource::AUTOSTEER, "Current sensing enabled on pin A%d", currentPin - A0);
     }
     
@@ -55,10 +55,22 @@ bool PWMMotorDriver::init() {
     analogWrite(pwm1Pin, 0);
     analogWrite(pwm2Pin, 0);
     
-    // Configure PWM for DRV8701
-    analogWriteResolution(8);  // 8-bit resolution (0-255)
-    analogWriteFrequency(pwm1Pin, PWM_FREQUENCY);
-    analogWriteFrequency(pwm2Pin, PWM_FREQUENCY);
+    // Configure PWM for DRV8701 through HardwareManager
+    HardwareManager* hwMgr = HardwareManager::getInstance();
+    
+    // Request 12-bit resolution to match PWMProcessor
+    // We'll scale our 8-bit values to 12-bit
+    if (!hwMgr->requestPWMResolution(12, "PWMMotorDriver")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to set PWM resolution to 12-bit");
+    }
+    
+    // Request PWM frequency for motor pins
+    if (!hwMgr->requestPWMFrequency(pwm1Pin, PWM_FREQUENCY, "PWMMotorDriver")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to set PWM frequency for pin %d", pwm1Pin);
+    }
+    if (!hwMgr->requestPWMFrequency(pwm2Pin, PWM_FREQUENCY, "PWMMotorDriver")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to set PWM frequency for pin %d", pwm2Pin);
+    }
     
     LOG_INFO(EventSource::AUTOSTEER, "DRV8701 initialized with complementary PWM on pins %d (LEFT) and %d (RIGHT)", pwm1Pin, pwm2Pin);
     
@@ -103,12 +115,14 @@ void PWMMotorDriver::setPWM(int16_t pwm) {
     status.targetPWM = pwm;
     
     // DRV8701 complementary PWM mode: PWM1 = LEFT, PWM2 = RIGHT
-    // Inactive pin is set to 0, active pin gets PWM value (0-256)
-    // Note: On Teensy, analogWrite(pin, 256) puts the pin in Hi-Z mode
+    // Scale 8-bit input (0-255) to 12-bit output (0-4095)
+    // Note: Hi-Z mode in 12-bit is 4096
     
     uint16_t pwmValue = abs(pwm);
-    // Map 0-255 to 0-256 for Teensy (256 = Hi-Z)
-    if (pwmValue == 255) pwmValue = 256;
+    // Scale from 8-bit to 12-bit
+    pwmValue = (pwmValue * 4095) / 255;
+    // Special case: max value should map to Hi-Z (4096)
+    if (abs(pwm) == 255) pwmValue = 4096;
     
     // Check if brake mode is enabled
     bool brakeMode = configManager.getPWMBrakeMode();
@@ -116,9 +130,9 @@ void PWMMotorDriver::setPWM(int16_t pwm) {
     if (pwm < 0) {
         // LEFT direction
         if (brakeMode) {
-            // Brake mode: PWM2 at (256-pwmValue), PWM1 at 256 (Hi-Z)
-            analogWrite(pwm2Pin, 256 - pwmValue);  
-            analogWrite(pwm1Pin, 256);
+            // Brake mode: PWM2 at (4096-pwmValue), PWM1 at 4096 (Hi-Z)
+            analogWrite(pwm2Pin, 4096 - pwmValue);  
+            analogWrite(pwm1Pin, 4096);
         } else {
             // Coast mode: PWM1 active, PWM2 low
             analogWrite(pwm1Pin, pwmValue);     
@@ -127,9 +141,9 @@ void PWMMotorDriver::setPWM(int16_t pwm) {
     } else if (pwm > 0) {
         // RIGHT direction
         if (brakeMode) {
-            // Brake mode: PWM1 at (256-pwmValue), PWM2 at 256 (Hi-Z)
-            analogWrite(pwm1Pin, 256 - pwmValue);  
-            analogWrite(pwm2Pin, 256);
+            // Brake mode: PWM1 at (4096-pwmValue), PWM2 at 4096 (Hi-Z)
+            analogWrite(pwm1Pin, 4096 - pwmValue);  
+            analogWrite(pwm2Pin, 4096);
         } else {
             // Coast mode: PWM2 active, PWM1 low
             analogWrite(pwm1Pin, 0);            
@@ -217,8 +231,17 @@ void PWMMotorDriver::setCurrentScaling(float scale, float offset) {
 }
 
 void PWMMotorDriver::setPWMFrequency(uint32_t freq) {
-    analogWriteFrequency(pwm1Pin, freq);
-    analogWriteFrequency(pwm2Pin, freq);
+    HardwareManager* hwMgr = HardwareManager::getInstance();
+    
+    if (!hwMgr->requestPWMFrequency(pwm1Pin, freq, "PWMMotorDriver")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to change PWM frequency for pin %d", pwm1Pin);
+        return;
+    }
+    if (!hwMgr->requestPWMFrequency(pwm2Pin, freq, "PWMMotorDriver")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to change PWM frequency for pin %d", pwm2Pin);
+        return;
+    }
+    
     LOG_INFO(EventSource::AUTOSTEER, "PWM frequency set to %lu Hz", freq);
 }
 

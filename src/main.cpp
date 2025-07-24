@@ -231,7 +231,16 @@ void setup()
     LOG_ERROR(EventSource::SYSTEM, "ADProcessor FAILED");
   }
   
-  // Initialize PWMProcessor
+  // Initialize Motor Driver BEFORE PWMProcessor to ensure correct PWM resolution
+  motorPTR = MotorDriverManager::getInstance()->detectAndCreateMotorDriver(&hardwareManager, &canManager);
+  
+  if (motorPTR && motorPTR->init()) {
+    LOG_INFO(EventSource::SYSTEM, "Motor driver initialized");
+  } else {
+    LOG_ERROR(EventSource::SYSTEM, "Motor driver FAILED");
+  }
+
+  // Initialize PWMProcessor AFTER motor driver (they conflict on PWM resolution)
   if (pwmProcessor.init())
   {
     LOG_INFO(EventSource::SYSTEM, "PWMProcessor initialized");
@@ -249,15 +258,6 @@ void setup()
   // Initialize NAVProcessor
   NAVProcessor::init();
   LOG_INFO(EventSource::SYSTEM, "NAVProcessor initialized");
-
-  // Initialize Motor Driver
-  motorPTR = MotorDriverManager::getInstance()->detectAndCreateMotorDriver(&hardwareManager, &canManager);
-  
-  if (motorPTR && motorPTR->init()) {
-    LOG_INFO(EventSource::SYSTEM, "Motor driver initialized");
-  } else {
-    LOG_ERROR(EventSource::SYSTEM, "Motor driver FAILED");
-  }
 
   // NOW initialize AsyncUDP after ALL hardware is up
   LOG_INFO(EventSource::SYSTEM, "All hardware initialized, starting AsyncUDP");

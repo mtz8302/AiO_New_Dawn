@@ -1,5 +1,6 @@
 #include "ADProcessor.h"
 #include "EventLogger.h"
+#include "HardwareManager.h"
 
 // Static instance
 ADProcessor* ADProcessor::instance = nullptr;
@@ -41,11 +42,20 @@ bool ADProcessor::init()
 {
     LOG_INFO(EventSource::AUTOSTEER, "=== A/D Processor Initialization ===");
     
-    // Configure pins
+    // Configure pins with ownership tracking
     pinMode(AD_STEER_PIN, INPUT_PULLUP);      // Steer switch with internal pullup
     pinMode(AD_WORK_PIN, INPUT_PULLUP);       // Work switch with pullup
     pinMode(AD_WAS_PIN, INPUT_DISABLE);       // WAS analog input (no pullup)
-    pinMode(AD_KICKOUT_A_PIN, INPUT_DISABLE); // Pressure sensor analog input
+    
+    // Request ownership of KICKOUT_A for pressure sensor mode
+    HardwareManager* hwMgr = HardwareManager::getInstance();
+    if (hwMgr->requestPinOwnership(AD_KICKOUT_A_PIN, HardwareManager::OWNER_ADPROCESSOR, "ADProcessor")) {
+        pinMode(AD_KICKOUT_A_PIN, INPUT_DISABLE); // Pressure sensor analog input
+        hwMgr->updatePinMode(AD_KICKOUT_A_PIN, INPUT_DISABLE);
+    } else {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to get ownership of KICKOUT_A pin");
+    }
+    
     pinMode(AD_CURRENT_PIN, INPUT_DISABLE);   // Current sensor analog input
     
     // Test immediately after setting
@@ -53,6 +63,18 @@ bool ADProcessor::init()
     
     // Initialize Teensy ADC library
     teensyADC = new ADC();
+    
+    // Register ADC configuration with HardwareManager
+    
+    // Register ADC0 config (WAS reading)
+    if (!hwMgr->requestADCConfig(HardwareManager::ADC_MODULE_0, 12, 4, "ADProcessor")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to register ADC0 configuration");
+    }
+    
+    // Register ADC1 config (other sensors)
+    if (!hwMgr->requestADCConfig(HardwareManager::ADC_MODULE_1, 12, 1, "ADProcessor")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to register ADC1 configuration");
+    }
     
     // Configure ADC0 for WAS reading - optimized settings
     teensyADC->adc0->setAveraging(4);                                      // Reduced from 16 for faster reads

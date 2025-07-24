@@ -1,4 +1,5 @@
 #include "MachineProcessor.h"
+#include "HardwareManager.h"
 #include <Arduino.h>
 #include "PGNProcessor.h"
 #include "PGNUtils.h"
@@ -144,7 +145,14 @@ bool MachineProcessor::initializeSectionOutputs() {
     
     // 2. Initialize PCA9685
     getSectionOutputs().begin();
-    Wire.setClock(1000000);  // Set to 1MHz for PCA9685 (same as working version)
+    
+    // Request higher I2C speed through HardwareManager
+    HardwareManager* hwMgr = HardwareManager::getInstance();
+    if (hwMgr->requestI2CSpeed(HardwareManager::I2C_BUS_0, 1000000, "MachineProcessor")) {
+        Wire.setClock(1000000);  // Set to 1MHz for PCA9685
+    } else {
+        LOG_WARNING(EventSource::MACHINE, "Failed to set I2C speed to 1MHz, using current speed");
+    }
     
     // 3. Wake PCA9685 from sleep mode
     getSectionOutputs().reset();  // This clears MODE1 sleep bit

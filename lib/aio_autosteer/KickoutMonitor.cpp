@@ -73,12 +73,8 @@ bool KickoutMonitor::init(MotorDriverInterface* driver) {
         }
     }
     
-    // Initialize encoder pin if enabled
-    if (configMgr->getShaftEncoder()) {
-        pinMode(KICKOUT_D_PIN, INPUT_PULLUP);
-        lastEncoderState = digitalRead(KICKOUT_D_PIN);
-        LOG_DEBUG(EventSource::AUTOSTEER, "Encoder input configured on pin %d (polling mode)", KICKOUT_D_PIN);
-    }
+    // Encoder pin initialization is handled by EncoderProcessor
+    // KickoutMonitor just reads the processed encoder data
     
     LOG_INFO(EventSource::AUTOSTEER, "KickoutMonitor initialized successfully");
     return true;

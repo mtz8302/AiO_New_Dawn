@@ -106,9 +106,46 @@ void EncoderProcessor::initEncoder() {
     uint8_t pinA = hardwareManager.getKickoutAPin();
     uint8_t pinD = hardwareManager.getKickoutDPin();
     
-    // Simple pin setup like the test sketch
-    pinMode(pinA, INPUT);
-    pinMode(pinD, INPUT);
+    HardwareManager* hwMgr = HardwareManager::getInstance();
+    
+    // Request ownership of pins
+    bool gotPinA = false;
+    bool gotPinD = false;
+    
+    if (encoderType == EncoderType::QUADRATURE) {
+        // For quadrature encoder, need both pins
+        // First, request transfer from ADProcessor who normally owns KICKOUT_A
+        if (hwMgr->getPinOwner(pinA) == HardwareManager::OWNER_ADPROCESSOR) {
+            // Need to transfer ownership from ADProcessor
+            gotPinA = hwMgr->transferPinOwnership(pinA, 
+                HardwareManager::OWNER_ADPROCESSOR,
+                HardwareManager::OWNER_ENCODERPROCESSOR,
+                "EncoderProcessor");
+        } else {
+            gotPinA = hwMgr->requestPinOwnership(pinA, 
+                HardwareManager::OWNER_ENCODERPROCESSOR, "EncoderProcessor");
+        }
+    }
+    
+    // Always need pin D
+    gotPinD = hwMgr->requestPinOwnership(pinD, 
+        HardwareManager::OWNER_ENCODERPROCESSOR, "EncoderProcessor");
+    
+    if ((encoderType == EncoderType::QUADRATURE && !gotPinA) || !gotPinD) {
+        LOG_ERROR(EventSource::AUTOSTEER, "Failed to get ownership of encoder pins");
+        return;
+    }
+    
+    // Configure pins
+    if (encoderType == EncoderType::QUADRATURE) {
+        pinMode(pinA, INPUT);
+        pinMode(pinD, INPUT);
+        hwMgr->updatePinMode(pinA, INPUT);
+        hwMgr->updatePinMode(pinD, INPUT);
+    } else {
+        pinMode(pinD, INPUT);
+        hwMgr->updatePinMode(pinD, INPUT);
+    }
     
     LOG_INFO(EventSource::AUTOSTEER, "Encoder pins configured - A12=%d, D=%d", 
              digitalRead(pinA), digitalRead(pinD));
@@ -129,10 +166,30 @@ void EncoderProcessor::initEncoder() {
 
 void EncoderProcessor::deinitEncoder() {
     if (encoder) {
+        // Get pin numbers before deleting encoder
+        uint8_t pinA = hardwareManager.getKickoutAPin();
+        uint8_t pinD = hardwareManager.getKickoutDPin();
+        
         delete encoder;
         encoder = nullptr;
         pulseCount = 0;
         lastEncoderValue = 0;
-        LOG_INFO(EventSource::AUTOSTEER, "Encoder deinitialized");
+        
+        // Detach interrupts that the Encoder library may have attached
+        detachInterrupt(digitalPinToInterrupt(pinA));
+        detachInterrupt(digitalPinToInterrupt(pinD));
+        
+        // Reset pins to default state
+        pinMode(pinA, INPUT_DISABLE);
+        pinMode(pinD, INPUT_DISABLE);
+        
+        // Release pin ownership
+        HardwareManager* hwMgr = HardwareManager::getInstance();
+        if (encoderType == EncoderType::QUADRATURE) {
+            hwMgr->releasePinOwnership(pinA, HardwareManager::OWNER_ENCODERPROCESSOR);
+        }
+        hwMgr->releasePinOwnership(pinD, HardwareManager::OWNER_ENCODERPROCESSOR);
+        
+        LOG_INFO(EventSource::AUTOSTEER, "Encoder deinitialized and pins released");
     }
 }

@@ -1,6 +1,7 @@
 // I2CManager.cpp - Implementation of I2C bus management
 #include "I2CManager.h"
 #include "EventLogger.h"
+#include "HardwareManager.h"
 
 I2CManager::I2CManager() {
     // Initialize bus info structures
@@ -57,6 +58,29 @@ bool I2CManager::initializeI2C() {
 }
 
 bool I2CManager::initializeBus(TwoWire& wire, uint32_t speed) {
+    // Determine which bus this is
+    HardwareManager::I2CBus busId;
+    const char* busName;
+    if (&wire == &Wire) {
+        busId = HardwareManager::I2C_BUS_0;
+        busName = "Wire";
+    } else if (&wire == &Wire1) {
+        busId = HardwareManager::I2C_BUS_1;
+        busName = "Wire1";
+    } else if (&wire == &Wire2) {
+        busId = HardwareManager::I2C_BUS_2;
+        busName = "Wire2";
+    } else {
+        LOG_ERROR(EventSource::SYSTEM, "Unknown I2C bus");
+        return false;
+    }
+    
+    // Register I2C speed with HardwareManager
+    HardwareManager* hwMgr = HardwareManager::getInstance();
+    if (!hwMgr->requestI2CSpeed(busId, speed, "I2CManager")) {
+        LOG_WARNING(EventSource::SYSTEM, "Failed to register I2C speed for %s", busName);
+    }
+    
     // Begin I2C bus
     wire.begin();
     
