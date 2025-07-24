@@ -560,15 +560,17 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     }
     
     // Log all settings at INFO level in a single message so users see everything
-    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Pressure=%s(max=%d) MotorType=%s", 
+    LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Pressure=%s Current=%s (max=%d) MotorType=%s", 
              steerConfig.InvertWAS ? "Inv" : "Norm",
              steerConfig.MotorDriveDirection ? "Rev" : "Norm",
              steerConfig.MinSpeed,
              steerType,
              steerConfig.ShaftEncoder ? "Yes" : "No",
              steerConfig.PressureSensor ? "Yes" : "No",
+             steerConfig.CurrentSensor ? "Yes" : "No",
              steerConfig.PulseCountMax,
              motorType);
+    
     
     // Save config to EEPROM
     configManager.setInvertWAS(steerConfig.InvertWAS);
@@ -577,6 +579,7 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     configManager.setCytronDriver(steerConfig.CytronDriver);
     configManager.setSteerSwitch(steerConfig.SteerSwitch);
     configManager.setSteerButton(steerConfig.SteerButton);
+    configManager.setShaftEncoder(steerConfig.ShaftEncoder);  // This was missing!
     configManager.setPressureSensor(steerConfig.PressureSensor);
     configManager.setCurrentSensor(steerConfig.CurrentSensor);
     configManager.setPulseCountMax(steerConfig.PulseCountMax);
@@ -610,6 +613,7 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     previousCytronDriver = currentCytronDriver;
     
     configManager.saveSteerConfig();
+    configManager.saveTurnSensorConfig();  // Also save turn sensor config (includes current threshold)
     LOG_INFO(EventSource::AUTOSTEER, "Steer config saved to EEPROM");
     
     if (motorTypeChanged) {

@@ -79,6 +79,10 @@ private:
     uint16_t lastPressureReading;
     uint16_t lastCurrentReading;
     
+    // Current sensor spike filtering
+    uint32_t currentHighStartTime;
+    static constexpr uint32_t CURRENT_SPIKE_FILTER_MS = 1500; // 1.5 seconds - enough time for intentional wheel grab
+    
     // Kickout state
     bool kickoutActive;
     KickoutReason kickoutReason;

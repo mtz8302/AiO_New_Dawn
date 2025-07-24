@@ -1,12 +1,8 @@
 [
   {"type":"directory","name":".","contents":[
-    {"type":"file","name":"AiO_New_Dawn_v0.1.28-alpha.hex"},
-    {"type":"file","name":"AiO_New_Dawn_v0.1.29-alpha.hex"},
-    {"type":"file","name":"AiO_New_Dawn_v0.1.30-alpha.hex"},
-    {"type":"file","name":"AiO_New_Dawn_v0.1.31-alpha.hex"},
+    {"type":"file","name":"AiO_New_Dawn_v0.1.43-alpha.hex"},
     {"type":"file","name":"CLAUDE.md"},
     {"type":"file","name":"copy_hex.py"},
-    {"type":"file","name":"dependency_analysis.md"},
     {"type":"directory","name":"docs","contents":[
       {"type":"file","name":"ADC_OPTIMIZATION_NOTES.md"},
       {"type":"file","name":"ARCHITECTURE_OVERVIEW.md"},
@@ -29,10 +25,12 @@
       {"type":"file","name":"ASYNC_UDP_README.md"},
       {"type":"file","name":"ASYNC_WEB_README.md"},
       {"type":"file","name":"blocking_operations_analysis.md"},
+      {"type":"file","name":"dependency_analysis.md"},
       {"type":"file","name":"eeprom_layout.txt"},
       {"type":"file","name":"keya_implementation_notes.md"},
       {"type":"file","name":"KEYA_MOTOR_KNOWLEDGE.md"},
       {"type":"file","name":"keya_protocol_actual.md"},
+      {"type":"file","name":"ldf.rst"},
       {"type":"file","name":"MOTOR_DRIVER_OVERHAUL_PLAN.md"},
       {"type":"file","name":"MOTOR_DRIVER_OVERHAUL.md"},
       {"type":"file","name":"motor_test_instructions.md"},
@@ -40,7 +38,6 @@
       {"type":"file","name":"QNETHERNET_README.md"},
       {"type":"file","name":"test_motor_detection.md"}
     ]},
-    {"type":"file","name":"ldf.rst"},
     {"type":"directory","name":"lib","contents":[
       {"type":"directory","name":"Adafruit_BusIO","contents":[
         {"type":"file","name":"Adafruit_GenericDevice.cpp"},
@@ -59,6 +56,8 @@
         {"type":"file","name":"AutosteerProcessor.cpp"},
         {"type":"file","name":"AutosteerProcessor.h"},
         {"type":"file","name":"DanfossMotorDriver.h"},
+        {"type":"file","name":"EncoderProcessor.cpp"},
+        {"type":"file","name":"EncoderProcessor.h"},
         {"type":"file","name":"KeyaCANDriver.h"},
         {"type":"file","name":"KickoutMonitor.cpp"},
         {"type":"file","name":"KickoutMonitor.h"},
@@ -70,6 +69,7 @@
         {"type":"file","name":"PWMMotorDriver.h"},
         {"type":"file","name":"PWMProcessor.cpp"},
         {"type":"file","name":"PWMProcessor.h"},
+        {"type":"file","name":"TurnSensorTypes.h"},
         {"type":"file","name":"WheelAngleFusion.cpp"},
         {"type":"file","name":"WheelAngleFusion.h"}
       ]},
@@ -597,6 +597,13 @@
         {"type":"file","name":"DHCPLite.cpp"},
         {"type":"file","name":"DHCPLite.h"}
       ]},
+      {"type":"directory","name":"Encoder","contents":[
+        {"type":"file","name":"direct_pin_read.h"},
+        {"type":"file","name":"Encoder.cpp"},
+        {"type":"file","name":"Encoder.h"},
+        {"type":"file","name":"interrupt_config.h"},
+        {"type":"file","name":"interrupt_pins.h"}
+      ]},
       {"type":"directory","name":"FlasherX","contents":[
         {"type":"file","name":"CRCStream.cpp"},
         {"type":"file","name":"CRCStream.h"},
@@ -977,6 +984,7 @@
         {"type":"file","name":"UBXParser.h"}
       ]}
     ]},
+    {"type":"file","name":"LICENSE.md"},
     {"type":"directory","name":"migration","contents":[
       {"type":"file","name":"CONTINUATION_PROMPT_QNETHERNET.md"},
       {"type":"file","name":"CONTINUATION_PROMPT_WEBSERVER.md"},
@@ -986,6 +994,7 @@
       {"type":"file","name":"WEB_UI_MIGRATION_PLAN_REVISED.md"},
       {"type":"file","name":"WEB_UI_MIGRATION_PLAN.md"}
     ]},
+    {"type":"file","name":"PGN250.md"},
     {"type":"file","name":"platformio.ini"},
     {"type":"file","name":"README.md"},
     {"type":"directory","name":"src","contents":[
@@ -995,10 +1004,11 @@
       {"type":"file","name":"DRV8701_Basic_Testing_Niekamp (1).ino"},
       {"type":"file","name":"DRV8701_Basic_Testing_Niekamp (2).ino"},
       {"type":"file","name":"DRV8701_Basic_Testing_Niekamp.ino"},
+      {"type":"file","name":"QNE_Encoder_Test.cpp"},
       {"type":"file","name":"README"}
     ]},
     {"type":"file","name":"to_bin.py"}
   ]}
 ,
-  {"type":"report","directories":161,"files":679}
+  {"type":"report","directories":162,"files":687}
 ]

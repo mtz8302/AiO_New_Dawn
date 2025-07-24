@@ -32,6 +32,7 @@ KickoutMonitor::KickoutMonitor() :
     lastPGN250Time(0),
     lastPressureReading(0),
     lastCurrentReading(0),
+    currentHighStartTime(0),
     kickoutActive(false),
     kickoutReason(NONE),
     kickoutTime(0) {
@@ -122,6 +123,7 @@ void KickoutMonitor::process() {
         if (!isKeyaMotor) {
             lastPressureReading = (uint16_t)adProcessor->getPressureReading();
             lastCurrentReading = adProcessor->getMotorCurrent();
+            
         }
         sendPGN250();
         lastPGN250Time = now;
@@ -282,21 +284,52 @@ bool KickoutMonitor::checkCurrentKickout() {
     // Get threshold from config (0-255, same scale as PGN250)
     uint8_t thresholdPercent = configMgr->getCurrentThreshold();
     
-    // Convert threshold to ADC counts
-    // Same scaling as PGN250: 200 counts/amp * 8.4A = 1680 counts for 255 (100%)
+    
+    // Convert threshold to raw ADC counts to match what ADProcessor returns
+    // ADProcessor returns counts after baseline subtraction
+    // Use same scale as PGN250 for consistency: 1680 counts = 255 (100%)
     uint16_t thresholdCounts = (thresholdPercent * 1680) / 255;
     
-    if (lastCurrentReading > thresholdCounts) {
-        // Only log when first detecting kickout (not already active)
-        if (!kickoutActive) {
-            LOG_DEBUG(EventSource::AUTOSTEER, "Current high: %u counts (%.1f%%) > threshold %u counts (%.1f%%)", 
-                          lastCurrentReading, (lastCurrentReading * 100.0f) / 1680.0f,
-                          thresholdCounts, (thresholdPercent * 100.0f) / 255.0f);
-        }
-        return true;
-    }
+    // Add 10% hysteresis to prevent triggering right at threshold
+    // This helps with direction changes where current briefly spikes
+    uint16_t thresholdWithHysteresis = thresholdCounts + (thresholdCounts / 10);
     
-    return false;
+    if (lastCurrentReading > thresholdWithHysteresis) {
+        // Current is above threshold - check if it's been high long enough
+        uint32_t now = millis();
+        
+        if (currentHighStartTime == 0) {
+            // First time seeing high current - start timing
+            currentHighStartTime = now;
+            LOG_INFO(EventSource::AUTOSTEER, "Current high detected: %u counts (%.1f%%) - monitoring for %.1f seconds", 
+                      lastCurrentReading, (lastCurrentReading * 100.0f) / 1680.0f, CURRENT_SPIKE_FILTER_MS / 1000.0f);
+            return false; // Don't kickout yet
+        }
+        
+        // Check if current has been high long enough
+        uint32_t highDuration = now - currentHighStartTime;
+        if (highDuration >= CURRENT_SPIKE_FILTER_MS) {
+            // Current has been high for long enough - trigger kickout
+            if (!kickoutActive) {
+                LOG_INFO(EventSource::AUTOSTEER, "Current kickout after %ums: reading=%u counts > threshold=%u counts (+10%% = %u) (config=%.1f%%)", 
+                              highDuration, lastCurrentReading, thresholdCounts, thresholdWithHysteresis, 
+                              (thresholdPercent * 100.0f) / 255.0f);
+            }
+            currentHighStartTime = 0; // Reset for next time
+            return true;
+        }
+        
+        // Still waiting for duration to elapse
+        return false;
+    } else {
+        // Current is below threshold - reset timer if it was running
+        if (currentHighStartTime != 0) {
+            uint32_t duration = millis() - currentHighStartTime;
+            LOG_INFO(EventSource::AUTOSTEER, "Current returned to normal after %ums - no kickout", duration);
+            currentHighStartTime = 0;
+        }
+        return false;
+    }
 }
 
 bool KickoutMonitor::checkMotorSlipKickout() {
@@ -330,6 +363,9 @@ void KickoutMonitor::clearKickout() {
     kickoutReason = NONE;
     kickoutTime = 0;
     
+    // Reset current spike timer
+    currentHighStartTime = 0;
+    
     // Reset encoder count via EncoderProcessor
     if (encoderProc) {
         encoderProc->resetPulseCount();
@@ -356,13 +392,18 @@ uint8_t KickoutMonitor::getTurnSensorReading() const {
     // Determine which turn sensor type is active
     TurnSensorType sensorType = TurnSensorType::NONE;
     
-    if (configMgr->getShaftEncoder()) {
+    bool hasEncoder = configMgr->getShaftEncoder();
+    bool hasPressure = configMgr->getPressureSensor();
+    bool hasCurrent = configMgr->getCurrentSensor();
+    
+    if (hasEncoder) {
         sensorType = TurnSensorType::ENCODER;
-    } else if (configMgr->getPressureSensor()) {
+    } else if (hasPressure) {
         sensorType = TurnSensorType::PRESSURE;
-    } else if (configMgr->getCurrentSensor()) {
+    } else if (hasCurrent) {
         sensorType = TurnSensorType::CURRENT;
     }
+    
     
     // Return the appropriate sensor value
     switch (sensorType) {
@@ -378,7 +419,10 @@ uint8_t KickoutMonitor::getTurnSensorReading() const {
             // Scale to 0-255 where 255 = 8.4A (100%)
             // Using conservative estimate: 200 counts/amp * 8.4A = 1680 counts for full scale
             float scaledCurrent = (lastCurrentReading * 255.0f) / 1680.0f;
-            return (uint8_t)min(scaledCurrent, 255.0f);
+            uint8_t result = (uint8_t)min(scaledCurrent, 255.0f);
+            
+            
+            return result;
         }
             
         case TurnSensorType::NONE:
@@ -419,26 +463,4 @@ void KickoutMonitor::sendPGN250() {
     // Send via UDP
     sendUDPbytes(pgn250, sizeof(pgn250));
     
-    // Debug log periodically
-    static uint32_t lastDebugTime = 0;
-    if (millis() - lastDebugTime > 5000) {  // Every 5 seconds
-        lastDebugTime = millis();
-        
-        // Log which sensor type is active and its raw value
-        const char* sensorName = "None";
-        uint16_t rawValue = 0;
-        if (configMgr->getShaftEncoder()) {
-            sensorName = "Encoder";
-            rawValue = encoderPulseCount;
-        } else if (configMgr->getPressureSensor()) {
-            sensorName = "Pressure";
-            rawValue = lastPressureReading;
-        } else if (configMgr->getCurrentSensor()) {
-            sensorName = "Current";
-            rawValue = lastCurrentReading;
-        }
-        
-        LOG_DEBUG(EventSource::AUTOSTEER, "PGN250: Sensor=%s, Raw=%u, Sent=%d", 
-                  sensorName, rawValue, pgn250[5]);
-    }
 }
