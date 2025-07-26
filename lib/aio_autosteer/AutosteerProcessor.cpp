@@ -241,6 +241,13 @@ void AutosteerProcessor::process() {
                 steerState = !steerState;
                 LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via button press", 
                          steerState == 0 ? "ARMED" : "DISARMED");
+                
+                // Reset encoder count when autosteer is armed
+                if (steerState == 0 && EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
+                    EncoderProcessor::getInstance()->resetPulseCount();
+                    LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
+                }
+                
                 // Pulse blue LED for button press
                 ledManagerFSM.pulseButton();
             }
@@ -255,6 +262,13 @@ void AutosteerProcessor::process() {
                 steerState = switchOn ? 0 : 1;  // 0 = armed, 1 = disarmed
                 LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via switch", 
                          steerState == 0 ? "ARMED" : "DISARMED");
+                
+                // Reset encoder count when autosteer is armed
+                if (steerState == 0 && EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
+                    EncoderProcessor::getInstance()->resetPulseCount();
+                    LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
+                }
+                
                 lastSwitchState = switchOn;
             }
         }
@@ -262,10 +276,20 @@ void AutosteerProcessor::process() {
     
     // Check if guidance status changed from AgOpenGPS
     if (guidanceStatusChanged) {
+        LOG_INFO(EventSource::AUTOSTEER, "Guidance status changed: %s (steerState=%d, hasKickout=%d)",
+                 guidanceActive ? "ACTIVE" : "INACTIVE", steerState,
+                 kickoutMonitor ? kickoutMonitor->hasKickout() : 0);
+        
         if (guidanceActive) {
             // Guidance turned ON in AgOpenGPS
             steerState = 0;  // Activate steering
             LOG_INFO(EventSource::AUTOSTEER, "Autosteer ARMED via AgOpenGPS (OSB)");
+            
+            // If there's a kickout active, clear it
+            if (kickoutMonitor && kickoutMonitor->hasKickout()) {
+                kickoutMonitor->clearKickout();
+                LOG_INFO(EventSource::AUTOSTEER, "KICKOUT: Cleared via AgOpenGPS (OSB)");
+            }
             
             // Reset encoder count when autosteer engages
             if (EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
@@ -329,6 +353,10 @@ void AutosteerProcessor::process() {
         }
     }
     
+    // Track when button/switch is pressed while in kickout
+    static uint32_t kickoutButtonPressTime = 0;
+    static bool kickoutButtonPressed = false;
+    
     // Process kickout monitoring
     if (kickoutMonitor) {
         kickoutMonitor->process();
@@ -339,7 +367,58 @@ void AutosteerProcessor::process() {
             steerState = 1;  // Disarmed
             emergencyStop();
             LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s - steering disarmed", kickoutMonitor->getReasonString());
+            kickoutButtonPressTime = millis();  // Start grace period for button clear
+            kickoutButtonPressed = false;
             // Don't clear kickout here - let KickoutMonitor auto-clear when conditions return to normal
+        }
+        
+        // Grace period after kickout - allow button/switch to clear it
+        if (kickoutMonitor->hasKickout() && steerState == 0 && !kickoutButtonPressed &&
+            millis() - kickoutButtonPressTime < 5000) {  // 5 second grace period
+            // User pressed button/switch to re-arm during grace period - clear kickout
+            kickoutMonitor->clearKickout();
+            kickoutButtonPressed = true;
+            LOG_INFO(EventSource::AUTOSTEER, "KICKOUT: Cleared via button/switch during grace period");
+            
+            // Reset encoder count
+            if (EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
+                EncoderProcessor::getInstance()->resetPulseCount();
+                LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
+            }
+        }
+        
+            // Check for OSB re-engagement during kickout
+        // When in kickout (steerState=1) and guidance is active, check if user is trying to re-engage
+        // The OSB doesn't change any bits, but we can detect repeated clicks by watching for
+        // guidance going off then on again quickly
+        static uint32_t lastGuidanceOffTime = 0;
+        static bool waitingForGuidanceOn = false;
+        
+        if (kickoutMonitor->hasKickout() && steerState == 1) {
+            if (!guidanceActive && prevGuidanceStatus) {
+                // Guidance just went OFF - user might have clicked OSB
+                lastGuidanceOffTime = millis();
+                waitingForGuidanceOn = true;
+                LOG_DEBUG(EventSource::AUTOSTEER, "Guidance went OFF during kickout - watching for re-engagement");
+            }
+            else if (guidanceActive && !prevGuidanceStatus && waitingForGuidanceOn && 
+                     (millis() - lastGuidanceOffTime < 1000)) {
+                // Guidance went back ON within 1 second - this is an OSB toggle
+                waitingForGuidanceOn = false;
+                
+                LOG_INFO(EventSource::AUTOSTEER, "OSB toggle detected during kickout - clearing kickout");
+                
+                // Clear kickout and re-arm
+                kickoutMonitor->clearKickout();
+                steerState = 0;  // Re-arm
+                LOG_INFO(EventSource::AUTOSTEER, "KICKOUT: Cleared via OSB toggle");
+                
+                // Reset encoder count
+                if (EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
+                    EncoderProcessor::getInstance()->resetPulseCount();
+                    LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
+                }
+            }
         }
     }
     
@@ -458,6 +537,19 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     // Expected length is 14 bytes total, but we get data after header
     
     LOG_DEBUG(EventSource::AUTOSTEER, "PGN 251 (Steer Config) received, %d bytes", len);
+    
+    // Clear any active kickout when steer config is received
+    // This happens when user clicks the test button in AgOpenGPS
+    if (kickoutMonitor && kickoutMonitor->hasKickout()) {
+        kickoutMonitor->clearKickout();
+        LOG_INFO(EventSource::AUTOSTEER, "KICKOUT: Cleared via steer config update");
+        
+        // Reset encoder count
+        if (EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
+            EncoderProcessor::getInstance()->resetPulseCount();
+            LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset via steer config");
+        }
+    }
     
     // Always show debug info first, regardless of packet validity
     char debugMsg[256];
@@ -759,6 +851,22 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     uint8_t status = data[2];
     bool newAutosteerState = (status & 0x40) != 0;  // Bit 6 is autosteer enable
     
+    // Debug OSB behavior - log every second during kickout
+    static uint32_t lastStatusLog = 0;
+    if (kickoutMonitor && kickoutMonitor->hasKickout() && millis() - lastStatusLog > 1000) {
+        lastStatusLog = millis();
+        LOG_INFO(EventSource::AUTOSTEER, "During kickout - PGN254 status: 0x%02X (guidance=%d, autosteer=%d), steerState=%d",
+                 status, (status & 0x01) != 0, (status & 0x40) != 0, steerState);
+    }
+    
+    // Also log any status changes
+    static uint8_t lastStatus = 0;
+    if (status != lastStatus) {
+        LOG_INFO(EventSource::AUTOSTEER, "PGN254 status changed: 0x%02X -> 0x%02X (guidance=%d, autosteer=%d)",
+                 lastStatus, status, (status & 0x01) != 0, (status & 0x40) != 0);
+        lastStatus = status;
+    }
+    
     
     // Track guidance status changes
     static bool firstBroadcast = true;
@@ -794,12 +902,31 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     uint8_t sections9_16 = data[7];
     machineSections = (uint16_t)(sections9_16 << 8 | sections1_8);
     
-    // Only print on state change to avoid spam
-    if (newAutosteerState != autosteerEnabled) {
-        LOG_INFO(EventSource::AUTOSTEER, "AgOpenGPS autosteer request: %s", 
-                      newAutosteerState ? "ENGAGE" : "DISENGAGE");
-        autosteerEnabled = newAutosteerState;
+    // Track autosteer enable bit changes for OSB handling
+    static bool prevAutosteerEnabled = false;
+    if (newAutosteerState != prevAutosteerEnabled) {
+        LOG_INFO(EventSource::AUTOSTEER, "AgOpenGPS autosteer bit changed: %s", 
+                      newAutosteerState ? "ENABLED" : "DISABLED");
+        
+        // If autosteer bit goes high and we're in kickout, this might be OSB press
+        if (newAutosteerState && !prevAutosteerEnabled && steerState == 1) {
+            // Check if we have an active kickout
+            if (kickoutMonitor && kickoutMonitor->hasKickout()) {
+                // OSB pressed during kickout - clear it and re-arm
+                kickoutMonitor->clearKickout();
+                steerState = 0;  // Re-arm
+                LOG_INFO(EventSource::AUTOSTEER, "KICKOUT: Cleared via OSB - autosteer re-armed");
+                
+                // Reset encoder count
+                if (EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
+                    EncoderProcessor::getInstance()->resetPulseCount();
+                    LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
+                }
+            }
+        }
+        prevAutosteerEnabled = newAutosteerState;
     }
+    autosteerEnabled = newAutosteerState;
 }
 
 // Static callback wrapper
