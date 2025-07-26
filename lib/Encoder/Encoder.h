@@ -38,14 +38,14 @@
 #include "pins_arduino.h"
 #endif
 
-#include "direct_pin_read.h"
+#include "utility/direct_pin_read.h"
 
 #if defined(ENCODER_USE_INTERRUPTS) || !defined(ENCODER_DO_NOT_USE_INTERRUPTS)
 #define ENCODER_USE_INTERRUPTS
 #define ENCODER_ARGLIST_SIZE CORE_NUM_INTERRUPT
-#include "interrupt_pins.h"
+#include "utility/interrupt_pins.h"
 #ifdef ENCODER_OPTIMIZE_INTERRUPTS
-#include "interrupt_config.h"
+#include "utility/interrupt_config.h"
 #endif
 #else
 #define ENCODER_ARGLIST_SIZE 0
@@ -58,8 +58,6 @@
 #define ENCODER_ISR_ATTR
 #endif
 
-
-
 // All the data needed by interrupts is consolidated into this ugly struct
 // to facilitate assembly language optimizing of the speed critical update.
 // The assembly code uses auto-incrementing addressing modes, so the struct
@@ -71,13 +69,17 @@ typedef struct {
 	IO_REG_TYPE            pin2_bitmask;
 	uint8_t                state;
 	int32_t                position;
-  uint8_t                count;
 } Encoder_internal_state_t;
 
 class Encoder
 {
 public:
-	Encoder(uint8_t pin1, uint8_t pin2) {
+	// one step setup like before
+	Encoder(uint8_t pin1, uint8_t pin2) { begin(pin1, pin2);}
+
+	// two step setup for platforms that have issues with constructor ordering
+	Encoder() { }
+	void begin(uint8_t pin1, uint8_t pin2) {
 		#ifdef INPUT_PULLUP
 		pinMode(pin1, INPUT_PULLUP);
 		pinMode(pin2, INPUT_PULLUP);
@@ -100,9 +102,7 @@ public:
 		if (DIRECT_PIN_READ(encoder.pin1_register, encoder.pin1_bitmask)) s |= 1;
 		if (DIRECT_PIN_READ(encoder.pin2_register, encoder.pin2_bitmask)) s |= 2;
 		encoder.state = s;
-		//Serial.print("Using interrupts?");
 #ifdef ENCODER_USE_INTERRUPTS
-		//Serial.print(" Using interrupts");
 		interrupts_in_use = attach_interrupt(pin1, &encoder);
 		interrupts_in_use += attach_interrupt(pin2, &encoder);
 #endif
@@ -111,7 +111,7 @@ public:
 
 
 #ifdef ENCODER_USE_INTERRUPTS
-	inline int32_t readPosition() {
+	inline int32_t read() {
 		if (interrupts_in_use < 2) {
 			noInterrupts();
 			update(&encoder);
@@ -122,18 +122,7 @@ public:
 		interrupts();
 		return ret;
 	}
-	inline int32_t readCount() {
-		if (interrupts_in_use < 2) {
-			noInterrupts();
-			update(&encoder);
-		} else {
-			noInterrupts();
-		}
-		int32_t ret = encoder.count;
-		interrupts();
-		return ret;
-	}
-	inline int32_t readPositionAndReset() {
+	inline int32_t readAndReset() {
 		if (interrupts_in_use < 2) {
 			noInterrupts();
 			update(&encoder);
@@ -142,18 +131,16 @@ public:
 		}
 		int32_t ret = encoder.position;
 		encoder.position = 0;
-    encoder.count = 0;
 		interrupts();
 		return ret;
 	}
 	inline void write(int32_t p) {
 		noInterrupts();
 		encoder.position = p;
-    encoder.count = p;
 		interrupts();
 	}
 #else
-	inline int32_t readPosition() {
+	inline int32_t read() {
 		update(&encoder);
 		return encoder.position;
 	}
@@ -161,12 +148,10 @@ public:
 		update(&encoder);
 		int32_t ret = encoder.position;
 		encoder.position = 0;
-    encoder.count = 0;
 		return ret;
 	}
 	inline void write(int32_t p) {
 		encoder.position = p;
-    encoder.count = p;
 	}
 #endif
 private:
@@ -228,7 +213,11 @@ public:
 	// update() is not meant to be called from outside Encoder,
 	// but it is public to allow static interrupt routines.
 	// DO NOT call update() directly from sketches.
+#if defined(IRAM_ATTR)
+	static IRAM_ATTR void update(Encoder_internal_state_t *arg) {
+#else
 	static void update(Encoder_internal_state_t *arg) {
+#endif
 #if defined(__AVR__)
 		// The compiler believes this is just 1 line of code, so
 		// it will inline this function into each interrupt
@@ -317,23 +306,25 @@ public:
 		uint8_t p1val = DIRECT_PIN_READ(arg->pin1_register, arg->pin1_bitmask);
 		uint8_t p2val = DIRECT_PIN_READ(arg->pin2_register, arg->pin2_bitmask);
 		uint8_t state = arg->state & 3;
+		//Serial.print(p1val); Serial.print(", ");
+		//Serial.print(p2val); Serial.print(", ");
+		//Serial.print(state); Serial.print(", ");
 		if (p1val) state |= 4;
 		if (p2val) state |= 8;
+		//Serial.print(state); Serial.println(", ");
 		arg->state = (state >> 2);
 		switch (state) {
 			case 1: case 7: case 8: case 14:
 				arg->position++;
-        arg->count++;
 				return;
 			case 2: case 4: case 11: case 13:
 				arg->position--;
-        arg->count++;
 				return;
 			case 3: case 12:
-				arg->position += 200;
+				arg->position += 2;
 				return;
 			case 6: case 9:
-				arg->position -= 200;
+				arg->position -= 2;
 				return;
 		}
 #endif
@@ -785,7 +776,7 @@ private:
 	static ENCODER_ISR_ATTR void isr2(void) { update(interruptArgs[2]); }
 	#endif
 	#ifdef CORE_INT3_PIN
-	static ENCODER_ISR_ATTR void isr3(void) { update(interruptArgs[3]); }
+	static ENCODER_ISR_ATTR void isr3(void) { update(interruptArgs[3]);}
 	#endif
 	#ifdef CORE_INT4_PIN
 	static ENCODER_ISR_ATTR void isr4(void) { update(interruptArgs[4]); }
