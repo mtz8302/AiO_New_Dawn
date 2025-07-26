@@ -276,7 +276,7 @@ void AutosteerProcessor::process() {
     
     // Check if guidance status changed from AgOpenGPS
     if (guidanceStatusChanged) {
-        LOG_INFO(EventSource::AUTOSTEER, "Guidance status changed: %s (steerState=%d, hasKickout=%d)",
+        LOG_DEBUG(EventSource::AUTOSTEER, "Guidance status changed: %s (steerState=%d, hasKickout=%d)",
                  guidanceActive ? "ACTIVE" : "INACTIVE", steerState,
                  kickoutMonitor ? kickoutMonitor->hasKickout() : 0);
         
@@ -399,7 +399,6 @@ void AutosteerProcessor::process() {
                 // Guidance just went OFF - user might have clicked OSB
                 lastGuidanceOffTime = millis();
                 waitingForGuidanceOn = true;
-                LOG_DEBUG(EventSource::AUTOSTEER, "Guidance went OFF during kickout - watching for re-engagement");
             }
             else if (guidanceActive && !prevGuidanceStatus && waitingForGuidanceOn && 
                      (millis() - lastGuidanceOffTime < 1000)) {
@@ -634,11 +633,12 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     
     // Determine motor type from config
     const char* motorType = "Unknown";
+    bool isDanfossConfig = false;
     switch (steerConfig.MotorDriverConfig) {
         case 0x00: motorType = steerConfig.CytronDriver ? "Cytron IBT2" : "DRV8701"; break;
-        case 0x01: motorType = "Danfoss"; break;
+        case 0x01: motorType = "Danfoss"; isDanfossConfig = true; break;
         case 0x02: motorType = steerConfig.CytronDriver ? "Cytron IBT2" : "DRV8701"; break;
-        case 0x03: motorType = "Danfoss"; break;
+        case 0x03: motorType = "Danfoss"; isDanfossConfig = true; break;
         case 0x04: motorType = steerConfig.CytronDriver ? "Cytron IBT2" : "DRV8701"; break;
         default: motorType = "Unknown"; break;
     }
@@ -662,6 +662,10 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
              steerConfig.CurrentSensor ? "Yes" : "No",
              steerConfig.PulseCountMax,
              motorType);
+             
+    // Additional debug for encoder configuration
+    LOG_DEBUG(EventSource::AUTOSTEER, "Encoder Debug: ShaftEncoder=%d, IsDanfoss=%d, MotorConfig=0x%02X, MotorType=%s",
+             steerConfig.ShaftEncoder, steerConfig.IsDanfoss, steerConfig.MotorDriverConfig, motorType);
     
     
     // Save config to EEPROM
@@ -855,14 +859,14 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     static uint32_t lastStatusLog = 0;
     if (kickoutMonitor && kickoutMonitor->hasKickout() && millis() - lastStatusLog > 1000) {
         lastStatusLog = millis();
-        LOG_INFO(EventSource::AUTOSTEER, "During kickout - PGN254 status: 0x%02X (guidance=%d, autosteer=%d), steerState=%d",
+        LOG_DEBUG(EventSource::AUTOSTEER, "During kickout - PGN254 status: 0x%02X (guidance=%d, autosteer=%d), steerState=%d",
                  status, (status & 0x01) != 0, (status & 0x40) != 0, steerState);
     }
     
     // Also log any status changes
     static uint8_t lastStatus = 0;
     if (status != lastStatus) {
-        LOG_INFO(EventSource::AUTOSTEER, "PGN254 status changed: 0x%02X -> 0x%02X (guidance=%d, autosteer=%d)",
+        LOG_DEBUG(EventSource::AUTOSTEER, "PGN254 status changed: 0x%02X -> 0x%02X (guidance=%d, autosteer=%d)",
                  lastStatus, status, (status & 0x01) != 0, (status & 0x40) != 0);
         lastStatus = status;
     }
@@ -905,7 +909,7 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     // Track autosteer enable bit changes for OSB handling
     static bool prevAutosteerEnabled = false;
     if (newAutosteerState != prevAutosteerEnabled) {
-        LOG_INFO(EventSource::AUTOSTEER, "AgOpenGPS autosteer bit changed: %s", 
+        LOG_DEBUG(EventSource::AUTOSTEER, "AgOpenGPS autosteer bit changed: %s", 
                       newAutosteerState ? "ENABLED" : "DISABLED");
         
         // If autosteer bit goes high and we're in kickout, this might be OSB press

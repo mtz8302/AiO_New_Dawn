@@ -89,6 +89,28 @@ void KickoutMonitor::process() {
     // Determine motor type for sensor relevance
     bool isKeyaMotor = (motorDriver && motorDriver->getType() == MotorDriverType::KEYA_CAN);
     
+    // Debug motor type and sensor configuration
+    static uint32_t lastDebugTime = 0;
+    if (millis() - lastDebugTime > 10000) {  // Every 10 seconds
+        lastDebugTime = millis();
+        if (motorDriver) {
+            const char* motorTypeName = "Unknown";
+            switch (motorDriver->getType()) {
+                case MotorDriverType::KEYA_CAN: motorTypeName = "KEYA_CAN"; break;
+                case MotorDriverType::DANFOSS: motorTypeName = "DANFOSS"; break;
+                case MotorDriverType::DRV8701: motorTypeName = "DRV8701"; break;
+                case MotorDriverType::CYTRON_MD30C: motorTypeName = "CYTRON_MD30C"; break;
+                case MotorDriverType::IBT2: motorTypeName = "IBT2"; break;
+                default: break;
+            }
+            LOG_DEBUG(EventSource::AUTOSTEER, "KickoutMonitor: Motor=%s, isKeya=%d, Encoder=%d, Pressure=%d, Current=%d",
+                     motorTypeName, isKeyaMotor,
+                     configMgr->getShaftEncoder(),
+                     configMgr->getPressureSensor(),
+                     configMgr->getCurrentSensor());
+        }
+    }
+    
     // Only read sensors relevant to the motor type
     if (!isKeyaMotor) {
         // Get encoder pulse count from EncoderProcessor (not relevant for Keya)
@@ -130,16 +152,19 @@ void KickoutMonitor::process() {
         // Not currently in kickout - check if we should trigger one
         
         // External sensor checks - NOT for Keya motors
-        if (!isKeyaMotor && configMgr->getShaftEncoder() && checkEncoderKickout()) {
+        if (!isKeyaMotor && configMgr->getShaftEncoder()) {
+            // Encoder is enabled for non-Keya motors
+            if (checkEncoderKickout()) {
             kickoutActive = true;
             kickoutReason = ENCODER_OVERSPEED;
             kickoutTime = millis();
             
             LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s", getReasonString());
             
-            // Notify motor driver
-            if (motorDriver) {
-                motorDriver->handleKickout(KickoutType::WHEEL_ENCODER, encoderPulseCount);
+                // Notify motor driver
+                if (motorDriver) {
+                    motorDriver->handleKickout(KickoutType::WHEEL_ENCODER, encoderPulseCount);
+                }
             }
         }
         else if (!isKeyaMotor && configMgr->getPressureSensor() && checkPressureKickout()) {
@@ -240,7 +265,7 @@ bool KickoutMonitor::checkEncoderKickout() {
         uint32_t now = millis();
         
         if (!kickoutActive || (now - lastLogTime >= 1000)) {
-            LOG_INFO(EventSource::AUTOSTEER, "Encoder kickout: count=%d (max %u)", 
+            LOG_DEBUG(EventSource::AUTOSTEER, "Encoder kickout: count=%d (max %u)", 
                           encoderPulseCount, maxPulses);
             lastLogTime = now;
         }
