@@ -71,16 +71,6 @@ void EncoderProcessor::process() {
         return;
     }
     
-    // Debug logging every 2 seconds
-    static uint32_t lastDebugTime = 0;
-    if (millis() - lastDebugTime > 2000) {
-        lastDebugTime = millis();
-        uint8_t pinA = hardwareManager.getKickoutAPin();
-        uint8_t pinD = hardwareManager.getKickoutDPin();
-        LOG_INFO(EventSource::AUTOSTEER, "Encoder debug - Type: %s, Raw: %ld, PinA=%d, PinD=%d",
-                 encoderType == EncoderType::SINGLE ? "Single" : "Quad",
-                 encoder->read(), digitalRead(pinA), digitalRead(pinD));
-    }
     
     if (encoderType == EncoderType::SINGLE) {
         // Single channel encoder - count pulses
@@ -88,19 +78,16 @@ void EncoderProcessor::process() {
         
         // Log changes
         if (pulseCount != lastEncoderValue) {
-            LOG_INFO(EventSource::AUTOSTEER, "Encoder pulse count: %d (delta=%d)", 
-                     pulseCount, pulseCount - lastEncoderValue);
+            LOG_DEBUG(EventSource::AUTOSTEER, "Encoder pulse count: %d", pulseCount);
             lastEncoderValue = pulseCount;
         }
     } else {
         // Quadrature encoder - use absolute position
-        int32_t rawCount = encoder->read();
-        pulseCount = abs(rawCount);
+        pulseCount = abs(encoder->read());
         
         // Log changes
         if (pulseCount != lastEncoderValue) {
-            LOG_INFO(EventSource::AUTOSTEER, "Encoder position: %d (raw=%d, delta=%d)", 
-                     pulseCount, rawCount, pulseCount - lastEncoderValue);
+            LOG_DEBUG(EventSource::AUTOSTEER, "Encoder position: %d", pulseCount);
             lastEncoderValue = pulseCount;
         }
     }
@@ -163,17 +150,10 @@ void EncoderProcessor::initEncoder() {
         // Single channel encoder uses only digital pin
         encoder = new Encoder(pinD, pinD);  // Use same pin twice for single channel
         LOG_INFO(EventSource::AUTOSTEER, "Single channel encoder initialized on pin %d", pinD);
-        // Allow time for pullups to stabilize
-        delay(5);
-        LOG_INFO(EventSource::AUTOSTEER, "Single encoder pin D=%d after init", digitalRead(pinD));
     } else {
         // Quadrature encoder uses both pins - match test sketch order
         encoder = new Encoder(pinA, pinD);  // A12 first, then pin 3
         LOG_INFO(EventSource::AUTOSTEER, "Quadrature encoder initialized on pins A=%d, D=%d", pinA, pinD);
-        // Allow time for pullups to stabilize
-        delay(5);
-        LOG_INFO(EventSource::AUTOSTEER, "Quadrature encoder pins after init - A12=%d, D=%d", 
-                 digitalRead(pinA), digitalRead(pinD));
     }
     
     // Reset count
