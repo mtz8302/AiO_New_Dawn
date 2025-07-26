@@ -150,8 +150,8 @@ void EncoderProcessor::initEncoder() {
         return;
     }
     
-    // Don't configure pins here - the Encoder library will set them to INPUT_PULLUP
-    // Just update our tracking
+    // Don't call pinMode() here - the Encoder library will configure the pins as INPUT_PULLUP
+    // Just update our internal tracking to reflect what the Encoder library will do
     if (encoderType == EncoderType::QUADRATURE) {
         hwMgr->updatePinMode(pinA, INPUT_PULLUP);
         hwMgr->updatePinMode(pinD, INPUT_PULLUP);
