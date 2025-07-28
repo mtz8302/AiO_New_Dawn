@@ -244,11 +244,11 @@ void setup()
   if (pwmProcessor.init())
   {
     LOG_INFO(EventSource::SYSTEM, "PWMProcessor initialized");
-    pwmProcessor.setSpeedPulseHz(10.0f);
+    //pwmProcessor.setSpeedPulseHz(10.0f);  // should not set this here, use setSpeedKmh instead
     pwmProcessor.setSpeedPulseDuty(0.5f);
     pwmProcessor.enableSpeedPulse(true);
     pwmProcessor.setPulsesPerMeter(130.0f);  // ISO 11786 standard
-    pwmProcessor.setSpeedKmh(10.0f);
+    //pwmProcessor.setSpeedKmh(10.0f);  // should not set this here either
   }
   else
   {
