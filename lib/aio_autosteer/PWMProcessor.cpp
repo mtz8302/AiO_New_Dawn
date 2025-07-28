@@ -64,13 +64,14 @@ void PWMProcessor::setSpeedPulseHz(float hz)
     
     pulseFrequency = hz;
     
-    if (hz > 0.0f) {
+    //if (hz > 0.0f) {
         HardwareManager* hwMgr = HardwareManager::getInstance();
         if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, (int)hz, "PWMProcessor")) {
             LOG_WARNING(EventSource::AUTOSTEER, "Failed to change PWM frequency to %dHz", (int)hz);
         }
-    }
+    //}
     
+    //Serial.printf(" pf: %.1f", pulseFrequency);
     updatePWM();
 }
 
@@ -97,6 +98,7 @@ void PWMProcessor::setSpeedKmh(float speedKmh)
     
     // Convert speed to pulse frequency
     float hz = speedToFrequency(speedKmh);
+    //Serial.printf(" hz: %.1f", hz);
     setSpeedPulseHz(hz);
 }
 
@@ -123,9 +125,11 @@ void PWMProcessor::updatePWM()
         // So we invert the duty cycle
         int pwmValue = (int)((1.0f - pulseDuty) * 4095.0f);
         analogWrite(SPEED_PULSE_PIN, pwmValue);
+        //Serial.printf(" pwm: %i\n", pwmValue);
     } else {
         // Disable PWM - set output LOW (transistor OFF = output HIGH)
         digitalWrite(SPEED_PULSE_PIN, LOW);
+        //Serial.printf(" pwm: 0 (disabled)\n");
     }
 }
 

@@ -162,7 +162,10 @@ public:
     // Public getters for state
     bool isEnabled() const { return autosteerEnabled; }
     float getTargetAngle() const { return targetAngle; }
-    
+
+    // Public getter for PGN254 vehicle speed 
+    float getVehicleSpeed() const { return vehicleSpeed; }
+
     // Soft-start configuration
     uint16_t getSoftStartDuration() const { return softStartDurationMs; }
     void setSoftStartDuration(uint16_t durationMs) { 
