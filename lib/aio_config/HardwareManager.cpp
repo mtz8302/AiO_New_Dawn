@@ -323,8 +323,6 @@ void HardwareManager::printPinOwnership()
 // PWM resource management
 bool HardwareManager::requestPWMFrequency(uint8_t pin, uint32_t frequency, const char* owner)
 {
-    Serial.printf("Requesting PWM frequency %luHz for pin %d by %s: ", frequency, pin, owner);
-
     PWMTimerGroup group = getPWMTimerGroup(pin);
     if (group == TIMER_GROUP_UNKNOWN) {
         LOG_ERROR(EventSource::SYSTEM, "Unknown PWM timer group for pin %d", pin);
@@ -340,22 +338,19 @@ bool HardwareManager::requestPWMFrequency(uint8_t pin, uint32_t frequency, const
                 // Same owner can change their own frequency
                 if (frequency > 0) {
                     analogWriteFrequency(pin, frequency);
-                    it->second.frequency = frequency;
                     LOG_DEBUG(EventSource::SYSTEM, "PWM timer group %d frequency changed to %luHz by %s", 
                             group, frequency, owner);
-                    Serial.println(frequency);
                     return true;
                 } else {
                     // Disable PWM if frequency is 0
-                    //digitalWrite(pin, LOW); // Set output LOW to disable
-                    //analogWriteFrequency(pin, frequency);
-                    analogWrite(pin, 0); // Set duty cycle to 0
-                    it->second.frequency = frequency;
+                    //digitalWrite(pin, LOW); // does not work to set zero speed (disabled) pulse
+                    //analogWriteFrequency(pin, frequency); // does not work to set zero speed (disabled) pulse
+                    analogWrite(pin, 0); // Set duty cycle to 0 to disable output
                     LOG_DEBUG(EventSource::SYSTEM, "PWM timer group %d disabled by %s", 
                             group, owner);
-                    Serial.println("Disabled");
                     return true;
                 }
+                it->second.frequency = frequency;
             } else {
                 // Different owner - conflict
                 LOG_WARNING(EventSource::SYSTEM, 
@@ -364,7 +359,6 @@ bool HardwareManager::requestPWMFrequency(uint8_t pin, uint32_t frequency, const
                 return false;
             }
         }
-        Serial.println("unchanged");
         // Same frequency is OK
         return true;
     }

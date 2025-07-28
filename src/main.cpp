@@ -407,6 +407,15 @@ void loop()
         // Convert knots to km/h
         speedKmh = gpsData.speedKnots * 1.852f;
       }
+      else
+      {
+        // Fallback to PGN 254 speed if GPS velocity is not available
+        // This is useful for systems that are running in SIM mode
+        // - could also always use PGN254 speed as it returns GPS speed if available
+        speedKmh = AutosteerProcessor::getInstance()->getVehicleSpeed();
+      }
+
+      //Serial.printf("Vehicle speed: %.1f km/h", speedKmh);
       
       // Set the speed
       pwmProcessor.setSpeedKmh(speedKmh);
