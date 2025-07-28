@@ -64,12 +64,10 @@ void PWMProcessor::setSpeedPulseHz(float hz)
     
     pulseFrequency = hz;
     
-    //if (hz > 0.0f) { // check for zero speed in requestPWMFrequency()
-        HardwareManager* hwMgr = HardwareManager::getInstance();
-        if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, (int)hz, "PWMProcessor")) {
-            LOG_WARNING(EventSource::AUTOSTEER, "Failed to change PWM frequency to %dHz", (int)hz);
-        }
-    //}
+    HardwareManager* hwMgr = HardwareManager::getInstance();
+    if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, (int)hz, "PWMProcessor")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to change PWM frequency to %dHz", (int)hz);
+    }
     
     updatePWM();
 }
