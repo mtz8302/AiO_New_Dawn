@@ -222,8 +222,6 @@ void setup()
   if (adProcessor.init())
   {
     LOG_INFO(EventSource::SYSTEM, "ADProcessor initialized");
-    adProcessor.setWASOffset(1553);  // 2.5V center with 10k/10k voltage divider
-    adProcessor.setWASCountsPerDegree(30.0f);
     adProcessor.process();
   }
   else
