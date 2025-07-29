@@ -44,13 +44,13 @@ bool PWMProcessor::init()
     }
     
     // Request initial frequency
-    if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, 100, "PWMProcessor")) {
+    if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, 0, "PWMProcessor")) {
         LOG_WARNING(EventSource::AUTOSTEER, "Failed to set initial PWM frequency");
     }
     
     LOG_DEBUG(EventSource::AUTOSTEER, "Speed pulse pin (D33) configured");
     LOG_DEBUG(EventSource::AUTOSTEER, "PWM resolution: 12-bit");
-    LOG_DEBUG(EventSource::AUTOSTEER, "Default frequency: 100Hz");
+    //LOG_DEBUG(EventSource::AUTOSTEER, "Default frequency: 100Hz");    // let's not set an erronious pulse ouput
     LOG_DEBUG(EventSource::AUTOSTEER, "Output type: Open collector (inverted)");
     LOG_INFO(EventSource::AUTOSTEER, "PWM Processor initialization SUCCESS");
     
@@ -64,11 +64,9 @@ void PWMProcessor::setSpeedPulseHz(float hz)
     
     pulseFrequency = hz;
     
-    if (hz > 0.0f) {
-        HardwareManager* hwMgr = HardwareManager::getInstance();
-        if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, (int)hz, "PWMProcessor")) {
-            LOG_WARNING(EventSource::AUTOSTEER, "Failed to change PWM frequency to %dHz", (int)hz);
-        }
+    HardwareManager* hwMgr = HardwareManager::getInstance();
+    if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, (int)hz, "PWMProcessor")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to change PWM frequency to %dHz", (int)hz);
     }
     
     updatePWM();

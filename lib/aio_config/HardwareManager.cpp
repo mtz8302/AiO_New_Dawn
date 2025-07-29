@@ -336,11 +336,21 @@ bool HardwareManager::requestPWMFrequency(uint8_t pin, uint32_t frequency, const
             // Check if it's the same owner trying to change frequency
             if (strcmp(it->second.owner, owner) == 0) {
                 // Same owner can change their own frequency
-                analogWriteFrequency(pin, frequency);
+                if (frequency > 0) {
+                    analogWriteFrequency(pin, frequency);
+                    LOG_DEBUG(EventSource::SYSTEM, "PWM timer group %d frequency changed to %luHz by %s", 
+                            group, frequency, owner);
+                    return true;
+                } else {
+                    // Disable PWM if frequency is 0
+                    //digitalWrite(pin, LOW); // does not work to set zero speed (disabled) pulse
+                    //analogWriteFrequency(pin, frequency); // does not work to set zero speed (disabled) pulse
+                    analogWrite(pin, 0); // Set duty cycle to 0 to disable output
+                    LOG_DEBUG(EventSource::SYSTEM, "PWM timer group %d disabled by %s", 
+                            group, owner);
+                    return true;
+                }
                 it->second.frequency = frequency;
-                LOG_DEBUG(EventSource::SYSTEM, "PWM timer group %d frequency changed to %luHz by %s", 
-                         group, frequency, owner);
-                return true;
             } else {
                 // Different owner - conflict
                 LOG_WARNING(EventSource::SYSTEM, 
