@@ -13,7 +13,7 @@
 // Baud rates (self-contained constants)
 const int32_t baudGPS = 460800;
 const int32_t baudRTK = 115200;
-const int32_t baudRS232 = 38400;
+const int32_t baudRS232 = 115200;
 const int32_t baudESP32 = 460800;
 const int32_t baudIMU = 115200;
 
@@ -53,7 +53,7 @@ public:
     // Baud rates (matching pcb.h values)
     static const int32_t BAUD_GPS = 460800;
     static const int32_t BAUD_RTK = 115200;
-    static const int32_t BAUD_RS232 = 38400;
+    static const int32_t BAUD_RS232 = 115200;
     static const int32_t BAUD_ESP32 = 460800;
     static const int32_t BAUD_IMU = 115200;
 
