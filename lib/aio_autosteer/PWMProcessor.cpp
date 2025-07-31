@@ -29,10 +29,12 @@ bool PWMProcessor::init()
     
     // Configure speed pulse pin as output
     pinMode(SPEED_PULSE_PIN, OUTPUT);
+    pinMode(SPEED_PULSE_LED_PIN, OUTPUT);
     
     // Start with output LOW (transistor OFF = output HIGH due to pull-up)
     // Remember: output is inverted through transistor
     digitalWrite(SPEED_PULSE_PIN, LOW);
+    digitalWrite(SPEED_PULSE_LED_PIN, LOW);
     
     // Configure PWM through HardwareManager
     HardwareManager* hwMgr = HardwareManager::getInstance();
@@ -45,12 +47,15 @@ bool PWMProcessor::init()
     
     // Request initial frequency
     if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, 0, "PWMProcessor")) {
-        LOG_WARNING(EventSource::AUTOSTEER, "Failed to set initial PWM frequency");
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to set initial Speed Pulse PWM frequency");
     }
-    
+    if (!hwMgr->requestPWMFrequency(SPEED_PULSE_LED_PIN, 0, "PWMProcessor")) {
+        LOG_WARNING(EventSource::AUTOSTEER, "Failed to set initial Speed Pulse LED PWM frequency");
+    }
+   
     LOG_DEBUG(EventSource::AUTOSTEER, "Speed pulse pin (D33) configured");
+    LOG_DEBUG(EventSource::AUTOSTEER, "Speed pulse LED pin (D37) configured");
     LOG_DEBUG(EventSource::AUTOSTEER, "PWM resolution: 12-bit");
-    //LOG_DEBUG(EventSource::AUTOSTEER, "Default frequency: 100Hz");    // let's not set an erronious pulse ouput
     LOG_DEBUG(EventSource::AUTOSTEER, "Output type: Open collector (inverted)");
     LOG_INFO(EventSource::AUTOSTEER, "PWM Processor initialization SUCCESS");
     
@@ -64,9 +69,11 @@ void PWMProcessor::setSpeedPulseHz(float hz)
     
     pulseFrequency = hz;
     
-    HardwareManager* hwMgr = HardwareManager::getInstance();
-    if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, (int)hz, "PWMProcessor")) {
-        LOG_WARNING(EventSource::AUTOSTEER, "Failed to change PWM frequency to %dHz", (int)hz);
+    if (hz > 0.0f) {
+        HardwareManager* hwMgr = HardwareManager::getInstance();
+        if (!hwMgr->requestPWMFrequency(SPEED_PULSE_PIN, (int)hz, "PWMProcessor")) {
+            LOG_WARNING(EventSource::AUTOSTEER, "Failed to change Speed Pulse PWM frequency to %dHz", (int)hz);
+        }
     }
     
     updatePWM();
@@ -121,9 +128,18 @@ void PWMProcessor::updatePWM()
         // So we invert the duty cycle
         int pwmValue = (int)((1.0f - pulseDuty) * 4095.0f);
         analogWrite(SPEED_PULSE_PIN, pwmValue);
+
+        float ledFreq = pulseFrequency / 10.0f;
+        if (ledFreq > 2.000f)                        // Minimum frequency for tone() to work
+            tone(SPEED_PULSE_LED_PIN, (int)ledFreq); // LED blinks at 1/10 speed pulse frequency
+        else
+            noTone(SPEED_PULSE_LED_PIN); // Disable LED if frequency is too low
+
     } else {
         // Disable PWM - set output LOW (transistor OFF = output HIGH)
-        digitalWrite(SPEED_PULSE_PIN, LOW);
+        //digitalWrite(SPEED_PULSE_PIN, LOW);   // does not work for disabling pulse
+        analogWrite(SPEED_PULSE_PIN, 0);
+        noTone(SPEED_PULSE_LED_PIN); // Disable LED
     }
 }
 
