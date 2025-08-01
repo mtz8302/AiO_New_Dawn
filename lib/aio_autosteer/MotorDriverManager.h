@@ -6,6 +6,7 @@
 #include "MotorDriverInterface.h"
 #include "PWMMotorDriver.h"
 #include "KeyaCANDriver.h"
+#include "KeyaSerialDriver.h"
 #include "DanfossMotorDriver.h"
 #include "HardwareManager.h"
 #include "CANManager.h"
@@ -30,6 +31,7 @@ private:
     KickoutType kickoutType = KickoutType::NONE;
     bool detectionComplete = false;
     uint32_t detectionStartTime = 0;
+    bool keyaSerialChecked = false;
     
     // Configuration from EEPROM
     uint8_t motorConfigByte = 0x00;  // From PGN251 Byte 8
@@ -40,6 +42,7 @@ private:
     // Internal detection methods
     void readMotorConfig();
     bool performDetection(bool keyaHeartbeatDetected);
+    bool probeKeyaSerial();
     
 public:
     static MotorDriverManager* getInstance() {
