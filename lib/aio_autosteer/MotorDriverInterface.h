@@ -11,6 +11,7 @@ enum class MotorDriverType {
     IBT2,              // PWM-based IBT-2 
     DRV8701,           // PWM-based DRV8701
     KEYA_CAN,          // CAN-based Keya motor
+    KEYA_SERIAL,       // Serial-based Keya motor
     DANFOSS,           // Danfoss valve driver
     GENERIC_PWM        // Generic PWM driver
 };

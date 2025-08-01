@@ -1,5 +1,6 @@
 // MotorDriverManager.cpp - Implementation
 #include "MotorDriverManager.h"
+#include "SerialManager.h"
 
 // Define the static instance
 MotorDriverManager* MotorDriverManager::instance = nullptr;
@@ -44,6 +45,9 @@ MotorDriverInterface* MotorDriverManager::detectAndCreateMotorDriver(HardwareMan
         case MotorDriverType::KEYA_CAN:
             driverName = "Keya CAN Motor";
             break;
+        case MotorDriverType::KEYA_SERIAL:
+            driverName = "Keya Serial Motor";
+            break;
         case MotorDriverType::DANFOSS:
             driverName = "Danfoss Valve";
             break;
@@ -76,6 +80,9 @@ MotorDriverInterface* MotorDriverManager::createMotorDriver(MotorDriverType type
         case MotorDriverType::KEYA_CAN:
             return new KeyaCANDriver();
             
+        case MotorDriverType::KEYA_SERIAL:
+            return new KeyaSerialDriver();
+            
         case MotorDriverType::DANFOSS:
             LOG_INFO(EventSource::AUTOSTEER, "Creating Danfoss valve driver");
             return new DanfossMotorDriver(hwMgr);
@@ -100,7 +107,19 @@ bool MotorDriverManager::performDetection(bool keyaHeartbeatDetected) {
         return true;
     }
     
-    // Wait up to 2 seconds for Keya heartbeat
+    // Priority 2: Check for Keya Serial (after 1 second, if no CAN)
+    if (millis() - detectionStartTime > 1000 && !keyaSerialChecked) {
+        keyaSerialChecked = true;
+        if (probeKeyaSerial()) {
+            detectedType = MotorDriverType::KEYA_SERIAL;
+            kickoutType = KickoutType::NONE;  // Keya uses motor slip detection
+            LOG_INFO(EventSource::AUTOSTEER, "Detected Keya Serial motor via RS232");
+            detectionComplete = true;
+            return true;
+        }
+    }
+    
+    // Wait up to 2 seconds for Keya detection
     if (millis() - detectionStartTime < 2000) {
         return false;  // Still waiting
     }
@@ -154,6 +173,47 @@ void MotorDriverManager::updateMotorConfig(uint8_t configByte) {
         motorConfigByte = configByte;
         // AutosteerProcessor handles the logging and EEPROM save
     }
+}
+
+bool MotorDriverManager::probeKeyaSerial() {
+    // Send 0xE2 query command and check for echo response
+    LOG_INFO(EventSource::AUTOSTEER, "Probing for Keya Serial motor on RS232...");
+    
+    // Build query command (0xE2 = query speed)
+    uint8_t queryCmd[4];
+    queryCmd[0] = 0xE2;
+    queryCmd[1] = 0x00;
+    queryCmd[2] = 0x00;
+    // Calculate checksum (sum of all bytes & 0xFF)
+    queryCmd[3] = (queryCmd[0] + queryCmd[1] + queryCmd[2]) & 0xFF;
+    
+    // Clear any pending data
+    while (SerialRS232.available()) {
+        SerialRS232.read();
+    }
+    
+    // Send query
+    SerialRS232.write(queryCmd, 4);
+    
+    // Wait for response (up to 100ms)
+    uint32_t probeStart = millis();
+    uint8_t response[5];  // Motor returns 5 bytes for query
+    uint8_t responseIndex = 0;
+    
+    while (millis() - probeStart < 100 && responseIndex < 5) {
+        if (SerialRS232.available()) {
+            response[responseIndex++] = SerialRS232.read();
+        }
+    }
+    
+    // Check if we got a valid echo response (at least 4 bytes starting with 0xE2)
+    if (responseIndex >= 4 && response[0] == 0xE2) {
+        LOG_INFO(EventSource::AUTOSTEER, "Keya Serial probe successful - got %d byte response", responseIndex);
+        return true;
+    }
+    
+    LOG_DEBUG(EventSource::AUTOSTEER, "Keya Serial probe failed - got %d bytes", responseIndex);
+    return false;
 }
 
 void MotorDriverManager::readMotorConfig() {
