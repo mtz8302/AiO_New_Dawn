@@ -46,7 +46,8 @@ public:
 
 private:
     // Pin assignment from pcb.h
-    static constexpr uint8_t SPEED_PULSE_PIN = 33;  // D33 - actual speed pulse output
+    static constexpr uint8_t SPEED_PULSE_PIN = 33;      // D33 - actual speed pulse output
+    static constexpr uint8_t SPEED_PULSE_LED_PIN = 37;  // D37 - output for LED at 1/10 speed pulse frequency
     
     // PWM parameters
     float pulseFrequency;      // Hz
