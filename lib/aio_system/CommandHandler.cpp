@@ -1,4 +1,5 @@
 #include "CommandHandler.h"
+#include "ADProcessor.h"
 
 // Static instance pointer
 CommandHandler* CommandHandler::instance = nullptr;
@@ -131,6 +132,10 @@ void CommandHandler::handleCommand(char cmd) {
             continuousCurrentMonitor();
             break;
             
+        case 'w':  // Work switch analog test
+        case 'W':
+            testAnalogWorkSwitch();
+            break;
             
         case '?':
         case 'h':
@@ -159,6 +164,7 @@ void CommandHandler::showMenu() {
     Serial.print("\r\nL - Toggle loop timing diagnostics");
     Serial.print("\r\nA - Test current sensor ADC");
     Serial.print("\r\nC - Continuous current monitoring");
+    Serial.print("\r\nW - Test analog work switch");
     Serial.print("\r\n? - Show this menu");
     Serial.print("\r\n=========================\r\n");
 }
@@ -401,5 +407,52 @@ void CommandHandler::continuousCurrentMonitor() {
         Serial.read();
     }
     Serial.println("\r\nAnalysis complete. Motor control resumed.");
+}
+
+void CommandHandler::testAnalogWorkSwitch() {
+    Serial.println("\r\n=== Analog Work Switch Test ===");
+    
+    ADProcessor* adProcessor = ADProcessor::getInstance();
+    
+    // Toggle analog mode
+    bool currentMode = adProcessor->isAnalogWorkSwitchEnabled();
+    adProcessor->setAnalogWorkSwitchEnabled(!currentMode);
+    
+    Serial.printf("Analog work switch mode: %s -> %s\r\n", 
+                  currentMode ? "ENABLED" : "DISABLED",
+                  !currentMode ? "ENABLED" : "DISABLED");
+    
+    // Only reconfigure the work pin, don't reinitialize entire ADProcessor
+    Serial.println("Reconfiguring work pin...");
+    adProcessor->configureWorkPin();
+    
+    if (!currentMode) {
+        // Now enabled - show continuous readings
+        Serial.println("\r\nAnalog work switch enabled. Press any key to stop monitoring...\r\n");
+        Serial.println("Raw ADC | Percent | State");
+        Serial.println("--------|---------|------");
+        
+        while (!Serial.available()) {
+            // Update ADProcessor
+            adProcessor->updateSwitches();
+            
+            uint16_t raw = adProcessor->getWorkSwitchAnalogRaw();
+            float percent = adProcessor->getWorkSwitchAnalogPercent();
+            bool state = adProcessor->isWorkSwitchOn();
+            
+            Serial.printf("%4d    | %5.1f%% | %s\r\n", 
+                         raw, percent, state ? "ON " : "OFF");
+            
+            delay(250);  // Update 4 times per second
+        }
+        
+        // Clear serial buffer
+        while (Serial.available()) {
+            Serial.read();
+        }
+        Serial.println("\r\nMonitoring stopped.");
+    } else {
+        Serial.println("Analog mode disabled. Work switch is now in digital mode.");
+    }
 }
 

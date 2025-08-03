@@ -24,6 +24,7 @@ const char EN_HOME_PAGE[] PROGMEM = R"rawliteral(
             <li><a href='/eventlogger'>Event Logger Settings</a></li>
             <li><a href='/network'>Network Settings</a></li>
             <li><a href='/device'>Device Settings</a></li>
+            <li><a href='/analogworkswitch'>Analog Work Switch</a></li>
         </ul>
         
         <h2>Tools</h2>

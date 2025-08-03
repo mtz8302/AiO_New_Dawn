@@ -28,6 +28,7 @@ private:
     // Test functions
     void testCurrentSensor();
     void continuousCurrentMonitor();
+    void testAnalogWorkSwitch();
 
 public:
     ~CommandHandler();

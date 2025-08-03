@@ -357,6 +357,7 @@ void ConfigManager::loadAllConfigs()
     loadKWASConfig();
     loadINSConfig();
     loadTurnSensorConfig();
+    loadAnalogWorkSwitchConfig();
 }
 
 void ConfigManager::saveAllConfigs()
@@ -368,6 +369,7 @@ void ConfigManager::saveAllConfigs()
     saveKWASConfig();
     saveINSConfig();
     saveTurnSensorConfig();
+    saveAnalogWorkSwitchConfig();
 }
 
 void ConfigManager::resetToDefaults()
@@ -443,6 +445,12 @@ void ConfigManager::resetToDefaults()
     pressureThreshold = 100; // Middle of range
     currentThreshold = 100;  // Middle of range
     currentZeroOffset = 90;  // From NG-V6 code
+    
+    // Analog work switch defaults
+    analogWorkSwitchEnabled = false;
+    workSwitchSetpoint = 50;     // 50%
+    workSwitchHysteresis = 20;   // 20%
+    invertWorkSwitch = false;
 
     eeVersion = CURRENT_EE_VERSION;
 }
@@ -512,4 +520,42 @@ void ConfigManager::loadTurnSensorConfig()
     
     LOG_DEBUG(EventSource::CONFIG, "Loaded turn sensor config: Type=%d, EncoderType=%d", 
               turnSensorType, encoderType);
+}
+
+void ConfigManager::saveAnalogWorkSwitchConfig()
+{
+    LOG_INFO(EventSource::CONFIG, "Saving analog work switch config to EEPROM: Enabled=%d, SP=%d%%, H=%d%%, Inv=%d", 
+             analogWorkSwitchEnabled, workSwitchSetpoint, workSwitchHysteresis, invertWorkSwitch);
+    
+    int addr = ANALOG_WORK_SWITCH_ADDR;
+    EEPROM.put(addr, analogWorkSwitchEnabled);
+    addr += sizeof(analogWorkSwitchEnabled);
+    EEPROM.put(addr, workSwitchSetpoint);
+    addr += sizeof(workSwitchSetpoint);
+    EEPROM.put(addr, workSwitchHysteresis);
+    addr += sizeof(workSwitchHysteresis);
+    EEPROM.put(addr, invertWorkSwitch);
+}
+
+void ConfigManager::loadAnalogWorkSwitchConfig()
+{
+    int addr = ANALOG_WORK_SWITCH_ADDR;
+    EEPROM.get(addr, analogWorkSwitchEnabled);
+    addr += sizeof(analogWorkSwitchEnabled);
+    EEPROM.get(addr, workSwitchSetpoint);
+    addr += sizeof(workSwitchSetpoint);
+    EEPROM.get(addr, workSwitchHysteresis);
+    addr += sizeof(workSwitchHysteresis);
+    EEPROM.get(addr, invertWorkSwitch);
+    
+    // Validate loaded values
+    if (workSwitchSetpoint > 100) {
+        workSwitchSetpoint = 50;  // Default
+    }
+    if (workSwitchHysteresis < 5 || workSwitchHysteresis > 25) {
+        workSwitchHysteresis = 20;  // Default
+    }
+    
+    LOG_INFO(EventSource::CONFIG, "Loaded analog work switch config from EEPROM: Enabled=%d, SP=%d%%, H=%d%%, Inv=%d", 
+             analogWorkSwitchEnabled, workSwitchSetpoint, workSwitchHysteresis, invertWorkSwitch);
 }
