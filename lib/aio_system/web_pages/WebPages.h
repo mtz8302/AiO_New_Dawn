@@ -22,6 +22,7 @@ enum class WebLanguage : uint8_t {
 #include "en_OTAPage.h"
 #include "en_WASDemoPage.h"
 #include "en_DeviceSettingsPage.h"
+#include "en_AnalogWorkSwitchSimple2.h"
 #include "de_HomePage.h"
 #include "de_EventLoggerPage.h"
 // Add more languages as needed:
@@ -67,6 +68,11 @@ public:
     static const char* getDeviceSettingsPage(WebLanguage lang) {
         // Only English version for now
         return EN_DEVICE_SETTINGS_PAGE;
+    }
+    
+    static const char* getAnalogWorkSwitchPage(WebLanguage lang) {
+        // Only English version for now
+        return EN_ANALOG_WORK_SWITCH_PAGE;
     }
     
     // Add getters for each page type as you implement them

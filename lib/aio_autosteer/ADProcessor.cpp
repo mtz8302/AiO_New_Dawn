@@ -1,6 +1,7 @@
 #include "ADProcessor.h"
 #include "EventLogger.h"
 #include "HardwareManager.h"
+#include "ConfigManager.h"
 
 // Static instance
 ADProcessor* ADProcessor::instance = nullptr;
@@ -13,6 +14,11 @@ ADProcessor::ADProcessor() :
     pressureReading(0.0f),
     motorCurrentRaw(0),
     currentReading(0.0f),
+    analogWorkSwitchEnabled(false),
+    workSwitchAnalogRaw(0),
+    workSwitchSetpoint(50.0f),      // 50% default
+    workSwitchHysteresis(20.0f),    // 20% default
+    invertWorkSwitch(false),
     debounceDelay(50),  // 50ms default debounce
     lastProcessTime(0),
     currentBufferIndex(0),
@@ -42,9 +48,22 @@ bool ADProcessor::init()
 {
     LOG_INFO(EventSource::AUTOSTEER, "=== A/D Processor Initialization ===");
     
+    // Load analog work switch settings from ConfigManager
+    extern ConfigManager configManager;
+    analogWorkSwitchEnabled = configManager.getAnalogWorkSwitchEnabled();
+    workSwitchSetpoint = configManager.getWorkSwitchSetpoint();
+    workSwitchHysteresis = configManager.getWorkSwitchHysteresis();
+    invertWorkSwitch = configManager.getInvertWorkSwitch();
+    
+    LOG_INFO(EventSource::AUTOSTEER, "Analog work switch config: Enabled=%d, SP=%d%%, H=%d%%, Inv=%d",
+             analogWorkSwitchEnabled, workSwitchSetpoint, workSwitchHysteresis, invertWorkSwitch);
+    
     // Configure pins with ownership tracking
     pinMode(AD_STEER_PIN, INPUT_PULLUP);      // Steer switch with internal pullup
-    pinMode(AD_WORK_PIN, INPUT_PULLUP);       // Work switch with pullup
+    
+    // Configure work pin based on mode
+    configureWorkPin();
+    
     pinMode(AD_WAS_PIN, INPUT_DISABLE);       // WAS analog input (no pullup)
     
     // Request ownership of KICKOUT_A for pressure sensor mode
@@ -180,10 +199,44 @@ void ADProcessor::updateSwitches()
 {
     // Simple digital read - just like old firmware
     int steerPinRaw = digitalRead(AD_STEER_PIN);
-    int workPinRaw = digitalRead(AD_WORK_PIN);
+    
+    bool workRaw;
+    if (analogWorkSwitchEnabled) {
+        // Read analog value
+        workSwitchAnalogRaw = teensyADC->adc1->analogRead(AD_WORK_PIN);
+        
+        // Convert to percentage (0-100%)
+        float currentPercent = getWorkSwitchAnalogPercent();
+        
+        // Apply hysteresis logic
+        float lowerThreshold = workSwitchSetpoint - (workSwitchHysteresis * 0.5f);
+        float upperThreshold = workSwitchSetpoint + (workSwitchHysteresis * 0.5f);
+        
+        // Determine state based on thresholds
+        if (currentPercent < lowerThreshold) {
+            workRaw = !invertWorkSwitch;  // Below lower threshold
+        } else if (currentPercent > upperThreshold) {
+            workRaw = invertWorkSwitch;    // Above upper threshold
+        } else {
+            // In hysteresis zone - maintain current state
+            workRaw = workSwitch.debouncedState;
+        }
+        
+        // Debug logging
+        static uint32_t lastAnalogDebug = 0;
+        if (millis() - lastAnalogDebug > 1000) {
+            lastAnalogDebug = millis();
+            LOG_DEBUG(EventSource::AUTOSTEER, "Analog work switch: raw=%d, %.1f%%, SP=%.1f%%, H=%.1f%%, state=%s",
+                      workSwitchAnalogRaw, currentPercent, workSwitchSetpoint, workSwitchHysteresis,
+                      workRaw ? "ON" : "OFF");
+        }
+    } else {
+        // Digital mode
+        int workPinRaw = digitalRead(AD_WORK_PIN);
+        workRaw = !workPinRaw;     // Work is active LOW (pressed = 0)
+    }
     
     // Convert to active states
-    bool workRaw = !workPinRaw;     // Work is active LOW (pressed = 0)
     bool steerRaw = !steerPinRaw;   // Steer is active LOW (pressed pulls down)
     
     // Debug raw pin state changes
@@ -278,9 +331,17 @@ void ADProcessor::printStatus() const
     
     // Switch states
     LOG_INFO(EventSource::AUTOSTEER, "Switches:");
-    LOG_INFO(EventSource::AUTOSTEER, "  Work: %s%s", 
-                  workSwitch.debouncedState ? "ON" : "OFF",
-                  workSwitch.hasChanged ? " (changed)" : "");
+    if (analogWorkSwitchEnabled) {
+        LOG_INFO(EventSource::AUTOSTEER, "  Work (ANALOG): %s%s - Raw: %d (%.1f%%), SP: %.1f%%, H: %.1f%%", 
+                      workSwitch.debouncedState ? "ON" : "OFF",
+                      workSwitch.hasChanged ? " (changed)" : "",
+                      workSwitchAnalogRaw, getWorkSwitchAnalogPercent(),
+                      workSwitchSetpoint, workSwitchHysteresis);
+    } else {
+        LOG_INFO(EventSource::AUTOSTEER, "  Work (DIGITAL): %s%s", 
+                      workSwitch.debouncedState ? "ON" : "OFF",
+                      workSwitch.hasChanged ? " (changed)" : "");
+    }
     LOG_INFO(EventSource::AUTOSTEER, "  Steer: %s%s", 
                   steerSwitch.debouncedState ? "ON" : "OFF",
                   steerSwitch.hasChanged ? " (changed)" : "");
@@ -292,4 +353,50 @@ void ADProcessor::printStatus() const
     LOG_INFO(EventSource::AUTOSTEER, "  ADC averaging: 16 samples");
     
     LOG_INFO(EventSource::AUTOSTEER, "=============================");
+}
+
+void ADProcessor::configureWorkPin()
+{
+    // Configure work pin based on mode
+    if (analogWorkSwitchEnabled) {
+        pinMode(AD_WORK_PIN, INPUT_DISABLE);   // Analog input (no pullup)
+        LOG_INFO(EventSource::AUTOSTEER, "Work switch configured for ANALOG input");
+    } else {
+        pinMode(AD_WORK_PIN, INPUT_PULLUP);    // Digital with pullup
+        LOG_INFO(EventSource::AUTOSTEER, "Work switch configured for DIGITAL input");
+    }
+}
+
+void ADProcessor::setAnalogWorkSwitchEnabled(bool enabled)
+{
+    analogWorkSwitchEnabled = enabled;
+    extern ConfigManager configManager;
+    configManager.setAnalogWorkSwitchEnabled(enabled);
+    configManager.saveAnalogWorkSwitchConfig();
+    LOG_INFO(EventSource::AUTOSTEER, "Analog work switch mode saved to EEPROM: %s", 
+             enabled ? "ENABLED" : "DISABLED");
+}
+
+void ADProcessor::setWorkSwitchSetpoint(float sp)
+{
+    workSwitchSetpoint = constrain(sp, 0.0f, 100.0f);
+    extern ConfigManager configManager;
+    configManager.setWorkSwitchSetpoint((uint8_t)workSwitchSetpoint);
+    configManager.saveAnalogWorkSwitchConfig();
+}
+
+void ADProcessor::setWorkSwitchHysteresis(float h)
+{
+    workSwitchHysteresis = constrain(h, 5.0f, 25.0f);
+    extern ConfigManager configManager;
+    configManager.setWorkSwitchHysteresis((uint8_t)workSwitchHysteresis);
+    configManager.saveAnalogWorkSwitchConfig();
+}
+
+void ADProcessor::setInvertWorkSwitch(bool inv)
+{
+    invertWorkSwitch = inv;
+    extern ConfigManager configManager;
+    configManager.setInvertWorkSwitch(inv);
+    configManager.saveAnalogWorkSwitchConfig();
 }

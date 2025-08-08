@@ -82,6 +82,12 @@ private:
     uint8_t currentThreshold;    // Current sensor threshold
     uint16_t currentZeroOffset;  // Current sensor zero offset
     
+    // Analog work switch configuration
+    bool analogWorkSwitchEnabled;
+    uint8_t workSwitchSetpoint;     // 0-100% stored as 0-100
+    uint8_t workSwitchHysteresis;   // 5-25% stored as 5-25
+    bool invertWorkSwitch;
+    
     // Version control
     uint16_t eeVersion;
 
@@ -223,6 +229,16 @@ public:
     uint16_t getCurrentZeroOffset() const { return currentZeroOffset; }
     void setCurrentZeroOffset(uint16_t value) { currentZeroOffset = value; }
 
+    // Analog work switch methods
+    bool getAnalogWorkSwitchEnabled() const { return analogWorkSwitchEnabled; }
+    void setAnalogWorkSwitchEnabled(bool value) { analogWorkSwitchEnabled = value; }
+    uint8_t getWorkSwitchSetpoint() const { return workSwitchSetpoint; }
+    void setWorkSwitchSetpoint(uint8_t value) { workSwitchSetpoint = constrain(value, 0, 100); }
+    uint8_t getWorkSwitchHysteresis() const { return workSwitchHysteresis; }
+    void setWorkSwitchHysteresis(uint8_t value) { workSwitchHysteresis = constrain(value, 5, 25); }
+    bool getInvertWorkSwitch() const { return invertWorkSwitch; }
+    void setInvertWorkSwitch(bool value) { invertWorkSwitch = value; }
+
     // EEPROM operations
     void saveSteerConfig();
     void loadSteerConfig();
@@ -238,6 +254,8 @@ public:
     void loadINSConfig();
     void saveTurnSensorConfig();
     void loadTurnSensorConfig();
+    void saveAnalogWorkSwitchConfig();
+    void loadAnalogWorkSwitchConfig();
     void loadAllConfigs();
     void saveAllConfigs();
     void resetToDefaults();
