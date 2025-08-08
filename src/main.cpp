@@ -30,6 +30,7 @@
 #include "WebManager.h"
 #include "Version.h"
 #include "OTAHandler.h"
+#include "LittleDawnInterface.h"
 
 // Flash ID for OTA verification - must match FLASH_ID in FlashTxx.h
 const char* flash_id = "fw_teensy41";
@@ -285,6 +286,10 @@ void setup()
     LOG_ERROR(EventSource::SYSTEM, "MachineProcessor FAILED");
   }
 
+  // Initialize Little Dawn Interface
+  littleDawnInterface.init();
+  LOG_INFO(EventSource::SYSTEM, "LittleDawnInterface initialized");
+
   // PGN 201 handling is now done by QNetworkBase
 
   // Initialize CommandHandler
@@ -353,6 +358,9 @@ void loop()
   
   // Process A/D inputs
   adProcessor.process();
+  
+  // Process Little Dawn interface
+  littleDawnInterface.process();
 
   // Process NAV messages
   NAVProcessor::getInstance()->process();
