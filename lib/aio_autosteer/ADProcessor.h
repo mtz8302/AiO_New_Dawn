@@ -26,6 +26,7 @@ public:
     
     // Main processing function - call regularly from loop
     void process();
+    void updateSwitches();  // Update switch states (made public for testing)
     
     // Digital switch states (debounced)
     bool isWorkSwitchOn() const { return workSwitch.debouncedState; }
@@ -59,6 +60,19 @@ public:
     // Get configuration
     int16_t getWASOffset() const { return wasOffset; }
     float getWASCountsPerDegree() const { return wasCountsPerDegree; }
+    
+    // Analog work switch methods
+    void setAnalogWorkSwitchEnabled(bool enabled);
+    bool isAnalogWorkSwitchEnabled() const { return analogWorkSwitchEnabled; }
+    uint16_t getWorkSwitchAnalogRaw() const { return workSwitchAnalogRaw; }
+    float getWorkSwitchAnalogPercent() const { return (workSwitchAnalogRaw * 100.0f) / 4095.0f; }
+    float getWorkSwitchSetpoint() const { return workSwitchSetpoint; }
+    void setWorkSwitchSetpoint(float sp);
+    float getWorkSwitchHysteresis() const { return workSwitchHysteresis; }
+    void setWorkSwitchHysteresis(float h);
+    bool getInvertWorkSwitch() const { return invertWorkSwitch; }
+    void setInvertWorkSwitch(bool inv);
+    void configureWorkPin();  // Configure work pin for analog/digital mode
     
     // Diagnostics
     void printStatus() const;
@@ -97,6 +111,13 @@ private:
     uint16_t motorCurrentRaw;
     float currentReading;   // Filtered current sensor reading
     
+    // Analog work switch mode
+    bool analogWorkSwitchEnabled;
+    uint16_t workSwitchAnalogRaw;
+    float workSwitchSetpoint;      // 0-100%
+    float workSwitchHysteresis;    // 5-25%
+    bool invertWorkSwitch;
+    
     // Configuration
     uint16_t debounceDelay;
     
@@ -112,7 +133,6 @@ private:
     ADC* teensyADC;
     
     // Helper methods
-    void updateSwitches();
     void updateWAS();
     bool debounceSwitch(SwitchState& sw, bool rawState);
 };

@@ -37,8 +37,8 @@ using namespace qindesign::network;
 // WebManager Implementation
 //=============================================================================
 
-WebManager::WebManager() : server(nullptr), wasEvents(nullptr), isRunning(false), 
-                           currentLanguage(WebLanguage::ENGLISH),
+WebManager::WebManager() : server(nullptr), wasEvents(nullptr), analogWorkSwitchEvents(nullptr),
+                           isRunning(false), currentLanguage(WebLanguage::ENGLISH),
                            lastWASAngle(0.0f), lastWASUpdate(0), systemReady(false) {
     // Load language preference from EEPROM
     uint8_t savedLang = EEPROM.read(WEB_CONFIG_ADDR);
@@ -122,6 +122,11 @@ void WebManager::setupRoutes() {
         handleOTAPage(request);
     });
     
+    // Analog Work Switch page
+    server->on("/analogworkswitch", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        handleAnalogWorkSwitchPage(request);
+    });
+    
     // WAS Demo page
     server->on("/was-demo", HTTP_GET, [this](AsyncWebServerRequest* request) {
         String html = FPSTR(WebPageSelector::getWASDemoPage(currentLanguage));
@@ -181,6 +186,9 @@ void WebManager::setupRoutes() {
     
     // Setup Network API routes
     setupNetworkAPI();
+    
+    // Setup analog work switch API
+    setupAnalogWorkSwitchAPI();
     
     // Setup OTA routes
     setupOTARoutes();
@@ -550,6 +558,11 @@ void WebManager::handleDeviceSettingsPage(AsyncWebServerRequest* request) {
     request->send(response);
 }
 
+void WebManager::handleAnalogWorkSwitchPage(AsyncWebServerRequest* request) {
+    // Send page directly from PROGMEM
+    request->send(200, "text/html", FPSTR(EN_ANALOG_WORK_SWITCH_PAGE));
+}
+
 void WebManager::setupDeviceSettingsAPI() {
     if (!server) return;
     
@@ -647,6 +660,123 @@ void WebManager::setupDeviceSettingsAPI() {
     );
 }
 
+void WebManager::setupAnalogWorkSwitchAPI() {
+    if (!server) return;
+    
+    // GET current analog work switch status
+    server->on("/api/analogworkswitch/status", HTTP_GET, [](AsyncWebServerRequest* request) {
+        ADProcessor* adProc = ADProcessor::getInstance();
+        if (!adProc) {
+            request->send(503, "application/json", "{\"error\":\"ADProcessor not available\"}");
+            return;
+        }
+        
+        JsonDocument doc;
+        doc["enabled"] = adProc->isAnalogWorkSwitchEnabled();
+        doc["reading"] = adProc->getWorkSwitchAnalogRaw();
+        doc["percent"] = adProc->getWorkSwitchAnalogPercent();
+        doc["state"] = adProc->isWorkSwitchOn();
+        doc["setpoint"] = adProc->getWorkSwitchSetpoint();
+        doc["hysteresis"] = adProc->getWorkSwitchHysteresis();
+        doc["invert"] = adProc->getInvertWorkSwitch();
+        
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    });
+    
+    // POST to update analog work switch configuration
+    server->on("/api/analogworkswitch/config", HTTP_POST,
+        [](AsyncWebServerRequest* request) {
+            // Response sent in onBody handler
+        },
+        nullptr,
+        [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+            if (index == 0) {
+                JsonDocument doc;
+                DeserializationError error = deserializeJson(doc, data, len);
+                
+                if (error) {
+                    request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+                    return;
+                }
+                
+                ADProcessor* adProc = ADProcessor::getInstance();
+                if (!adProc) {
+                    request->send(503, "application/json", "{\"error\":\"ADProcessor not available\"}");
+                    return;
+                }
+                
+                // Update configuration
+                bool updated = false;
+                
+                if (doc.containsKey("enabled")) {
+                    bool enabled = doc["enabled"];
+                    LOG_INFO(EventSource::NETWORK, "API: Setting analog work switch enabled = %d", enabled);
+                    adProc->setAnalogWorkSwitchEnabled(enabled);
+                    adProc->configureWorkPin();  // Reconfigure pin for new mode
+                    updated = true;
+                }
+                
+                if (doc.containsKey("setpoint")) {
+                    float setpoint = doc["setpoint"];
+                    LOG_INFO(EventSource::NETWORK, "API: Setting work switch setpoint = %.1f%%", setpoint);
+                    adProc->setWorkSwitchSetpoint(setpoint);
+                    updated = true;
+                }
+                
+                if (doc.containsKey("hysteresis")) {
+                    float hysteresis = doc["hysteresis"];
+                    LOG_INFO(EventSource::NETWORK, "API: Setting work switch hysteresis = %.1f%%", hysteresis);
+                    adProc->setWorkSwitchHysteresis(hysteresis);
+                    updated = true;
+                }
+                
+                if (doc.containsKey("invert")) {
+                    bool invert = doc["invert"];
+                    LOG_INFO(EventSource::NETWORK, "API: Setting work switch invert = %d", invert);
+                    adProc->setInvertWorkSwitch(invert);
+                    updated = true;
+                }
+                
+                if (updated) {
+                    LOG_INFO(EventSource::NETWORK, "API: Analog work switch config updated");
+                }
+                
+                request->send(200, "application/json", "{\"success\":true}");
+            }
+        }
+    );
+    
+    // POST to capture current reading as setpoint
+    server->on("/api/analogworkswitch/setpoint", HTTP_POST, [](AsyncWebServerRequest* request) {
+        ADProcessor* adProc = ADProcessor::getInstance();
+        if (!adProc) {
+            request->send(503, "application/json", "{\"error\":\"ADProcessor not available\"}");
+            return;
+        }
+        
+        // Update switches to get latest reading
+        adProc->updateSwitches();
+        
+        // Get current percentage and set as setpoint
+        float currentPercent = adProc->getWorkSwitchAnalogPercent();
+        adProc->setWorkSwitchSetpoint(currentPercent);
+        
+        JsonDocument doc;
+        doc["success"] = true;
+        doc["newSetpoint"] = currentPercent;
+        
+        String response;
+        serializeJson(doc, response);
+        request->send(200, "application/json", response);
+    });
+    
+    // SSE endpoint for real-time analog work switch data
+    analogWorkSwitchEvents = new AsyncEventSource("/api/analogworkswitch/stream");
+    server->addHandler(analogWorkSwitchEvents);
+}
+
 void WebManager::handleNotFound(AsyncWebServerRequest* request) {
     String message = "404 Not Found\n\n";
     message += "URI: ";
@@ -739,6 +869,59 @@ void WebManager::updateWASClients() {
                      currentAngle, wasEvents->count());
         }
     }
+}
+
+void WebManager::updateAnalogWorkSwitchClients() {
+    // Don't process until system is ready
+    if (!systemReady) {
+        return;
+    }
+    
+    // Only process if we have event source
+    if (!analogWorkSwitchEvents) {
+        return;
+    }
+    
+    // Check if we have connected clients
+    if (analogWorkSwitchEvents->count() == 0) {
+        return;
+    }
+    
+    // Rate limit updates to 10Hz (100ms)
+    static uint32_t lastUpdate = 0;
+    uint32_t now = millis();
+    if (now - lastUpdate < 100) {
+        return;
+    }
+    
+    // Get current analog work switch data from ADProcessor
+    ADProcessor* adProc = ADProcessor::getInstance();
+    if (!adProc) {
+        return;
+    }
+    
+    // Only send if analog mode is enabled
+    if (!adProc->isAnalogWorkSwitchEnabled()) {
+        return;
+    }
+    
+    // Update switches to get latest reading
+    adProc->updateSwitches();
+    
+    // Build JSON response
+    JsonDocument doc;
+    doc["reading"] = adProc->getWorkSwitchAnalogRaw();
+    doc["percent"] = adProc->getWorkSwitchAnalogPercent();
+    doc["state"] = adProc->isWorkSwitchOn();
+    doc["setpoint"] = adProc->getWorkSwitchSetpoint();
+    doc["hysteresis"] = adProc->getWorkSwitchHysteresis();
+    doc["ts"] = millis();
+    
+    String json;
+    serializeJson(doc, json);
+    analogWorkSwitchEvents->send(json.c_str(), "aws-data");
+    
+    lastUpdate = now;
 }
 
 //=============================================================================

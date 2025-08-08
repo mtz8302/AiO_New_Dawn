@@ -24,11 +24,13 @@ public:
     
     // SSE support for real-time data
     void updateWASClients();
+    void updateAnalogWorkSwitchClients();
     void setSystemReady() { systemReady = true; }
     
 private:
     AsyncWebServer* server;
     AsyncEventSource* wasEvents;
+    AsyncEventSource* analogWorkSwitchEvents;
     bool isRunning;
     WebLanguage currentLanguage;
     
@@ -43,12 +45,14 @@ private:
     void setupOTARoutes();
     void setupSSERoutes();
     void setupDeviceSettingsAPI();
+    void setupAnalogWorkSwitchAPI();
     void handleRoot(AsyncWebServerRequest* request);
     void handleApiStatus(AsyncWebServerRequest* request);
     void handleEventLoggerPage(AsyncWebServerRequest* request);
     void handleNetworkPage(AsyncWebServerRequest* request);
     void handleOTAPage(AsyncWebServerRequest* request);
     void handleDeviceSettingsPage(AsyncWebServerRequest* request);
+    void handleAnalogWorkSwitchPage(AsyncWebServerRequest* request);
     void handleNotFound(AsyncWebServerRequest* request);
     
     // Helper to build select options for log levels
