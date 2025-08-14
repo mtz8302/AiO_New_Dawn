@@ -6,6 +6,7 @@
 
 #include <Arduino.h>
 #include "web_pages/WebPages.h"
+#include "TelemetryWebSocket.h"
 
 // Forward declarations to avoid including AsyncWebServer in header
 class AsyncWebServer;
@@ -21,16 +22,22 @@ public:
     void stop();
     
     // No need for handleClient() - AsyncWebServer handles everything async
+    // But we need to handle WebSocket server
+    void handleClient();
     
     // SSE support for real-time data
     void updateWASClients();
     void updateAnalogWorkSwitchClients();
     void setSystemReady() { systemReady = true; }
     
+    // WebSocket telemetry support
+    void broadcastTelemetry();
+    
 private:
     AsyncWebServer* server;
     AsyncEventSource* wasEvents;
     AsyncEventSource* analogWorkSwitchEvents;
+    TelemetryWebSocket telemetryWS;  // WebSocket telemetry server
     bool isRunning;
     WebLanguage currentLanguage;
     
@@ -38,6 +45,9 @@ private:
     float lastWASAngle;
     uint32_t lastWASUpdate;
     bool systemReady;
+    
+    // For telemetry updates
+    uint32_t lastTelemetryUpdate;
     
     void setupRoutes();
     void setupEventLoggerAPI();

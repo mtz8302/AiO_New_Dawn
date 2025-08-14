@@ -393,6 +393,10 @@ void loop()
   
   // Update SSE clients with WAS data if enabled
   webManager.updateWASClients();
+  
+  // Handle WebSocket clients and broadcast telemetry
+  webManager.handleClient();
+  webManager.broadcastTelemetry();
     
   // Update PWM speed pulse from GPS
   static uint32_t lastSpeedUpdate = 0;

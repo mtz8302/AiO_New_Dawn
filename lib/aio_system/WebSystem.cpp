@@ -39,7 +39,8 @@ using namespace qindesign::network;
 
 WebManager::WebManager() : server(nullptr), wasEvents(nullptr), analogWorkSwitchEvents(nullptr),
                            isRunning(false), currentLanguage(WebLanguage::ENGLISH),
-                           lastWASAngle(0.0f), lastWASUpdate(0), systemReady(false) {
+                           lastWASAngle(0.0f), lastWASUpdate(0), systemReady(false),
+                           lastTelemetryUpdate(0) {
     // Load language preference from EEPROM
     uint8_t savedLang = EEPROM.read(WEB_CONFIG_ADDR);
     if (savedLang == 0 || savedLang == 1) {
@@ -68,6 +69,12 @@ bool WebManager::begin(uint16_t port) {
     
     // Start the server
     server->begin();
+    
+    // Start WebSocket telemetry server on port 8082
+    if (!telemetryWS.begin(8082)) {
+        LOG_WARNING(EventSource::NETWORK, "Failed to start WebSocket telemetry server");
+    }
+    
     isRunning = true;
     
     IPAddress ip = Ethernet.localIP();
@@ -85,6 +92,15 @@ void WebManager::stop() {
             delete wasEvents;
             wasEvents = nullptr;
         }
+        
+        if (analogWorkSwitchEvents) {
+            analogWorkSwitchEvents->close();
+            delete analogWorkSwitchEvents;
+            analogWorkSwitchEvents = nullptr;
+        }
+        
+        // Stop WebSocket telemetry server
+        telemetryWS.stop();
         
         server->end();
         delete server;
@@ -922,6 +938,103 @@ void WebManager::updateAnalogWorkSwitchClients() {
     analogWorkSwitchEvents->send(json.c_str(), "aws-data");
     
     lastUpdate = now;
+}
+
+void WebManager::handleClient() {
+    // Handle WebSocket telemetry server
+    telemetryWS.handleClient();
+}
+
+void WebManager::broadcastTelemetry() {
+    // Rate limit to configured rate
+    uint32_t now = millis();
+    
+    // Start with faster rate to prime the connection, then slow down
+    static uint32_t connectionStart = 0;
+    static bool connectionPrimed = false;
+    
+    if (telemetryWS.getClientCount() > 0 && connectionStart == 0) {
+        connectionStart = now;
+        connectionPrimed = false;
+        LOG_INFO(EventSource::NETWORK, "WebSocket client connected, priming connection");
+    } else if (telemetryWS.getClientCount() == 0) {
+        connectionStart = 0;
+        connectionPrimed = false;
+    }
+    
+    uint32_t targetInterval;
+    if (!connectionPrimed && connectionStart > 0 && now - connectionStart < 5000) {
+        // First 5 seconds: send at 200Hz to quickly open up TCP window
+        targetInterval = 5;  // 5ms = 200Hz
+    } else {
+        connectionPrimed = true;
+        targetInterval = 10;  // 10ms = 100Hz normal rate
+    }
+    
+    if (now - lastTelemetryUpdate < targetInterval) {
+        return;
+    }
+    
+    // Debug: Log actual broadcast rate every 5 seconds
+    static uint32_t lastRateLog = 0;
+    static uint32_t broadcastCount = 0;
+    broadcastCount++;
+    
+    if (now - lastRateLog >= 5000) {
+        if (lastRateLog > 0) {
+            float actualRate = broadcastCount * 1000.0f / (now - lastRateLog);
+            LOG_INFO(EventSource::NETWORK, "WebSocket telemetry rate: %.1f Hz", actualRate);
+        }
+        lastRateLog = now;
+        broadcastCount = 0;
+    }
+    
+    // Build telemetry packet
+    TelemetryPacket packet;
+    packet.timestamp = now;
+    
+    // Get data from various processors
+    AutosteerProcessor* autosteer = AutosteerProcessor::getInstance();
+    ADProcessor* adProc = ADProcessor::getInstance();
+    
+    if (autosteer) {
+        // Get wheel angle from ADProcessor
+        packet.was_angle = adProc ? adProc->getWASAngle() : 0.0f;
+        packet.was_angle_target = autosteer->getTargetAngle();
+        
+        // Get current draw from ADProcessor (convert from raw counts to amps)
+        // TODO: Add proper current calibration
+        packet.current_draw = adProc ? adProc->getMotorCurrent() * 0.01f : 0.0f;
+        
+        // Get speed and status from autosteer
+        packet.speed_kph = autosteer->getVehicleSpeed();
+        
+        // TODO: Get heading from IMU processor when available
+        packet.heading = 0.0f;
+        
+        // Build status flags
+        packet.status_flags = 0;
+        if (autosteer->isEnabled()) packet.status_flags |= 0x01;
+        
+        // Get switch states from ADProcessor
+        packet.steer_switch = (adProc && adProc->isSteerSwitchOn()) ? 1 : 0;
+        packet.work_switch = (adProc && adProc->isWorkSwitchOn()) ? 1 : 0;
+    }
+    
+    EncoderProcessor* encoder = EncoderProcessor::getInstance();
+    if (encoder) {
+        // Get encoder position
+        packet.encoder_count = encoder->getPulseCount();
+    }
+    
+    // Clear reserved bytes
+    packet.reserved[0] = 0;
+    packet.reserved[1] = 0;
+    
+    // Broadcast to all connected clients
+    telemetryWS.broadcastTelemetry(packet);
+    
+    lastTelemetryUpdate = now;
 }
 
 //=============================================================================
