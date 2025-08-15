@@ -2,7 +2,7 @@
 #include "Arduino.h"
 #include <QNEthernet.h>
 #include "QNetworkBase.h"
-#include "AsyncUDPHandler.h"
+#include "QNEthernetUDPHandler.h"
 #include "ConfigManager.h"
 #include "HardwareManager.h"
 #include "SerialManager.h"
@@ -27,9 +27,8 @@
 #include "CommandHandler.h"
 #include "PGNProcessor.h"
 #include "RTCMProcessor.h"
-#include "WebManager.h"
+#include "SimpleWebManager.h"
 #include "Version.h"
-#include "OTAHandler.h"
 #include "LittleDawnInterface.h"
 
 // Flash ID for OTA verification - must match FLASH_ID in FlashTxx.h
@@ -47,7 +46,7 @@ IMUProcessor imuProcessor;
 ADProcessor adProcessor;
 PWMProcessor pwmProcessor;
 // LEDManagerFSM ledManagerFSM; // Global instance already defined in LEDManagerFSM.cpp
-WebManager webManager;
+SimpleWebManager webManager;
 MotorDriverInterface *motorPTR = nullptr; // Motor driver still uses factory pattern
 
 // Loop timing diagnostics
@@ -220,6 +219,8 @@ void setup()
   }
 
   // Initialize ADProcessor
+  // Set the instance pointer so getInstance() returns the correct object
+  ADProcessor::instance = &adProcessor;
   if (adProcessor.init())
   {
     LOG_INFO(EventSource::SYSTEM, "ADProcessor initialized");
@@ -259,7 +260,7 @@ void setup()
 
   // NOW initialize AsyncUDP after ALL hardware is up
   LOG_INFO(EventSource::SYSTEM, "All hardware initialized, starting AsyncUDP");
-  AsyncUDPHandler::init();
+  QNEthernetUDPHandler::init();
   LOG_INFO(EventSource::SYSTEM, "AsyncUDP handlers ready");
 
   // Initialize AutosteerProcessor
@@ -309,7 +310,7 @@ void setup()
   EventLogger::getInstance()->setStartupMode(false);
   
   // Mark web manager as ready for SSE updates
-  webManager.setSystemReady();
+  webManager.setSystemReady(true);
   
   // Display access information
   localIP = Ethernet.localIP();  // Reuse existing variable
@@ -329,7 +330,7 @@ void setup()
 void loop()
 {
   // Check for OTA update apply
-  OTAHandler::applyUpdate();
+  // OTAHandler::applyUpdate();  // TODO: Implement OTA handler
   
   // Process Ethernet events - REQUIRED for QNEthernet!
   Ethernet.loop();
@@ -337,7 +338,7 @@ void loop()
   QNetworkBase::poll();
   
   // Poll AsyncUDP for network diagnostics
-  AsyncUDPHandler::poll();
+  QNEthernetUDPHandler::poll();
   
   // AsyncUDP handles all UDP packet reception via callbacks
   // The poll() call above is just for diagnostics and status monitoring
@@ -391,8 +392,9 @@ void loop()
     ledManagerFSM.updateAll();
   }
   
-  // Update SSE clients with WAS data if enabled
-  webManager.updateWASClients();
+  // Handle WebSocket clients and broadcast telemetry
+  webManager.handleClient();
+  webManager.broadcastTelemetry();
     
   // Update PWM speed pulse from GPS
   static uint32_t lastSpeedUpdate = 0;

@@ -8,8 +8,6 @@
   },
   "dependencies": [
     {"name": "QNEthernet"},
-    {"name": "AsyncWebServer_Teensy41"},
-    {"name": "AsyncUDP_Teensy41"},
     {"name": "ArduinoJson"},
     {"name": "FlasherX"}
   ],
