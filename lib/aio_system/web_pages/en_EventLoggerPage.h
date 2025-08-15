@@ -51,7 +51,7 @@ const char EN_EVENTLOGGER_PAGE[] PROGMEM = R"rawliteral(
             <div class='form-group'>
                 <label>Disable Rate Limiting:</label>
                 <input type='checkbox' id='rateLimitDisabled' %RATE_LIMIT_DISABLED%>
-                <span class='help-text'>⚠️ Warning: May flood console with messages</span>
+                <span class='help-text' style='color: red;'>Warning: May flood console with messages</span>
             </div>
             
             <div class='info'>Syslog messages are sent to the server IP configured by your network admin on port 514.</div>

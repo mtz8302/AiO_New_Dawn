@@ -27,7 +27,7 @@
 #include "CommandHandler.h"
 #include "PGNProcessor.h"
 #include "RTCMProcessor.h"
-#include "WebManager.h"
+#include "SimpleWebManager.h"
 #include "Version.h"
 #include "OTAHandler.h"
 #include "LittleDawnInterface.h"
@@ -47,7 +47,7 @@ IMUProcessor imuProcessor;
 ADProcessor adProcessor;
 PWMProcessor pwmProcessor;
 // LEDManagerFSM ledManagerFSM; // Global instance already defined in LEDManagerFSM.cpp
-WebManager webManager;
+SimpleWebManager webManager;
 MotorDriverInterface *motorPTR = nullptr; // Motor driver still uses factory pattern
 
 // Loop timing diagnostics
@@ -309,7 +309,7 @@ void setup()
   EventLogger::getInstance()->setStartupMode(false);
   
   // Mark web manager as ready for SSE updates
-  webManager.setSystemReady();
+  webManager.setSystemReady(true);
   
   // Display access information
   localIP = Ethernet.localIP();  // Reuse existing variable
@@ -329,7 +329,7 @@ void setup()
 void loop()
 {
   // Check for OTA update apply
-  OTAHandler::applyUpdate();
+  // OTAHandler::applyUpdate();  // TODO: Implement OTA handler
   
   // Process Ethernet events - REQUIRED for QNEthernet!
   Ethernet.loop();
@@ -390,9 +390,6 @@ void loop()
     lastLEDUpdate = millis();
     ledManagerFSM.updateAll();
   }
-  
-  // Update SSE clients with WAS data if enabled
-  webManager.updateWASClients();
   
   // Handle WebSocket clients and broadcast telemetry
   webManager.handleClient();
