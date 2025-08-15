@@ -29,8 +29,7 @@ bool SimpleOTAHandler::init() {
     }
     
     const char* bufferTypeStr = (bufferType == RAM_BUFFER_TYPE) ? "RAM" : "FLASH";
-    LOG_INFO(EventSource::SYSTEM, "OTA handler initialized with %dKB %s buffer at 0x%08X", 
-             bufferSize / 1024, bufferTypeStr, bufferAddr);
+    // OTA handler initialized
     return true;
 }
 
@@ -52,7 +51,7 @@ void SimpleOTAHandler::reset() {
         memset((void*)bufferAddr, 0xFF, bufferSize);
     }
     
-    LOG_INFO(EventSource::SYSTEM, "OTA upload started");
+    // OTA upload started
 }
 
 bool SimpleOTAHandler::processChunk(const uint8_t* data, size_t len) {
@@ -153,7 +152,7 @@ bool SimpleOTAHandler::processHexLine(const String& line) {
         case 1: // End of file
             otaComplete = true;
             progress = 100;
-            LOG_INFO(EventSource::SYSTEM, "OTA upload complete: %d bytes", processedBytes);
+            // OTA upload complete
             break;
             
         case 4: // Extended linear address

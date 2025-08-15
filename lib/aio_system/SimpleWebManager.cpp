@@ -569,12 +569,12 @@ void SimpleWebManager::handleAnalogWorkSwitchSetpoint(EthernetClient& client) {
 }
 
 void SimpleWebManager::handleOTAUpload(EthernetClient& client) {
-    LOG_INFO(EventSource::NETWORK, "OTA upload request received");
+    // OTA upload request received
     
     // Initialize OTA handler if needed
     static bool otaInitialized = false;
     if (!otaInitialized) {
-        LOG_INFO(EventSource::NETWORK, "Initializing OTA handler");
+        // Initialize OTA handler
         if (!SimpleOTAHandler::init()) {
             LOG_ERROR(EventSource::NETWORK, "OTA init failed");
             SimpleHTTPServer::send(client, 500, "text/plain", "OTA init failed");
@@ -586,7 +586,7 @@ void SimpleWebManager::handleOTAUpload(EthernetClient& client) {
     // Reset OTA handler for new upload
     SimpleOTAHandler::reset();
     
-    LOG_INFO(EventSource::NETWORK, "Reading hex data from client");
+    // Read hex data from client
     
     // Read data in chunks directly from client
     uint8_t buffer[1024];
@@ -643,12 +643,12 @@ void SimpleWebManager::handleOTAUpload(EthernetClient& client) {
                 
                 // Log progress every 10KB
                 if (totalBytes % 10240 < 1024) {
-                    LOG_INFO(EventSource::NETWORK, "OTA upload progress: %lu bytes", totalBytes);
+                    // Progress: totalBytes
                 }
                 
                 // Check if OTA is complete
                 if (SimpleOTAHandler::isComplete()) {
-                    LOG_INFO(EventSource::NETWORK, "OTA upload complete, breaking loop");
+                    // Upload complete
                     break;
                 }
             }
@@ -657,7 +657,7 @@ void SimpleWebManager::handleOTAUpload(EthernetClient& client) {
             if (foundStart && millis() - lastDataTime > 1000) {
                 // If we've started receiving data but haven't gotten any new data for 1 second,
                 // assume the upload is complete
-                LOG_INFO(EventSource::NETWORK, "No data for 1 second, assuming upload complete");
+                // No data for 1 second, assuming complete
                 break;
             }
             
@@ -665,7 +665,7 @@ void SimpleWebManager::handleOTAUpload(EthernetClient& client) {
             
             // Also check for completion during idle time
             if (SimpleOTAHandler::isComplete()) {
-                LOG_INFO(EventSource::NETWORK, "OTA upload complete during idle");
+                // Upload complete during idle
                 break;
             }
         }
@@ -681,14 +681,14 @@ void SimpleWebManager::handleOTAUpload(EthernetClient& client) {
     
     // Check if we need to finalize even without explicit EOF
     if (!SimpleOTAHandler::isComplete() && foundStart) {
-        LOG_INFO(EventSource::NETWORK, "No EOF record found, checking if upload is valid");
+        // No EOF record found, check if valid
         // Process any remaining data in buffer
         if (SimpleOTAHandler::processChunk((const uint8_t*)"\n", 1)) {
             // Force a newline to process any pending hex line
         }
     }
     
-    LOG_INFO(EventSource::NETWORK, "Finalizing OTA upload");
+    // Finalize OTA upload
     
     // Finalize the upload
     if (SimpleOTAHandler::finalize()) {
@@ -770,7 +770,7 @@ void SimpleWebManager::broadcastTelemetry() {
     if (telemetryWS.getClientCount() > 0 && connectionStart == 0) {
         connectionStart = now;
         connectionPrimed = false;
-        LOG_INFO(EventSource::NETWORK, "WebSocket client connected, priming connection");
+        LOG_DEBUG(EventSource::NETWORK, "WebSocket client connected, priming connection");
     } else if (telemetryWS.getClientCount() == 0) {
         connectionStart = 0;
         connectionPrimed = false;

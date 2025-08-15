@@ -2,7 +2,7 @@
 #include "Arduino.h"
 #include <QNEthernet.h>
 #include "QNetworkBase.h"
-#include "AsyncUDPHandler.h"
+#include "QNEthernetUDPHandler.h"
 #include "ConfigManager.h"
 #include "HardwareManager.h"
 #include "SerialManager.h"
@@ -29,7 +29,6 @@
 #include "RTCMProcessor.h"
 #include "SimpleWebManager.h"
 #include "Version.h"
-#include "OTAHandler.h"
 #include "LittleDawnInterface.h"
 
 // Flash ID for OTA verification - must match FLASH_ID in FlashTxx.h
@@ -259,7 +258,7 @@ void setup()
 
   // NOW initialize AsyncUDP after ALL hardware is up
   LOG_INFO(EventSource::SYSTEM, "All hardware initialized, starting AsyncUDP");
-  AsyncUDPHandler::init();
+  QNEthernetUDPHandler::init();
   LOG_INFO(EventSource::SYSTEM, "AsyncUDP handlers ready");
 
   // Initialize AutosteerProcessor
@@ -337,7 +336,7 @@ void loop()
   QNetworkBase::poll();
   
   // Poll AsyncUDP for network diagnostics
-  AsyncUDPHandler::poll();
+  QNEthernetUDPHandler::poll();
   
   // AsyncUDP handles all UDP packet reception via callbacks
   // The poll() call above is just for diagnostics and status monitoring

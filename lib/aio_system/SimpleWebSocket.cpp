@@ -125,7 +125,7 @@ bool WebSocketClient::performHandshake() {
     tcpClient.flush();
     
     handshakeComplete = true;
-    LOG_INFO(EventSource::NETWORK, "WebSocket client %d handshake complete", clientId);
+    LOG_DEBUG(EventSource::NETWORK, "WebSocket client %d handshake complete", clientId);
     
     return true;
 }
@@ -357,7 +357,7 @@ void SimpleWebSocketServer::acceptNewClients() {
     EthernetClient newClient = server.available();
     
     if (newClient) {
-        LOG_INFO(EventSource::NETWORK, "New TCP connection on WebSocket port");
+        LOG_DEBUG(EventSource::NETWORK, "New TCP connection on WebSocket port");
         
         // Check if we have room
         if (clients.size() >= maxClients) {
@@ -373,7 +373,7 @@ void SimpleWebSocketServer::acceptNewClients() {
         uint32_t clientId = wsClient->getClientId();
         clients.push_back(std::move(wsClient));
         
-        LOG_INFO(EventSource::NETWORK, "WebSocket client %d created, waiting for handshake", clientId);
+        LOG_DEBUG(EventSource::NETWORK, "WebSocket client %d created, waiting for handshake", clientId);
     }
 }
 
@@ -414,8 +414,8 @@ void SimpleWebSocketServer::broadcastBinary(const uint8_t* data, size_t length) 
     sendTime += elapsed;
     sendCount++;
     
-    // Log performance every 5 seconds
-    if (millis() - lastPerfLog >= 5000) {
+    // Log performance every 60 seconds
+    if (millis() - lastPerfLog >= 60000) {
         if (sendCount > 0) {
             float avgSendTime = sendTime / (float)sendCount;
             LOG_INFO(EventSource::NETWORK, "WebSocket broadcast performance: %.1f us/send, %d clients", 
