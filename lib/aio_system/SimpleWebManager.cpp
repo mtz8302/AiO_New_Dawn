@@ -15,9 +15,9 @@
 #include "web_pages/SimpleDeviceSettingsNoReplace.h"  // Device settings without replacements
 #include "web_pages/SimpleHomePage.h"  // New simplified home page
 #include "web_pages/SimplePlaceholderPages.h"  // Placeholder pages
-#include "web_pages/en_EventLoggerPage.h"  // Event logger page
+#include "web_pages/SimpleEventLoggerPage.h"  // Event logger page
 #include "web_pages/SimpleNetworkPage.h"  // Simple network settings page
-#include "web_pages/en_AnalogWorkSwitchSimple2.h"  // Analog work switch page
+#include "web_pages/SimpleAnalogWorkSwitchPage.h"  // Analog work switch page
 #include "web_pages/SimpleOTAPageFixed.h"  // Fixed OTA update page
 #include <ArduinoJson.h>
 #include <QNEthernet.h>
@@ -211,8 +211,7 @@ void SimpleWebManager::sendHomePage(EthernetClient& client) {
 }
 
 void SimpleWebManager::sendEventLoggerPage(EthernetClient& client) {
-    extern const char EN_EVENTLOGGER_PAGE[];
-    String html = FPSTR(EN_EVENTLOGGER_PAGE);
+    String html = FPSTR(SIMPLE_EVENTLOGGER_PAGE);
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     
     // TODO: Get actual EventLogger config when available
@@ -262,10 +261,8 @@ void SimpleWebManager::sendDeviceSettingsPage(EthernetClient& client) {
 }
 
 void SimpleWebManager::sendAnalogWorkSwitchPage(EthernetClient& client) {
-    extern const char EN_ANALOG_WORK_SWITCH_PAGE[];
-    
     // Send the page directly without replacements
-    SimpleHTTPServer::sendP(client, 200, "text/html", EN_ANALOG_WORK_SWITCH_PAGE);
+    SimpleHTTPServer::sendP(client, 200, "text/html", SIMPLE_ANALOG_WORK_SWITCH_PAGE);
 }
 
 // WAS Demo page removed - using WebSocket telemetry instead
@@ -491,8 +488,10 @@ void SimpleWebManager::handleDeviceSettings(EthernetClient& client, const String
 }
 
 void SimpleWebManager::handleAnalogWorkSwitchStatus(EthernetClient& client) {
+    LOG_DEBUG(EventSource::NETWORK, "Analog work switch status requested");
     ADProcessor* adProc = ADProcessor::getInstance();
     if (!adProc) {
+        LOG_ERROR(EventSource::NETWORK, "ADProcessor not available");
         SimpleHTTPServer::send(client, 503, "application/json", "{\"error\":\"ADProcessor not available\"}");
         return;
     }
@@ -812,14 +811,22 @@ void SimpleWebManager::broadcastTelemetry() {
         packet.encoder_count = 0;
     }
     
+    // Get switch states from ADProcessor
+    if (adProc) {
+        packet.steer_switch = adProc->isSteerSwitchOn() ? 1 : 0;
+        packet.work_switch = adProc->isWorkSwitchOn() ? 1 : 0;
+        packet.work_analog_percent = (uint8_t)round(adProc->getWorkSwitchAnalogPercent());
+    } else {
+        packet.steer_switch = 0;
+        packet.work_switch = 0;
+        packet.work_analog_percent = 0;
+    }
+    
     // TODO: Fill in remaining fields
     packet.speed_kph = 0;
     packet.heading = 0;
     packet.status_flags = 0;
-    packet.steer_switch = 0;
-    packet.work_switch = 0;
     packet.reserved[0] = 0;
-    packet.reserved[1] = 0;
     
     // Broadcast to all connected clients
     telemetryWS.broadcastBinary((const uint8_t*)&packet, sizeof(packet));

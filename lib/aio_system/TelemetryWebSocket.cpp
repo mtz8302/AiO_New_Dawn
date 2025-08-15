@@ -83,7 +83,8 @@ const char wsTestPage[] PROGMEM = R"HTML(
                         heading: view.getFloat32(22, true),
                         status_flags: view.getUint16(26, true),
                         steer_switch: view.getUint8(28),
-                        work_switch: view.getUint8(29)
+                        work_switch: view.getUint8(29),
+                        work_analog_percent: view.getUint8(30)
                     };
                     
                     // Display data

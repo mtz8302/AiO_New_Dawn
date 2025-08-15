@@ -219,6 +219,8 @@ void setup()
   }
 
   // Initialize ADProcessor
+  // Set the instance pointer so getInstance() returns the correct object
+  ADProcessor::instance = &adProcessor;
   if (adProcessor.init())
   {
     LOG_INFO(EventSource::SYSTEM, "ADProcessor initialized");

@@ -22,8 +22,9 @@ struct __attribute__((packed)) TelemetryPacket {
     float heading;           // Compass heading
     uint16_t status_flags;   // Various status bits
     uint8_t steer_switch;    // Steering switch state
-    uint8_t work_switch;     // Work switch state
-    uint8_t reserved[2];     // Padding to 32 bytes
+    uint8_t work_switch;     // Work switch state (digital)
+    uint8_t work_analog_percent; // Analog work switch percentage (0-100)
+    uint8_t reserved[1];     // Padding to 32 bytes
 };
 
 class TelemetryWebSocket {

@@ -1,12 +1,12 @@
-// en_AnalogWorkSwitchSimple2.h
+// SimpleAnalogWorkSwitchPage.h
 // Ultra-simplified version to completely avoid PROGMEM issues
 
-#ifndef EN_ANALOG_WORK_SWITCH_SIMPLE2_H
-#define EN_ANALOG_WORK_SWITCH_SIMPLE2_H
+#ifndef SIMPLE_ANALOG_WORK_SWITCH_PAGE_H
+#define SIMPLE_ANALOG_WORK_SWITCH_PAGE_H
 
 #include <Arduino.h>
 
-const char EN_ANALOG_WORK_SWITCH_PAGE[] = R"rawliteral(
+const char SIMPLE_ANALOG_WORK_SWITCH_PAGE[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
@@ -70,25 +70,61 @@ select {padding: 5px; font-size: 16px;}
 <a href='/' class='btn-home'>Back to Home</a>
 </div>
 <script>
-var interval = null;
+var ws = null;
 var config = {enabled: false, setpoint: 50, hysteresis: 20, invert: false};
 
-function update() {
-    var xhr = new XMLHttpRequest();
-    xhr.onreadystatechange = function() {
-        if (this.readyState == 4 && this.status == 200) {
-            var data = JSON.parse(this.responseText);
-            document.getElementById('reading').textContent = 
-                'Reading: ' + Math.floor(data.percent) + '% (' + (data.state ? 'ON' : 'OFF') + ')';
-            document.getElementById('bar').style.width = data.percent + '%';
-            document.getElementById('bar').style.backgroundColor = 
-                data.state ? '#4CAF50' : '#f44336';
+function connectWebSocket() {
+    ws = new WebSocket('ws://' + window.location.hostname + ':8082');
+    ws.binaryType = 'arraybuffer';
+    
+    ws.onopen = function() {
+        document.getElementById('reading').textContent = 'Connected - Waiting for data...';
+    };
+    
+    ws.onmessage = function(event) {
+        if (event.data instanceof ArrayBuffer) {
+            const view = new DataView(event.data);
             
-            updateHysteresisZones(data.setpoint || config.setpoint, data.hysteresis || config.hysteresis);
+            // Debug: log packet size
+            console.log('Received packet size:', event.data.byteLength);
+            
+            // Parse telemetry packet
+            const work_switch = view.getUint8(29);
+            const work_analog_percent = view.getUint8(30);
+            
+            // Debug: log values
+            console.log('work_switch:', work_switch, 'work_analog_percent:', work_analog_percent);
+            
+            // Update display
+            var readingEl = document.getElementById('reading');
+            var barEl = document.getElementById('bar');
+            
+            if (readingEl) {
+                readingEl.textContent = 
+                    'Reading: ' + work_analog_percent + '% (' + (work_switch ? 'ON' : 'OFF') + ')';
+            } else {
+                console.error('reading element not found');
+            }
+            
+            if (barEl) {
+                barEl.style.width = work_analog_percent + '%';
+                barEl.style.backgroundColor = work_switch ? '#4CAF50' : '#f44336';
+            } else {
+                console.error('bar element not found');
+            }
+            
+            updateHysteresisZones(config.setpoint, config.hysteresis);
         }
     };
-    xhr.open('GET', '/api/analogworkswitch/status', true);
-    xhr.send();
+    
+    ws.onclose = function() {
+        document.getElementById('reading').textContent = 'Disconnected - Reconnecting...';
+        setTimeout(connectWebSocket, 2000);
+    };
+    
+    ws.onerror = function(error) {
+        console.error('WebSocket error:', error);
+    };
 }
 
 function updateHysteresisZones(setpoint, hysteresis) {
@@ -130,13 +166,7 @@ function loadConfig() {
             
             updateHysteresisZones(config.setpoint, config.hysteresis);
             
-            if (data.enabled) {
-                if (interval) clearInterval(interval);
-                interval = setInterval(update, 100);
-            } else if (interval) {
-                clearInterval(interval);
-                interval = null;
-            }
+            // WebSocket provides real-time updates, no need for polling
         }
     };
     xhr.open('GET', '/api/analogworkswitch/status', true);
@@ -146,14 +176,6 @@ function loadConfig() {
 function toggleEnable() {
     var enabled = document.getElementById('enable').checked;
     saveConfig({enabled: enabled});
-    
-    if (enabled) {
-        if (interval) clearInterval(interval);
-        interval = setInterval(update, 100);
-    } else if (interval) {
-        clearInterval(interval);
-        interval = null;
-    }
 }
 
 function setSetpoint() {
@@ -197,15 +219,16 @@ function saveConfig(data) {
 }
 
 window.onload = function() {
+    connectWebSocket();
     loadConfig();
 };
 
 window.onbeforeunload = function() {
-    if (interval) clearInterval(interval);
+    if (ws) ws.close();
 };
 </script>
 </body>
 </html>
 )rawliteral";
 
-#endif
+#endif // SIMPLE_ANALOG_WORK_SWITCH_PAGE_H

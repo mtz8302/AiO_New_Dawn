@@ -191,7 +191,7 @@ void SimpleHTTPServer::sendP(EthernetClient& client, int code, const String& con
                     size_t sent = client.write(buffer, copied);
                     totalSent += sent;
                 }
-                Serial.printf("HTTP SendP: Complete, sent %d bytes total\n", totalSent);
+                // Serial.printf("HTTP SendP: Complete, sent %d bytes total\n", totalSent);
                 client.flush();
                 return;
             }
@@ -201,32 +201,45 @@ void SimpleHTTPServer::sendP(EthernetClient& client, int code, const String& con
         
         // Send this chunk
         if (copied > 0) {
-            size_t sent = client.write(buffer, copied);
-            totalSent += sent;
-            if (sent < copied) {
-                Serial.printf("HTTP SendP: Write failed at %d bytes (tried %d, sent %d)\n", totalSent, copied, sent);
-                // Try to continue by sending remaining data
-                size_t remaining = copied - sent;
-                size_t retries = 3;
-                while (remaining > 0 && retries > 0) {
-                    delay(10);  // Give network time
-                    size_t additional = client.write(buffer + sent, remaining);
-                    if (additional > 0) {
-                        sent += additional;
-                        totalSent += additional;
-                        remaining -= additional;
-                    } else {
-                        retries--;
-                    }
+            size_t sent = 0;
+            size_t toSend = copied;
+            size_t offset = 0;
+            
+            // Send in smaller pieces if needed, waiting for client to be ready
+            while (toSend > 0) {
+                // Wait for client to be ready (up to 100ms)
+                uint32_t waitStart = millis();
+                while (!client.availableForWrite() && (millis() - waitStart < 100)) {
+                    delay(1);
                 }
-                if (remaining > 0) {
-                    Serial.printf("HTTP SendP: Failed to send %d bytes\n", remaining);
+                
+                // Try to send what we can
+                size_t canSend = client.availableForWrite();
+                if (canSend > toSend) canSend = toSend;
+                if (canSend > 64) canSend = 64;  // Limit chunk size to avoid buffer issues
+                
+                if (canSend > 0) {
+                    size_t written = client.write(buffer + offset, canSend);
+                    if (written > 0) {
+                        sent += written;
+                        offset += written;
+                        toSend -= written;
+                        totalSent += written;
+                    } else {
+                        // Write failed completely
+                        Serial.printf("HTTP SendP: Write failed at %d bytes\n", totalSent);
+                        return;
+                    }
+                } else {
+                    // Client not ready after timeout
+                    Serial.printf("HTTP SendP: Client not ready at %d bytes\n", totalSent);
                     return;
                 }
-            }
-            // Small delay between chunks to avoid overwhelming the network
-            if (totalSent % 1024 == 0) {
-                delay(1);
+                
+                // Small delay to let network catch up
+                if (totalSent % 512 == 0) {
+                    delay(1);
+                }
             }
         }
     }

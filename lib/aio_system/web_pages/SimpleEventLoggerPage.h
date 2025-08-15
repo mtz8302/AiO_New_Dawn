@@ -1,12 +1,12 @@
-// en_EventLoggerPage.h
-// English version of EventLogger configuration page
+// SimpleEventLoggerPage.h
+// EventLogger configuration page
 
-#ifndef EN_EVENTLOGGER_PAGE_H
-#define EN_EVENTLOGGER_PAGE_H
+#ifndef SIMPLE_EVENTLOGGER_PAGE_H
+#define SIMPLE_EVENTLOGGER_PAGE_H
 
 #include <Arduino.h>
 
-const char EN_EVENTLOGGER_PAGE[] PROGMEM = R"rawliteral(
+const char SIMPLE_EVENTLOGGER_PAGE[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
@@ -105,4 +105,4 @@ const char EN_BACK_HOME[] PROGMEM = "Back to Home";
 const char EN_SAVE_SUCCESS[] PROGMEM = "Configuration saved successfully!";
 const char EN_SAVE_ERROR[] PROGMEM = "Error saving configuration";
 
-#endif // EN_EVENTLOGGER_PAGE_H
+#endif // SIMPLE_EVENTLOGGER_PAGE_H
