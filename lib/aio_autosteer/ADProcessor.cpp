@@ -32,6 +32,7 @@ ADProcessor::ADProcessor() :
     for (int i = 0; i < CURRENT_BUFFER_SIZE; i++) {
         currentBuffer[i] = 0.0f;
     }
+    currentRunningSum = 0.0f;
     
     instance = this;
 }
@@ -127,12 +128,17 @@ bool ADProcessor::init()
 
 void ADProcessor::process()
 {
-    // Always read WAS - critical for steering
-    updateWAS();
+    uint32_t now = millis();
+    
+    // Update WAS at 200Hz (every 5ms) - more than enough for 100Hz autosteer
+    static uint32_t lastWASUpdate = 0;
+    if (now - lastWASUpdate >= 5) {
+        lastWASUpdate = now;
+        updateWAS();
+    }
     
     // Fast current sensor sampling (every 1ms like test sketch)
     static uint32_t lastCurrentSample = 0;
-    uint32_t now = millis();
     
     if (now - lastCurrentSample >= 1) {
         lastCurrentSample = now;
@@ -142,15 +148,16 @@ void ADProcessor::process()
         
         // Simple approach from test sketch - subtract baseline offset
         float adjusted = (float)(reading - 77);  // 77 is our baseline
-        currentBuffer[currentBufferIndex] = (adjusted > 0) ? adjusted : 0.0f;
+        float newValue = (adjusted > 0) ? adjusted : 0.0f;
+        
+        // Update running sum by removing old value and adding new value
+        currentRunningSum -= currentBuffer[currentBufferIndex];
+        currentRunningSum += newValue;
+        currentBuffer[currentBufferIndex] = newValue;
         currentBufferIndex = (currentBufferIndex + 1) % CURRENT_BUFFER_SIZE;
         
-        // Calculate average of buffer
-        float sum = 0;
-        for (int i = 0; i < CURRENT_BUFFER_SIZE; i++) {
-            sum += currentBuffer[i];
-        }
-        currentReading = sum / CURRENT_BUFFER_SIZE;
+        // Calculate average from running sum (much faster!)
+        currentReading = currentRunningSum / CURRENT_BUFFER_SIZE;
     }
     
     // Read other sensors at reduced rate (every 10ms = 100Hz)

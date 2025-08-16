@@ -128,6 +128,7 @@ private:
     static constexpr uint8_t CURRENT_BUFFER_SIZE = 50;  // Reduced for faster response
     float currentBuffer[CURRENT_BUFFER_SIZE];
     uint8_t currentBufferIndex;
+    float currentRunningSum;  // Running sum to avoid recalculating every time
     
     // Teensy ADC object
     ADC* teensyADC;
