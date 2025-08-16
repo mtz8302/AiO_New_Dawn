@@ -11,11 +11,34 @@ LittleDawnInterface littleDawnInterface;
 void LittleDawnInterface::init() {
     // SerialESP32 is already initialized by SerialManager at 460800 baud
     LOG_INFO(EventSource::SYSTEM, "Little Dawn interface initialized on Serial2 (460800 baud)");
+    
+    // Send initial handshake request
+    sendHandshakeRequest();
+    lastHandshakeTime = millis();
 }
 
 // Main processing loop - called from main.cpp
 void LittleDawnInterface::process() {
-    // Send data every 100ms
+    // Process any incoming data
+    processIncomingData();
+    
+    // If not detected, send periodic handshake requests
+    if (!littleDawnDetected) {
+        if (millis() - lastHandshakeTime >= HANDSHAKE_INTERVAL_MS) {
+            sendHandshakeRequest();
+            lastHandshakeTime = millis();
+        }
+        return;  // Don't send data if not detected
+    }
+    
+    // Check for timeout - if we haven't heard from Little Dawn in a while
+    if (millis() - lastResponseTime > HANDSHAKE_TIMEOUT_MS) {
+        littleDawnDetected = false;
+        LOG_WARNING(EventSource::SYSTEM, "Little Dawn connection lost (timeout)");
+        return;
+    }
+    
+    // Send data every 100ms if detected
     if (millis() - lastTransmitTime >= TRANSMIT_INTERVAL_MS) {
         sendMachineStatus();
         lastTransmitTime = millis();
@@ -81,31 +104,132 @@ void LittleDawnInterface::sendMachineStatus() {
 
 // Check if interface is active
 bool LittleDawnInterface::isActive() const {
-    // Consider active if we've sent data recently
-    return (millis() - lastTransmitTime) < (TRANSMIT_INTERVAL_MS * 2);
+    // Consider active if Little Dawn is detected and we've sent data recently
+    return littleDawnDetected && ((millis() - lastTransmitTime) < (TRANSMIT_INTERVAL_MS * 2));
+}
+
+// Send handshake request
+void LittleDawnInterface::sendHandshakeRequest() {
+    uint8_t handshakeData[] = {'N', 'D', '2', 'L', 'D'};  // "ND2LD" - New Dawn to Little Dawn
+    sendToLittleDawn(MSG_HANDSHAKE_REQUEST, handshakeData, sizeof(handshakeData));
+}
+
+// Process incoming data from Little Dawn
+void LittleDawnInterface::processIncomingData() {
+    static uint8_t rxBuffer[64];
+    static uint8_t rxIndex = 0;
+    static enum { WAIT_ID, WAIT_LEN, WAIT_DATA, WAIT_CHECKSUM } rxState = WAIT_ID;
+    static uint8_t msgId = 0;
+    static uint8_t msgLen = 0;
+    
+    while (SerialESP32.available()) {
+        uint8_t byte = SerialESP32.read();
+        
+        switch (rxState) {
+            case WAIT_ID:
+                msgId = byte;
+                rxIndex = 0;
+                rxState = WAIT_LEN;
+                break;
+                
+            case WAIT_LEN:
+                msgLen = byte;
+                if (msgLen > sizeof(rxBuffer)) {
+                    // Invalid length, reset
+                    rxState = WAIT_ID;
+                } else {
+                    rxState = (msgLen > 0) ? WAIT_DATA : WAIT_CHECKSUM;
+                }
+                break;
+                
+            case WAIT_DATA:
+                rxBuffer[rxIndex++] = byte;
+                if (rxIndex >= msgLen) {
+                    rxState = WAIT_CHECKSUM;
+                }
+                break;
+                
+            case WAIT_CHECKSUM:
+                {
+                    // Verify checksum
+                    uint8_t calcChecksum = msgId + msgLen;
+                    for (uint8_t i = 0; i < msgLen; i++) {
+                        calcChecksum += rxBuffer[i];
+                    }
+                    calcChecksum = ~calcChecksum;
+                    
+                    if (calcChecksum == byte) {
+                        // Valid message received
+                        if (processMessage(msgId, rxBuffer, msgLen)) {
+                            lastResponseTime = millis();
+                        }
+                    }
+                    
+                    rxState = WAIT_ID;
+                }
+                break;
+        }
+    }
+}
+
+// Process a received message
+bool LittleDawnInterface::processMessage(uint8_t id, const uint8_t* data, uint8_t length) {
+    switch (id) {
+        case MSG_HANDSHAKE_RESPONSE:
+            if (length >= 5 && data[0] == 'L' && data[1] == 'D' && data[2] == '2' && 
+                data[3] == 'N' && data[4] == 'D') {  // "LD2ND" - Little Dawn to New Dawn
+                if (!littleDawnDetected) {
+                    littleDawnDetected = true;
+                    LOG_INFO(EventSource::SYSTEM, "Little Dawn detected and connected");
+                }
+                // Always update response time when we get a valid handshake
+                lastResponseTime = millis();
+                return true;
+            }
+            break;
+            
+        default:
+            // Any other valid message also serves as a keepalive
+            if (littleDawnDetected) {
+                // Consider any message from Little Dawn as a sign it's still alive
+                return true;
+            }
+            break;
+    }
+    
+    return false;
 }
 
 // Print status information
 void LittleDawnInterface::printStatus() {
     Serial.println("\n=== Little Dawn Interface Status ===");
+    Serial.printf("Detected: %s\n", littleDawnDetected ? "Yes" : "No");
     Serial.printf("Active: %s\n", isActive() ? "Yes" : "No");
-    Serial.printf("Last transmit: %lu ms ago\n", millis() - lastTransmitTime);
+    
+    if (littleDawnDetected) {
+        Serial.printf("Last response: %lu ms ago\n", millis() - lastResponseTime);
+        Serial.printf("Last transmit: %lu ms ago\n", millis() - lastTransmitTime);
+    } else {
+        Serial.printf("Last handshake attempt: %lu ms ago\n", millis() - lastHandshakeTime);
+    }
     
     // Print current data being sent
-    float speedKmh = AutosteerProcessor::getInstance() ? 
-                     AutosteerProcessor::getInstance()->getVehicleSpeed() : 0.0f;
-    float wasAngle = adProcessor.getWASAngle();
-    
-    Serial.printf("Current data:\n");
-    Serial.printf("  Speed: %.2f km/h\n", speedKmh);
-    Serial.printf("  WAS angle: %.1f deg\n", wasAngle);
-    
-    if (imuProcessor.hasValidData()) {
-        IMUData imuData = imuProcessor.getCurrentData();
-        Serial.printf("  Heading: %.1f deg\n", imuData.heading);
-        Serial.printf("  Roll: %.1f deg\n", imuData.roll);
-        Serial.printf("  Pitch: %.1f deg\n", imuData.pitch);
-    } else {
-        Serial.println("  IMU: No valid data");
+    if (isActive()) {
+        float speedKmh = AutosteerProcessor::getInstance() ? 
+                         AutosteerProcessor::getInstance()->getVehicleSpeed() : 0.0f;
+        float wasAngle = adProcessor.getWASAngle();
+        
+        Serial.printf("Current data:\n");
+        Serial.printf("  Speed: %.2f km/h\n", speedKmh);
+        Serial.printf("  WAS angle: %.1f deg\n", wasAngle);
+        
+        if (imuProcessor.hasValidData()) {
+            IMUData imuData = imuProcessor.getCurrentData();
+            Serial.printf("  Heading: %.1f deg\n", imuData.heading);
+            Serial.printf("  Roll: %.1f deg\n", imuData.roll);
+            Serial.printf("  Pitch: %.1f deg\n", imuData.pitch);
+        } else {
+            Serial.println("  IMU: No valid data");
+        }
     }
 }

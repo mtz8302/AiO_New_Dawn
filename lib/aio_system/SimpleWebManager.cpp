@@ -21,6 +21,7 @@
 #include "web_pages/SimpleOTAPageFixed.h"  // Fixed OTA update page
 #include <ArduinoJson.h>
 #include <QNEthernet.h>
+#include "LittleDawnInterface.h"
 
 using namespace qindesign::network;
 
@@ -288,6 +289,10 @@ void SimpleWebManager::handleApiStatus(EthernetClient& client) {
     // Module info
     doc["deviceType"] = "Steer";  // TODO: Get from config when available
     doc["moduleId"] = 126;  // TODO: Get from config when available
+    
+    // Little Dawn status
+    doc["littleDawnDetected"] = littleDawnInterface.isDetected();
+    doc["littleDawnActive"] = littleDawnInterface.isActive();
     
     // System status
     doc["systemHealthy"] = true;

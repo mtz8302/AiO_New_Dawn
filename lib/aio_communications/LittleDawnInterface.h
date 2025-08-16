@@ -6,6 +6,8 @@
 
 // Message IDs
 #define MSG_MACHINE_STATUS 0x01
+#define MSG_HANDSHAKE_REQUEST 0x10
+#define MSG_HANDSHAKE_RESPONSE 0x11
 
 // Machine status structure (must match Little Dawn)
 struct MachineStatus {
@@ -31,10 +33,20 @@ private:
     // Serial configuration
     static constexpr uint32_t BAUD_RATE = 460800;  // Must match SerialManager BAUD_ESP32
     
+    // Detection state
+    bool littleDawnDetected = false;
+    uint32_t lastHandshakeTime = 0;
+    static constexpr uint32_t HANDSHAKE_INTERVAL_MS = 1000;  // Try handshake every second
+    static constexpr uint32_t HANDSHAKE_TIMEOUT_MS = 5000;   // Consider disconnected after 5s
+    uint32_t lastResponseTime = 0;
+    
     // Helper methods
     uint8_t calculateChecksum(const uint8_t* data, size_t len);
     void sendToLittleDawn(uint8_t id, const uint8_t* data, uint8_t length);
     void sendMachineStatus();
+    void sendHandshakeRequest();
+    void processIncomingData();
+    bool processMessage(uint8_t id, const uint8_t* data, uint8_t length);
     
 public:
     LittleDawnInterface() = default;
@@ -46,6 +58,7 @@ public:
     
     // Status
     bool isActive() const;
+    bool isDetected() const { return littleDawnDetected; }
     void printStatus();
 };
 
