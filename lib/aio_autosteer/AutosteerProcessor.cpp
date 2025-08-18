@@ -202,6 +202,47 @@ void AutosteerProcessor::initializeFusion() {
     }
 }
 
+void AutosteerProcessor::rowSenseProcess() {
+    int center = 742;  // Center value for Row Sense (adjust as needed)
+    int left = 317;    // Left limit (adjust as needed), ~0.8V
+    int right = 1238;  // Right limit (adjust as needed), ~3.6V
+    int deadband = 20; // Deadband around center value (adjust as needed), 34 = ~0.1V
+
+    uint32_t now = millis();
+
+    static uint32_t lastUpdate = 0;
+    if (now - lastUpdate >= 10) {   // Update 100Hz (every 10ms)
+    lastUpdate = now;
+    int rawSignal = analogRead(hardwareManager.getKickoutAPin());
+
+    static float aveSignal = 0.0f;
+    aveSignal = aveSignal * 0.5f + rawSignal * 0.5f; // Simple moving average
+
+    if ((int)aveSignal < left || (int)aveSignal > right) return;  // Ignore out of range values
+
+    int centeredSignal = (int)aveSignal - center;
+    Serial.printf("\r\nRow Sense: Raw %4d  Ave %4d  Cen %3d", rawSignal, (int)aveSignal, centeredSignal);
+
+    float steerAngle = 0.0f;  // set default 0 deg steer angle
+
+    // Above deadband, set positive angle
+    if (centeredSignal > deadband) {
+        steerAngle = (centeredSignal) / ((right - center) / 5.0f); // scale to 5 degrees
+        Serial.printf("  DB %d", center + deadband);
+    }
+
+    // Below deadband, set negative angle
+    else if (centeredSignal < -deadband) {
+        steerAngle = (centeredSignal) / ((center - left) / 5.0f); // scale to -5 degrees
+        Serial.printf("  DB %d", center - deadband);
+    }
+
+    //AutosteerProcessor::getInstance()->setTargetAngle(steerAngle);
+    Serial.printf("  Ang %2.1f", steerAngle);
+    targetAngle = steerAngle; // Set global target angle directly
+    }
+}
+
 void AutosteerProcessor::process() {
     // Run autosteer loop at 100Hz
     uint32_t currentTime = millis();
@@ -892,7 +933,7 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     }
     // Extract steer angle
     int16_t angleRaw = (int16_t)(data[4] << 8 | data[3]);
-    //targetAngle = angleRaw / 100.0f;
+    targetAngle = angleRaw / 100.0f;
     
     // Debug log for AgIO test mode
     if (targetAngle != 0.0f || autosteerEnabled) {
@@ -1020,6 +1061,8 @@ void AutosteerProcessor::sendPGN253() {
 void AutosteerProcessor::updateMotorControl() {
     // Current angle is now updated in process() before this function is called
     
+    rowSenseProcess();
+
     // Check if steering should be active
     bool shouldBeActive = shouldSteerBeActive();
     
@@ -1074,7 +1117,7 @@ void AutosteerProcessor::updateMotorControl() {
     // Ackerman fix is now applied in process() before this function is called
     
     // Calculate angle error
-    Serial.printf("\nTarget angle: %.1f°, Actual angle: %.1f°", targetAngle, actualAngle);
+    //Serial.printf("\nTarget angle: %.1f°, Actual angle: %.1f°", targetAngle, actualAngle);
     float angleError = actualAngle - targetAngle;
     float errorAbs = abs(angleError);
     

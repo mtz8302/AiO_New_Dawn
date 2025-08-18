@@ -129,6 +129,7 @@ public:
     bool init();
     void process();
     void initializeFusion();  // Initialize sensor fusion separately
+    void rowSenseProcess();
     
     // PGN handlers
     void handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len);
