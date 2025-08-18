@@ -162,6 +162,7 @@ public:
     // Public getters for state
     bool isEnabled() const { return autosteerEnabled; }
     float getTargetAngle() const { return targetAngle; }
+    void setTargetAngle(float angle) { targetAngle = angle; }
 
     // Public getter for PGN254 vehicle speed 
     float getVehicleSpeed() const { return vehicleSpeed; }

@@ -892,7 +892,7 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     }
     // Extract steer angle
     int16_t angleRaw = (int16_t)(data[4] << 8 | data[3]);
-    targetAngle = angleRaw / 100.0f;
+    //targetAngle = angleRaw / 100.0f;
     
     // Debug log for AgIO test mode
     if (targetAngle != 0.0f || autosteerEnabled) {
@@ -1074,6 +1074,7 @@ void AutosteerProcessor::updateMotorControl() {
     // Ackerman fix is now applied in process() before this function is called
     
     // Calculate angle error
+    Serial.printf("\nTarget angle: %.1f°, Actual angle: %.1f°", targetAngle, actualAngle);
     float angleError = actualAngle - targetAngle;
     float errorAbs = abs(angleError);
     
