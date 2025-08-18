@@ -11,17 +11,20 @@ graph TB
         HM[HardwareManager<br/>Singleton]
         EL[EventLogger<br/>Singleton]
         CH[CommandHandler<br/>Singleton]
+        POM[PinOwnershipManager<br/>Static]
+        SRM[SharedResourceManager<br/>Static]
     end
 
     %% Communication Layer
     subgraph "Communication"
         QNB[QNetworkBase<br/>Static]
-        AUH[AsyncUDPHandler<br/>Static]
-        SM[SerialManager]
-        CANM[CANManager]
-        I2CM[I2CManager]
-        WM[WebManager]
+        AUH[QNEthernetUDPHandler<br/>Static]
+        SM[SerialManager<br/>Singleton]
+        CANM[CANManager<br/>Singleton]
+        I2CM[I2CManager<br/>Singleton]
+        SWM[SimpleWebManager<br/>Singleton]
         PP[PGNProcessor<br/>Static]
+        TWS[TelemetryWebSocket<br/>Static]
     end
 
     %% Motor Driver Hierarchy
@@ -31,11 +34,13 @@ graph TB
         PWM[PWMMotorDriver]
         KCD[KeyaCANDriver]
         DFM[DanfossMotorDriver]
+        KSD[KeyaSerialDriver]
         
         MDM -->|creates| MDI
         PWM -.->|implements| MDI
         KCD -.->|implements| MDI
         DFM -.->|implements| MDI
+        KSD -.->|implements| MDI
     end
 
     %% Navigation/Sensors
@@ -46,6 +51,8 @@ graph TB
         AD[ADProcessor<br/>Singleton]
         ENC[EncoderProcessor<br/>Singleton]
         PWMP[PWMProcessor<br/>Singleton]
+        UBX[UBXParser]
+        BNO[BNOAiOParser]
     end
 
     %% Control Systems
@@ -60,7 +67,8 @@ graph TB
     %% System Services
     subgraph "System Services"
         RTCM[RTCMProcessor<br/>Static]
-        OTA[OTAHandler<br/>Static]
+        OTA[SimpleOTAHandler<br/>Static]
+        LDI[LittleDawnInterface<br/>Static]
     end
 
     %% Major Dependencies
@@ -72,6 +80,9 @@ graph TB
     HM -->|pins| PWM
     HM -->|pins| DFM
     HM -->|pins| PWMP
+    POM -->|validates| HM
+    SRM -->|resources| I2CM
+    SRM -->|resources| CANM
 
     %% Communication
     PP -->|routes PGNs| AS
@@ -85,6 +96,8 @@ graph TB
     I2CM -->|I2C| IMU
     I2CM -->|I2C| LED
     I2CM -->|I2C| MP
+    TWS -->|telemetry| SWM
+    SWM -->|events| EL
 
     %% Motor Control
     MDM -->|uses| HM
@@ -111,15 +124,26 @@ graph TB
     SM -->|GPS serial| GNSS
     SM -->|RS232| RTCM
     RTCM -->|RTCM data| SM
+    SM -->|IMU serial| IMU
+    SM -->|Keya serial| KSD
+    GNSS -->|uses| UBX
+    IMU -->|uses| BNO
 
     %% Web Interface
-    WM -->|status| AS
-    WM -->|status| GNSS
-    WM -->|SSE events| EL
+    SWM -->|status| AS
+    SWM -->|status| GNSS
+    SWM -->|WebSocket| TWS
+    SWM -->|config| CM
+    SWM -->|OTA| OTA
 
     %% Command Processing
     CH -->|commands| MP
     CH -->|debug| AS
+    CH -->|logging| EL
+    
+    %% Little Dawn Support
+    LDI -->|processor info| HM
+    LDI -->|processor info| CM
 ```
 
 ## Key Design Patterns
@@ -147,6 +171,11 @@ Used extensively for system services that should have only one instance:
 - Motor drivers receive HardwareManager reference
 - Allows testing with mock hardware managers
 
+### 6. Resource Management Pattern
+- PinOwnershipManager tracks pin usage
+- SharedResourceManager manages shared hardware
+- Prevents conflicts at compile and runtime
+
 ## Communication Flow
 
 ### PGN Message Flow:
@@ -162,6 +191,11 @@ AutosteerProcessor → MotorDriverInterface → Concrete Driver → Hardware
 ### Sensor Data Flow:
 ```
 Hardware → ADProcessor/EncoderProcessor → WheelAngleFusion → AutosteerProcessor
+```
+
+### Web/Telemetry Flow:
+```
+Processors → EventLogger → TelemetryWebSocket → SimpleWebManager → Browser
 ```
 
 ## Key Relationships
@@ -184,4 +218,34 @@ Hardware → ADProcessor/EncoderProcessor → WheelAngleFusion → AutosteerProc
 ## Thread Safety
 - Most singletons use getInstance() pattern
 - Critical sections protected by interrupt disabling
-- Careful management of shared resources (pins, PWM timers, etc.)
+- SharedResourceManager provides thread-safe hardware access
+- I2CManager includes mutex protection for bus access
+
+## Module Initialization Order
+
+1. **Hardware Layer**: HardwareManager, PinOwnershipManager
+2. **Communication**: I2CManager, CANManager, SerialManager
+3. **Network**: QNetworkBase, QNEthernetUDPHandler
+4. **Core Services**: ConfigManager, EventLogger, PGNProcessor
+5. **Sensors**: ADProcessor, EncoderProcessor, GNSSProcessor, IMUProcessor
+6. **Control**: MotorDriverManager, AutosteerProcessor, MachineProcessor
+7. **Web Services**: SimpleWebManager, TelemetryWebSocket
+8. **User Interface**: LEDManagerFSM, CommandHandler
+
+## PGN Message Registration
+
+### Direct Registration (specific PGNs):
+- AutosteerProcessor: PGN 254 (steer command)
+- MachineProcessor: PGN 239 (section control)
+- GNSSProcessor: PGN 211 (GPS config)
+- IMUProcessor: PGN 192 (IMU config)
+- NAVProcessor: PGN 197 (navigation config)
+
+### Broadcast Registration (all PGNs):
+- EventLogger: For logging purposes
+- WebSocket: For telemetry streaming
+
+### Special PGNs:
+- PGN 200: Module scan request (handled internally)
+- PGN 202: Module hello broadcast (never register)
+- PGN 201: Subnet response (automatic)
