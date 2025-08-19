@@ -104,7 +104,7 @@ Press `?` for interactive menu:
 - Try DHCP mode
 
 ### No GPS Data
-- Check baud rate (115200)
+- Check baud rate (460800)
 - Verify antenna connection
 - Monitor Serial2 output
 
