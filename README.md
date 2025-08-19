@@ -13,179 +13,98 @@ AiO New Dawn is a modular agricultural control system built on the Teensy 4.1 pl
 - **Real-Time Processing**: Critical control loops run at consistent intervals
 - **Network-First**: Built around QNEthernet for reliable UDP communication
 
-## Main Components
+1. **[ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md)**
+   - System architecture and design principles
+   - Component overview and relationships
+   - Data flow and communication patterns
+   - Performance considerations
 
-### System Management
+2. **[CLASS_INTERACTION_DIAGRAM.md](CLASS_INTERACTION_DIAGRAM.md)**
+   - Visual representation of class relationships
+   - Design patterns used in the codebase
+   - Module initialization order
+   - PGN message registration details
 
-**main.cpp**
-- Entry point that initializes all subsystems in the correct order
-- Manages the main loop that polls each processor
+3. **[HARDWARE_AND_PIN_MANAGEMENT.md](HARDWARE_AND_PIN_MANAGEMENT.md)**
+   - Pin assignments for Teensy 4.1 and Little Dawn
+   - Resource management system
+   - Hardware abstraction layer
+   - Conflict resolution and debugging
 
-**ConfigManager** (`lib/aio_config/`)
-- Stores and manages all system configuration in EEPROM
-- Provides centralized access to hardware pins, network settings, and operational parameters
+4. **[COMMUNICATION_AND_NETWORKING.md](COMMUNICATION_AND_NETWORKING.md)**
+   - Network configuration and protocols
+   - Serial communication interfaces
+   - CAN bus implementation
+   - I2C device management
 
-**EventLogger** (`lib/aio_system/`)
-- Centralized logging system with configurable output to Serial and UDP syslog
-- Supports multiple severity levels and event sources with rate limiting
+5. **[MOTOR_DRIVERS_AND_SENSORS.md](MOTOR_DRIVERS_AND_SENSORS.md)**
+   - Supported motor driver types
+   - Sensor interfaces and calibration
+   - Control loop implementation
+   - Safety features and troubleshooting
 
-**CommandHandler** (`lib/aio_system/`)
-- Provides interactive serial menu for configuration and debugging
-- Handles user input for logging control and system status
+6. **[WEB_INTERFACE.md](WEB_INTERFACE.md)**
+   - Web server architecture
+   - Available configuration pages
+   - WebSocket protocol
+   - API endpoints and customization
 
-### Network & Communication
+7. **[LED_Status_Guide.md](LED_Status_Guide.md)**
+   - Front panel LED meanings
+   - Color codes and patterns
+   - Troubleshooting with LEDs
+   - Visual feedback system
 
-**QNetworkBase** (`lib/aio_system/`)
-- Manages Ethernet initialization and connection status
-- Handles DHCP/static IP configuration and monitors link state
+8. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)**
+   - Essential commands and shortcuts
+   - Pin assignments reference
+   - Common issues and solutions
+   - Performance metrics
 
-**AsyncUDPHandler** (`lib/aio_system/`)
-- Manages all UDP communication with AgOpenGPS
-- Routes incoming PGN messages to appropriate processors
+## Getting Started
 
-**SubnetManager** (`lib/aio_system/`)
-- Handles AgOpenGPS subnet scanning and module identification (PGN 201)
-- Manages "Hello" broadcasts and scan responses
+If you're new to AiO New Dawn, we recommend reading the documentation in this order:
 
-**WebManager** (`lib/aio_system/`)
-- Provides web interface for configuration and status monitoring
-- Supports OTA firmware updates and multi-language pages
+1. Start with [ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md) to understand the system
+2. Review [LED_Status_Guide.md](LED_Status_Guide.md) to understand status indicators
+3. Check [QUICK_REFERENCE.md](QUICK_REFERENCE.md) for common tasks
+4. Dive into specific topics as needed
 
-**SerialManager** (`lib/aio_communications/`)
-- Manages multiple hardware serial ports for GPS, RTK, IMU, and RS232
-- Provides bridging functionality between serial devices and UDP
+## For Developers
 
-### Navigation & Positioning
+If you're planning to modify or extend AiO New Dawn:
 
-**GNSSProcessor** (`lib/aio_navigation/`)
-- Parses NMEA and UBX messages from GPS/GNSS receivers
-- Manages dual GPS inputs with automatic failover
+1. Study [CLASS_INTERACTION_DIAGRAM.md](CLASS_INTERACTION_DIAGRAM.md) for code structure
+2. Review [HARDWARE_AND_PIN_MANAGEMENT.md](HARDWARE_AND_PIN_MANAGEMENT.md) before adding hardware
+3. Understand [COMMUNICATION_AND_NETWORKING.md](COMMUNICATION_AND_NETWORKING.md) for protocol details
+4. Follow patterns in [MOTOR_DRIVERS_AND_SENSORS.md](MOTOR_DRIVERS_AND_SENSORS.md) for new drivers
 
-**RTCMProcessor** (`lib/aio_system/`)
-- Handles RTK correction data (RTCM messages)
-- Routes corrections between network/serial sources and GPS receivers
+## Additional Resources
 
-**IMUProcessor** (`lib/aio_navigation/`)
-- Interfaces with BNO08x IMU for heading and roll data
-- Processes IMU data and forwards to AgOpenGPS via PGN
+- **Knowledge Base**: Check the `/knowledge` folder for implementation guides
+- **Source Code**: Well-commented code in `/lib` and `/src`
+- **Web Interface**: Access device at `http://192.168.5.126` for configuration
+- **Serial Menu**: Press `?` at boot for interactive debugging
 
-**NAVProcessor** (`lib/aio_navigation/`)
-- Combines GPS and IMU data for complete navigation solution
-- Manages coordinate transformations and heading calculations
+## Documentation Standards
 
-### Vehicle Control
+When contributing to documentation:
 
-**AutosteerProcessor** (`lib/aio_autosteer/`)
-- Implements automated steering control with multiple motor driver support
-- Handles steering angle sensing, motor control, and safety switches
-- Sends PGN253 status messages with current wheel angle even when autosteer is off
-- Supports wheel angle sensor fusion for improved accuracy
+- Use clear, concise language
+- Include code examples where helpful
+- Keep formatting consistent
+- Update the table of contents
+- Test all commands and procedures
 
-**MachineProcessor** (`lib/aio_system/`)
-- Manages section control for implements (sprayers, seeders, etc.)
-- Controls up to 16 sections via PCA9685 PWM controller at address 0x44
-- Supports machine functions: hydraulic lift, tramlines, and geo-stop
-- Automatically protects outputs 5 & 6 when Danfoss valve is configured
-- Initializes Danfoss valve to 50% PWM (centered) at boot
+## Version
 
-**MotorDriverInterface** (`lib/aio_autosteer/`)
-- Abstract interface for different motor driver types
-- Implementations include:
-  - PWM drivers: Cytron MD30C, IBT-2, DRV8701
-  - CAN-based: Keya motor
-  - Hydraulic: Danfoss proportional valve
-- Supports coast/brake mode configuration for PWM drivers
+This documentation is current as of version 1.0.0-beta. Check the git history for the latest updates.
 
-**PWMProcessor** (`lib/aio_system/`)
-- Generates speed pulse output for rate controllers
-- Configurable frequency and duty cycle based on ground speed
+## Questions?
 
-### Hardware Interfaces
+If you can't find what you need:
 
-**HardwareManager** (`lib/aio_config/`)
-- Manages hardware initialization and pin assignments
-- Provides buzzer control and hardware status reporting
-
-**I2CManager** (`lib/aio_communications/`)
-- Manages I2C bus for multiple devices:
-  - PCA9685 at 0x44: Section outputs and machine control
-  - PCA9685 at 0x70: RGB LED control
-- Handles bus initialization at 1MHz and error recovery
-
-**CANManager** (`lib/aio_communications/`)
-- Manages FlexCAN interfaces for motor control and implement communication
-- Auto-detects connected CAN devices like Keya steering motors
-
-**LEDManagerFSM** (`lib/aio_system/`)
-- Controls RGB LEDs via PCA9685 at address 0x70 using FSM pattern
-- Four status LEDs: PWR/ETH, GPS, STEER, INS
-- Blue pulse overlays for RTCM data (GPS LED) and button press (STEER LED)
-- Updates every 100ms with 25% default brightness
-
-**ADProcessor** (`lib/aio_autosteer/`)
-- Reads analog inputs for steering angle sensor (WAS)
-- Provides filtering and calibration for analog signals
-- Monitors work switch and remote switch inputs
-
-### Data Processing
-
-**PGNProcessor** (`lib/aio_system/`)
-- Central router for all PGN messages in the system
-- Manages callback registration and message distribution
-
-**UBXParser** (`lib/aio_navigation/`)
-- Parses u-blox UBX protocol messages
-- Extracts high-precision position and timing data
-
-**BNO_RVC** (`lib/aio_navigation/`)
-- Interfaces with BNO08x IMU in RVC (Robot Vacuum Cleaner) mode
-- Simplified binary protocol for heading and motion data
-
-## Data Flow
-
-1. **GPS/IMU Data** → GNSSProcessor/IMUProcessor → NAVProcessor → PGN messages → UDP to AgOpenGPS
-2. **Steering Commands** ← UDP from AgOpenGPS → PGN messages → AutosteerProcessor → Motor Driver
-3. **Section Control** ← UDP from AgOpenGPS → PGN messages → MachineProcessor → PCA9685 → Sections
-4. **Configuration** ← Web Interface/Serial Menu → ConfigManager → EEPROM
-
-## Key Design Patterns
-
-- **Singleton Pattern**: Used for managers and processors that need global access
-- **Factory Pattern**: Motor drivers created based on detected hardware or EEPROM configuration
-- **Observer Pattern**: PGN callback system for message routing
-- **Finite State Machine**: LED control and network connection handling
-- **Strategy Pattern**: Multiple motor driver implementations with common interface
-
-## Building and Development
-
-The project uses PlatformIO with the Teensy 4.1 platform. Key directories:
-- `lib/` - All modular components
-- `src/` - Main application entry point
-- `docs/` - Documentation
-- `testing/` - Test utilities and examples
-
-## Network Protocol
-
-Uses AgOpenGPS PGN protocol over UDP port 8888:
-- Receives control commands from AgOpenGPS
-- Sends position, heading, and status data
-- Supports module discovery via subnet scanning
-
-## Recent Improvements
-
-### Motor Driver Enhancements
-- **Danfoss Valve Support**: Proper initialization at boot with 50% PWM centering
-- **PWM Mode Fix**: Standard PWM mode for PCA9685 eliminates pulse glitches
-- **Coast/Brake Mode**: Configurable motor behavior for PWM drivers
-- **EEPROM-based Detection**: Motor type configuration stored persistently
-
-### System Reliability
-- **PGN253 Updates**: Wheel angle reported even when autosteer is disabled
-- **Output Protection**: Machine outputs 5 & 6 reserved for Danfoss when configured
-- **LED Responsiveness**: Removed hysteresis for instant RTCM pulse indication
-- **Sensor Fusion**: Support for combined wheel angle sensor data
-
-### Hardware Compatibility
-- **Multiple Motor Drivers**: Cytron, IBT-2, DRV8701, Keya CAN, Danfoss
-- **Dual GPS Support**: Automatic failover between primary and secondary
-- **IMU Options**: BNO08x, TM171, UM981 integrated INS
+1. Check the source code comments
+2. Use the serial menu for debugging
+3. Review the web interface help
+4. Examine the `/knowledge` folder
