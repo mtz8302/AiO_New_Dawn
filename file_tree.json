@@ -1,16 +1,41 @@
 [
   {"type":"directory","name":".","contents":[
-    {"type":"file","name":"AiO_New_Dawn_v0.1.70-alpha.hex"},
-    {"type":"file","name":"AiO_New_Dawn_v0.1.71-alpha.hex"},
+    {"type":"file","name":"AiO_New_Dawn_v0.1.75-alpha.hex"},
+    {"type":"file","name":"AiO_New_Dawn_v1.0.0-beta.hex"},
     {"type":"file","name":"CLAUDE.md"},
     {"type":"file","name":"compile_commands.json"},
     {"type":"file","name":"copy_hex.py"},
     {"type":"directory","name":"docs","contents":[
-      {"type":"file","name":"ADC_OPTIMIZATION_NOTES.md"},
       {"type":"file","name":"ARCHITECTURE_OVERVIEW.md"},
-      {"type":"file","name":"CIVETWEB_IMPLEMENTATION_GUIDE.md"},
       {"type":"file","name":"CLASS_INTERACTION_DIAGRAM.md"},
+      {"type":"file","name":"COMMUNICATION_AND_NETWORKING.md"},
+      {"type":"file","name":"HARDWARE_AND_PIN_MANAGEMENT.md"},
+      {"type":"file","name":"LED_Status_Guide.md"},
+      {"type":"file","name":"MOTOR_DRIVERS_AND_SENSORS.md"},
+      {"type":"file","name":"QUICK_REFERENCE.md"},
+      {"type":"file","name":"README.md"},
+      {"type":"file","name":"WEB_INTERFACE.md"}
+    ]},
+    {"type":"file","name":"file_tree.json"},
+    {"type":"directory","name":"include","contents":[
+      {"type":"file","name":"README"}
+    ]},
+    {"type":"directory","name":"knowledge","contents":[
+      {"type":"file","name":"ADC_OPTIMIZATION_NOTES.md"},
+      {"type":"file","name":"ASYNC_TCP_README.md"},
+      {"type":"file","name":"ASYNC_UDP_README.md"},
+      {"type":"file","name":"ASYNC_WEB_README.md"},
+      {"type":"file","name":"blocking_operations_analysis.md"},
+      {"type":"file","name":"CIVETWEB_IMPLEMENTATION_GUIDE.md"},
+      {"type":"file","name":"CONTINUATION_PROMPT_QNETHERNET.md"},
+      {"type":"file","name":"CONTINUATION_PROMPT_WEBSERVER.md"},
+      {"type":"file","name":"CONTINUE_PROMPT_WEB_MIGRATION.md"},
+      {"type":"file","name":"CONTINUE_PROMPT.md"},
+      {"type":"file","name":"dependency_analysis.md"},
       {"type":"file","name":"DYNAMIC_MOTOR_RECONFIGURATION.md"},
+      {"type":"file","name":"eeprom_layout.txt"},
+      {"type":"file","name":"ESP32_CAN_CONNECTION_OPTIONS.md"},
+      {"type":"file","name":"ESP32_ISOBUS_BRIDGE.md"},
       {"type":"file","name":"HARDWARE_OWNERSHIP_MATRIX.md"},
       {"type":"file","name":"HARDWARE_REFACTOR_PHASE2.md"},
       {"type":"file","name":"HARDWARE_REFACTOR_PHASE3.md"},
@@ -18,37 +43,6 @@
       {"type":"file","name":"HARDWARE_REFACTOR.md"},
       {"type":"file","name":"HARDWARE_UNIFICATION.md"},
       {"type":"file","name":"HOW_TO_ADD_TRANSLATIONS.md"},
-      {"type":"file","name":"LED_Status_Guide.md"},
-      {"type":"file","name":"led-fsm-refactoring.md"},
-      {"type":"file","name":"LIGHTWEIGHT_WEB_IMPLEMENTATION_PLAN 2.md"},
-      {"type":"file","name":"LIGHTWEIGHT_WEB_IMPLEMENTATION_PLAN.md"},
-      {"type":"file","name":"machine_outputs_implementation_plan.md"},
-      {"type":"file","name":"orbital_valve_compensation.md"},
-      {"type":"file","name":"performance-optimization-analysis.md"},
-      {"type":"file","name":"sensor_fusion_implementation_plan.md"},
-      {"type":"file","name":"sensor_fusion_proposal.md"},
-      {"type":"file","name":"WEB_NAVIGATION_STANDARDIZATION.md"},
-      {"type":"file","name":"WEBSOCKET_FIRST_IMPLEMENTATION_PLAN 2.md"},
-      {"type":"file","name":"WEBSOCKET_FIRST_IMPLEMENTATION_PLAN.md"},
-      {"type":"file","name":"WEBSOCKET_MIGRATION_LESSONS.md"}
-    ]},
-    {"type":"file","name":"file_tree.json"},
-    {"type":"directory","name":"include","contents":[
-      {"type":"file","name":"README"}
-    ]},
-    {"type":"directory","name":"knowledge","contents":[
-      {"type":"file","name":"ASYNC_TCP_README.md"},
-      {"type":"file","name":"ASYNC_UDP_README.md"},
-      {"type":"file","name":"ASYNC_WEB_README.md"},
-      {"type":"file","name":"blocking_operations_analysis.md"},
-      {"type":"file","name":"CONTINUATION_PROMPT_QNETHERNET.md"},
-      {"type":"file","name":"CONTINUATION_PROMPT_WEBSERVER.md"},
-      {"type":"file","name":"CONTINUE_PROMPT_WEB_MIGRATION.md"},
-      {"type":"file","name":"CONTINUE_PROMPT.md"},
-      {"type":"file","name":"dependency_analysis.md"},
-      {"type":"file","name":"eeprom_layout.txt"},
-      {"type":"file","name":"ESP32_CAN_CONNECTION_OPTIONS.md"},
-      {"type":"file","name":"ESP32_ISOBUS_BRIDGE.md"},
       {"type":"file","name":"ISOBUS_MEMORY_OPTIMIZATION.md"},
       {"type":"file","name":"ISOBUS_VT_IMPLEMENTATION_KNOWLEDGE.md"},
       {"type":"file","name":"keya_implementation_notes.md"},
@@ -56,18 +50,30 @@
       {"type":"file","name":"keya_protocol_actual.md"},
       {"type":"file","name":"Keya_Serial_Protocol.pdf"},
       {"type":"file","name":"ldf.rst"},
+      {"type":"file","name":"led-fsm-refactoring.md"},
+      {"type":"file","name":"LIGHTWEIGHT_WEB_IMPLEMENTATION_PLAN 2.md"},
+      {"type":"file","name":"LIGHTWEIGHT_WEB_IMPLEMENTATION_PLAN.md"},
+      {"type":"file","name":"machine_outputs_implementation_plan.md"},
       {"type":"file","name":"MOTOR_DRIVER_OVERHAUL_PLAN.md"},
       {"type":"file","name":"MOTOR_DRIVER_OVERHAUL.md"},
       {"type":"file","name":"motor_test_instructions.md"},
       {"type":"file","name":"NEW_DAWN_INTEGRATION.md"},
+      {"type":"file","name":"orbital_valve_compensation.md"},
+      {"type":"file","name":"performance-optimization-analysis.md"},
       {"type":"file","name":"PGN.md"},
       {"type":"file","name":"PGN250.md"},
       {"type":"file","name":"QNETHERNET_MIGRATION_PLAN.md"},
       {"type":"file","name":"QNETHERNET_README.md"},
       {"type":"file","name":"README.md"},
+      {"type":"file","name":"sensor_fusion_implementation_plan.md"},
+      {"type":"file","name":"sensor_fusion_proposal.md"},
       {"type":"file","name":"test_motor_detection.md"},
+      {"type":"file","name":"WEB_NAVIGATION_STANDARDIZATION.md"},
       {"type":"file","name":"WEB_UI_MIGRATION_PLAN_REVISED.md"},
-      {"type":"file","name":"WEB_UI_MIGRATION_PLAN.md"}
+      {"type":"file","name":"WEB_UI_MIGRATION_PLAN.md"},
+      {"type":"file","name":"WEBSOCKET_FIRST_IMPLEMENTATION_PLAN 2.md"},
+      {"type":"file","name":"WEBSOCKET_FIRST_IMPLEMENTATION_PLAN.md"},
+      {"type":"file","name":"WEBSOCKET_MIGRATION_LESSONS.md"}
     ]},
     {"type":"directory","name":"lib","contents":[
       {"type":"directory","name":"Adafruit_BusIO","contents":[
@@ -759,5 +765,5 @@
     {"type":"file","name":"to_bin.py"}
   ]}
 ,
-  {"type":"report","directories":94,"files":574}
+  {"type":"report","directories":94,"files":580}
 ]
