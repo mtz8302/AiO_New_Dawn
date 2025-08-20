@@ -9,6 +9,12 @@
 // QNEthernet namespace
 using namespace qindesign::network;
 
+// RTCM data sources
+enum class RTCMSource {
+    NETWORK,    // From UDP port 9999
+    RADIO       // From SerialRadio (Xbee)
+};
+
 class RTCMProcessor
 {
 public:
@@ -19,8 +25,17 @@ private:
     ~RTCMProcessor();
 
 public:
-    // Process incoming RTCM data
+    // Get singleton instance
+    static RTCMProcessor* getInstance() { return instance; }
+    
+    // Process incoming RTCM data from network
     void processRTCM(const uint8_t* data, size_t len, const IPAddress& remoteIP, uint16_t remotePort);
+    
+    // Process incoming RTCM data from radio
+    void processRadioRTCM();
+    
+    // Process all RTCM sources (called from main loop)
+    void process();
 
     // Initialize the handler
     static void init();

@@ -365,6 +365,9 @@ void loop()
 
   // Process NAV messages
   NAVProcessor::getInstance()->process();
+  
+  // Process RTCM data from all sources (network and radio)
+  RTCMProcessor::getInstance()->process();
 
   // Poll CAN messages - DISABLED (Motor driver handles CAN3)
   // canManager.pollForDevices();
