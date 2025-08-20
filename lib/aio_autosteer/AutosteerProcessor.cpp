@@ -202,7 +202,7 @@ void AutosteerProcessor::initializeFusion() {
     }
 }
 
-void AutosteerProcessor::rowSenseProcess() {
+float AutosteerProcessor::rowSenseProcess(float targetAngle) {
     int center = 742;  // Center value for Row Sense (adjust as needed)
     int left = 317;    // Left limit (adjust as needed), ~0.8V
     int right = 1238;  // Right limit (adjust as needed), ~3.6V
@@ -218,28 +218,30 @@ void AutosteerProcessor::rowSenseProcess() {
     static float aveSignal = 0.0f;
     aveSignal = aveSignal * 0.5f + rawSignal * 0.5f; // Simple moving average
 
-    if ((int)aveSignal < left || (int)aveSignal > right) return;  // Ignore out of range values
+    if ((int)aveSignal < left || (int)aveSignal > right) return targetAngle;  // Ignore out of range values and return current target angle
 
     int centeredSignal = (int)aveSignal - center;
     Serial.printf("\r\nRow Sense: Raw %4d  Ave %4d  Cen %3d", rawSignal, (int)aveSignal, centeredSignal);
 
-    float steerAngle = 0.0f;  // set default 0 deg steer angle
+    float newTargetAngle = 0.0f;  // set default 0 deg steer angle
 
     // Above deadband, set positive angle
     if (centeredSignal > deadband) {
-        steerAngle = (centeredSignal - deadband) / ((right - center) / 5.0f); // scale to 5 degrees
+        newTargetAngle = (centeredSignal - deadband) / ((right - center - deadband) / 5.0f); // scale to 5 degrees
         Serial.printf("  DB %d", center + deadband);
     }
 
     // Below deadband, set negative angle
     else if (centeredSignal < -deadband) {
-        steerAngle = (centeredSignal + deadband) / ((center - left) / 5.0f); // scale to -5 degrees
+        newTargetAngle = (centeredSignal + deadband) / ((center - left - deadband) / 5.0f); // scale to -5 degrees
         Serial.printf("  DB %d", center - deadband);
     }
 
     //AutosteerProcessor::getInstance()->setTargetAngle(steerAngle);
-    Serial.printf("  Ang %2.1f", steerAngle);
-    targetAngle = steerAngle; // Set global target angle directly
+    Serial.printf("  Ang %2.1f", newTargetAngle);
+
+    //targetAngle = steerAngle; // Set global target angle directly
+    return newTargetAngle;  // Return the new calculated row sense steer angle
     }
 }
 
@@ -1061,7 +1063,7 @@ void AutosteerProcessor::sendPGN253() {
 void AutosteerProcessor::updateMotorControl() {
     // Current angle is now updated in process() before this function is called
     
-    rowSenseProcess();
+    targetAngle = rowSenseProcess(targetAngle);  // Apply row sense correction if needed
 
     // Check if steering should be active
     bool shouldBeActive = shouldSteerBeActive();
