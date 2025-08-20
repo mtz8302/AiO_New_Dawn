@@ -227,13 +227,13 @@ void AutosteerProcessor::rowSenseProcess() {
 
     // Above deadband, set positive angle
     if (centeredSignal > deadband) {
-        steerAngle = (centeredSignal) / ((right - center) / 5.0f); // scale to 5 degrees
+        steerAngle = (centeredSignal - deadband) / ((right - center) / 5.0f); // scale to 5 degrees
         Serial.printf("  DB %d", center + deadband);
     }
 
     // Below deadband, set negative angle
     else if (centeredSignal < -deadband) {
-        steerAngle = (centeredSignal) / ((center - left) / 5.0f); // scale to -5 degrees
+        steerAngle = (centeredSignal + deadband) / ((center - left) / 5.0f); // scale to -5 degrees
         Serial.printf("  DB %d", center - deadband);
     }
 
