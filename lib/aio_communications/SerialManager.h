@@ -67,18 +67,13 @@ public:
     bool initializeSerial();
     bool initializeSerialPorts();
 
-    // All device detection moved to NAVProcessor
+    // Device detection handled by NAVProcessor
 
-    // Serial processing methods
-    void processGPS1();
-    void processGPS2();
-    void processRadio();
-    void processRS232();
+    // Serial processing methods - Most processing moved to specialized processors
+    // Only ESP32 PGN processing remains here
     void processESP32();
-    void processIMU();
 
     // Bridge mode management
-    void updateBridgeMode();
     bool isGPS1Bridged() const;
     bool isGPS2Bridged() const;
     void handleGPS1BridgeMode();

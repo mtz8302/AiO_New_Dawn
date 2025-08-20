@@ -387,9 +387,6 @@ void IMUProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t l
     {
         // When we receive a Hello from AgIO, we should respond
         // Using the same format as V6-NG
-        
-        // Serial.print("\r\n[IMUProcessor] Received Hello PGN, sending reply");
-        
         // IMU Hello reply from V6-NG: {128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71}
         uint8_t helloFromIMU[] = {128, 129, 121, 121, 5, 0, 0, 0, 0, 0, 71};
         
@@ -399,7 +396,6 @@ void IMUProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t l
     // Check if this is a Scan Request PGN
     else if (pgn == 202)
     {
-        // Serial.print("\r\n[IMUProcessor] Received Scan Request PGN, sending subnet reply");
         
         // Subnet IMU reply format from PGN.md:
         // Src: 0x79 (121), PGN: 0xCB (203), Len: 7

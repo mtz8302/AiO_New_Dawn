@@ -329,8 +329,7 @@ void setup()
 
 void loop()
 {
-  // Check for OTA update apply
-  // OTAHandler::applyUpdate();  // TODO: Implement OTA handler
+  // OTA updates are handled via web interface
   
   // Process Ethernet events - REQUIRED for QNEthernet!
   Ethernet.loop();
@@ -369,8 +368,7 @@ void loop()
   // Process RTCM data from all sources (network and radio)
   RTCMProcessor::getInstance()->process();
 
-  // Poll CAN messages - DISABLED (Motor driver handles CAN3)
-  // canManager.pollForDevices();
+  // CAN handling is done by motor drivers directly
   
   // Process autosteer FIRST - calculate new motor commands
   AutosteerProcessor::getInstance()->process();

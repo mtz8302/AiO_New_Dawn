@@ -38,7 +38,7 @@ bool SerialManager::initializeSerial()
         return false;
     }
 
-    // No device detection needed - all detection moved to NAVProcessor
+    // Device detection handled by NAVProcessor
 
     isInitialized = true;
     LOG_INFO(EventSource::SYSTEM, "Serial initialization SUCCESS");
@@ -84,43 +84,7 @@ bool SerialManager::initializeSerialPorts()
     return true;
 }
 
-// Removed all GPS and IMU detection methods - all detection moved to NAVProcessor
-
-// Removed GPS helper methods - GPS detection moved to NAVProcessor
-
-// Removed getIMUTypeName - all detection moved to NAVProcessor
-
-void SerialManager::processGPS1()
-{
-    // Only handle bridge mode - GPS data is processed in main.cpp
-    if (isGPS1Bridged())
-    {
-        handleGPS1BridgeMode();
-    }
-    // Don't read GPS data here - it's handled in main.cpp loop
-}
-
-void SerialManager::processGPS2()
-{
-    // Only handle bridge mode - GPS data is processed in main.cpp
-    if (isGPS2Bridged())
-    {
-        handleGPS2BridgeMode();
-    }
-    // Don't read GPS data here - it's handled in main.cpp loop
-}
-
-void SerialManager::processRadio()
-{
-    // Radio processing now handled by RTCMProcessor
-    // This method is kept for compatibility but does nothing
-}
-
-void SerialManager::processRS232()
-{
-    // RS232 is typically output only for NMEA sentences
-    // Add any RS232 input processing here if needed
-}
+// Device detection handled by NAVProcessor
 
 void SerialManager::processESP32()
 {
@@ -153,31 +117,12 @@ void SerialManager::processESP32()
     }
 }
 
-void SerialManager::processIMU()
-{
-    // IMU processing - placeholder for future implementation
-    if (serialIMU->available())
-    {
-        uint8_t imuByte = serialIMU->read();
-        // Process IMU data here
-        (void)imuByte; // Suppress unused variable warning
-    }
-}
-
-void SerialManager::updateBridgeMode()
-{
-    // Bridge mode detection - simplified for now
-#if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
-    // Update bridge mode status based on USB DTR lines
-    // This will be enhanced when USB bridge functionality is needed
-#endif
-}
 
 bool SerialManager::isGPS1Bridged() const
 {
 #if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
     // Return USB1DTR status when available
-    return false; // Placeholder
+    return false;
 #else
     return false;
 #endif
@@ -187,7 +132,7 @@ bool SerialManager::isGPS2Bridged() const
 {
 #if defined(USB_TRIPLE_SERIAL)
     // Return USB2DTR status when available
-    return false; // Placeholder
+    return false;
 #else
     return false;
 #endif
@@ -301,7 +246,7 @@ void SerialManager::printSerialStatus()
     LOG_INFO(EventSource::SYSTEM, "GPS1 Bridged: %s", isGPS1Bridged() ? "YES" : "NO");
     LOG_INFO(EventSource::SYSTEM, "GPS2 Bridged: %s", isGPS2Bridged() ? "YES" : "NO");
 
-    // Device detection moved to NAVProcessor
+    // Device detection handled by NAVProcessor
 
     printSerialConfiguration();
     LOG_INFO(EventSource::SYSTEM, "=============================");
