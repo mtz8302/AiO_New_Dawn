@@ -10,13 +10,6 @@
 #define SerialRS232 Serial7
 #define SerialESP32 Serial2
 
-// Baud rates (self-contained constants)
-const int32_t baudGPS = 460800;
-const int32_t baudRadio = 115200;
-const int32_t baudRS232 = 115200;
-const int32_t baudESP32 = 460800;
-const int32_t baudIMU = 115200;
-
 // GPS and IMU type enumerations removed - all detection moved to NAVProcessor
 
 class SerialManager
@@ -39,8 +32,12 @@ private:
     HardwareSerial *serialIMU;
 
     // Bridge mode tracking
+    bool USB1DTR;
+    bool USB2DTR;
     bool prevUSB1DTR;
     bool prevUSB2DTR;
+    uint32_t GPS1BAUD;  // to track baud changes for bridge mode
+    uint32_t GPS2BAUD;
 
 public:
     // Buffer sizes (matching pcb.h values - using existing global buffers)
@@ -74,6 +71,8 @@ public:
     void processESP32();
 
     // Bridge mode management
+    bool checkGPS1BridgeMode();
+    bool checkGPS2BridgeMode();
     bool isGPS1Bridged() const;
     bool isGPS2Bridged() const;
     void handleGPS1BridgeMode();

@@ -46,8 +46,11 @@ void RTCMProcessor::processRTCM(const uint8_t* data, size_t len, const IPAddress
 
     if (remotePort == 9999 && len >= 5)
     {
-        // Write directly to serial port
-        SerialGPS1.write(data, len);
+        if (!SerialManager::getInstance()->isGPS1Bridged())
+        {
+            // Write directly to serial port
+            SerialGPS1.write(data, len);
+        }
         
         // Pulse GPS LED blue for RTCM packet
         ledManagerFSM.pulseRTCM();

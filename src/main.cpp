@@ -430,19 +430,37 @@ void loop()
     }
   }
 
-  // Process GPS1 data if available - ONE byte per loop
-  if (SerialGPS1.available())
-  {
-    char c = SerialGPS1.read();
-    gnssProcessor.processNMEAChar(c);
-  }
   
-  // Process GPS2 data if available (for F9P dual RELPOSNED) - ONE byte per loop
-  if (SerialGPS2.available())
+
+  if (SerialManager::getInstance()->checkGPS1BridgeMode())
   {
-    uint8_t b = SerialGPS2.read();
-    gnssProcessor.processUBXByte(b);
+    SerialManager::getInstance()->handleGPS1BridgeMode();
   }
+  else
+  {
+    // Process GPS1 data if available - ONE byte per loop
+    if (SerialGPS1.available())
+    {
+      char c = SerialGPS1.read();
+      gnssProcessor.processNMEAChar(c);
+    }
+  }
+
+  if (SerialManager::getInstance()->checkGPS2BridgeMode())
+  {
+    SerialManager::getInstance()->handleGPS2BridgeMode();
+  }
+  else
+  {
+    // Process GPS2 data if available (for F9P dual RELPOSNED) - ONE byte per loop
+    if (SerialGPS2.available())
+    {
+      uint8_t b = SerialGPS2.read();
+      gnssProcessor.processUBXByte(b);
+    }
+  }
+
+
 
   // Loop timing - ultra lightweight, just increment counter
   if (loopTimingEnabled) {
