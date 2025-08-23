@@ -282,14 +282,12 @@ void WheelAngleFusion::updateKalmanFilter(float dt) {
 }
 
 void WheelAngleFusion::updateVariance() {
-    // TODO: Implement adaptive variance calculation
-    // For now, use fixed variance
+    // Using fixed variance - adaptive calculation not yet implemented
     measurementVariance = 1.0f;
 }
 
 void WheelAngleFusion::updateDriftCompensation(float dt) {
-    // TODO: Implement drift compensation
-    // For now, no compensation
+    // Drift compensation not yet implemented
     encoderDrift = 0.0f;
     driftRate = 0.0f;
 }

@@ -11,10 +11,12 @@
 #include "EncoderProcessor.h"
 #include "SimpleOTAHandler.h"
 #include "TelemetryWebSocket.h"
+#include "AutosteerProcessor.h"
+#include "NAVProcessor.h"
+#include "GNSSProcessor.h"
 #include "web_pages/CommonStyles.h"  // Common CSS
 #include "web_pages/SimpleDeviceSettingsNoReplace.h"  // Device settings without replacements
 #include "web_pages/SimpleHomePage.h"  // New simplified home page
-#include "web_pages/SimplePlaceholderPages.h"  // Placeholder pages
 #include "web_pages/SimpleEventLoggerPage.h"  // Event logger page
 #include "web_pages/SimpleNetworkPage.h"  // Simple network settings page
 #include "web_pages/SimpleAnalogWorkSwitchPage.h"  // Analog work switch page
@@ -30,7 +32,7 @@ using namespace qindesign::network;
 
 // External references
 extern EncoderProcessor* encoderProcessor;
-// extern AnalogWorkSwitchHandler* analogWorkSwitchHandler;  // TODO: Find correct handler
+extern GNSSProcessor gnssProcessor;
 
 SimpleWebManager::SimpleWebManager() : 
     isRunning(false),
@@ -215,8 +217,7 @@ void SimpleWebManager::sendEventLoggerPage(EthernetClient& client) {
     String html = FPSTR(SIMPLE_EVENTLOGGER_PAGE);
     html.replace("%CSS_STYLES%", FPSTR(COMMON_CSS));
     
-    // TODO: Get actual EventLogger config when available
-    // For now, use defaults
+    // EventLogger configuration is currently fixed - using default values
     
     // Replace checkbox states
     html.replace("%SERIAL_ENABLED%", "checked");  // Default to enabled
@@ -276,7 +277,12 @@ void SimpleWebManager::handleApiStatus(EthernetClient& client) {
     // Basic system info
     doc["version"] = FIRMWARE_VERSION;
     doc["uptime"] = millis();
-    doc["freeMemory"] = 0; // TODO: Calculate free memory
+    // Free memory calculation for Teensy 4.1
+    extern unsigned long _heap_start;
+    extern unsigned long _heap_end;
+    extern char *__brkval;
+    int freeMemory = (char *)&_heap_end - __brkval;
+    doc["freeMemory"] = freeMemory;
     
     // Network info
     JsonObject network = doc.createNestedObject("network");
@@ -287,8 +293,8 @@ void SimpleWebManager::handleApiStatus(EthernetClient& client) {
     network["connected"] = Ethernet.linkState();
     
     // Module info
-    doc["deviceType"] = "Steer";  // TODO: Get from config when available
-    doc["moduleId"] = 126;  // TODO: Get from config when available
+    doc["deviceType"] = "Steer";  // Fixed for steer module
+    doc["moduleId"] = 126;  // Fixed steer module ID
     
     // Little Dawn status
     doc["littleDawnDetected"] = littleDawnInterface.isDetected();
@@ -306,7 +312,7 @@ void SimpleWebManager::handleEventLoggerConfig(EthernetClient& client, const Str
     if (method == "GET") {
         // Return current configuration
         StaticJsonDocument<256> doc;
-        doc["serialEnabled"] = true;  // TODO: Get from actual config
+        doc["serialEnabled"] = true;  // EventLogger serial is always enabled
         doc["serialLevel"] = 3;  // INFO
         doc["udpEnabled"] = false;
         doc["udpLevel"] = 3;  // INFO
@@ -329,7 +335,7 @@ void SimpleWebManager::handleEventLoggerConfig(EthernetClient& client, const Str
             return;
         }
         
-        // TODO: Actually save these settings when EventLogger config is available
+        // EventLogger settings are currently fixed - changes not persisted
         bool serialEnabled = doc["serialEnabled"] | true;
         bool udpEnabled = doc["udpEnabled"] | false;
         int serialLevel = doc["serialLevel"] | 3;
@@ -440,10 +446,10 @@ void SimpleWebManager::handleDeviceSettings(EthernetClient& client, const String
         ConfigManager* config = ConfigManager::getInstance();
         
         StaticJsonDocument<256> doc;
-        doc["deviceType"] = "Steer";  // TODO: Get from config when available
+        doc["deviceType"] = "Steer";  // Fixed for steer module
         doc["moduleId"] = 126;  // Steer module ID
         doc["udpPassthrough"] = config->getGPSPassThrough();
-        doc["sensorFusion"] = false;  // TODO: Get from actual config when implemented
+        doc["sensorFusion"] = false;  // Sensor fusion not implemented yet
         doc["pwmBrakeMode"] = config->getPWMBrakeMode();
         doc["encoderType"] = config->getEncoderType();
         
@@ -475,7 +481,7 @@ void SimpleWebManager::handleDeviceSettings(EthernetClient& client, const String
         config->setGPSPassThrough(udpPassthrough);
         config->setPWMBrakeMode(pwmBrakeMode);
         config->setEncoderType(encoderType);
-        // TODO: Add setSensorFusion() when implemented in ConfigManager
+        // Sensor fusion configuration not implemented yet
         
         // Save to EEPROM
         config->saveTurnSensorConfig();  // This saves encoder type
@@ -801,7 +807,7 @@ void SimpleWebManager::broadcastTelemetry() {
     ADProcessor* adProc = ADProcessor::getInstance();
     if (adProc) {
         packet.was_angle = adProc->getWASAngle();
-        packet.was_angle_target = 0;  // TODO: Get target angle when available
+        packet.was_angle_target = AutosteerProcessor::getInstance()->getTargetAngle();
         packet.current_draw = adProc->getMotorCurrent() / 1000.0f;  // Convert mA to A
     } else {
         packet.was_angle = 0;
@@ -827,10 +833,22 @@ void SimpleWebManager::broadcastTelemetry() {
         packet.work_analog_percent = 0;
     }
     
-    // TODO: Fill in remaining fields
-    packet.speed_kph = 0;
-    packet.heading = 0;
+    // Get speed and heading from GNSSProcessor
+    const auto& gpsData = gnssProcessor.getData();
+    if (gpsData.isValid) {
+        packet.speed_kph = gpsData.speedKnots * 1.852f;  // Convert knots to km/h
+        packet.heading = gpsData.headingTrue;
+    } else {
+        packet.speed_kph = 0;
+        packet.heading = 0;
+    }
+    
+    // Status flags
     packet.status_flags = 0;
+    if (AutosteerProcessor::getInstance()->isEnabled()) {
+        packet.status_flags |= 0x01;  // Bit 0: Autosteer enabled
+    }
+    
     packet.reserved[0] = 0;
     
     // Broadcast to all connected clients

@@ -38,7 +38,7 @@ bool SerialManager::initializeSerial()
         return false;
     }
 
-    // No device detection needed - all detection moved to NAVProcessor
+    // Device detection handled by NAVProcessor
 
     isInitialized = true;
     LOG_INFO(EventSource::SYSTEM, "Serial initialization SUCCESS");
@@ -59,9 +59,9 @@ bool SerialManager::initializeSerialPorts()
     SerialGPS2.addMemoryForRead(gps2RxBuffer, sizeof(gps2RxBuffer));
     SerialGPS2.addMemoryForWrite(gps2TxBuffer, sizeof(gps2TxBuffer));
 
-    // RTK Radio Serial - use class member buffer
-    SerialRTK.begin(BAUD_RTK);
-    SerialRTK.addMemoryForRead(rtkRxBuffer, sizeof(rtkRxBuffer));
+    // Radio Serial (for RTCM data) - use class member buffer
+    SerialRadio.begin(BAUD_RADIO);
+    SerialRadio.addMemoryForRead(radioRxBuffer, sizeof(radioRxBuffer));
 
     // RS232 Serial - use class member buffer
     SerialRS232.begin(BAUD_RS232);
@@ -76,7 +76,7 @@ bool SerialManager::initializeSerialPorts()
     serialIMU->begin(BAUD_IMU);
 
     LOG_DEBUG(EventSource::SYSTEM, "SerialGPS1/GPS2: %i baud", BAUD_GPS);
-    LOG_DEBUG(EventSource::SYSTEM, "SerialRTK: %i baud", BAUD_RTK);
+    LOG_DEBUG(EventSource::SYSTEM, "SerialRadio: %i baud", BAUD_RADIO);
     LOG_DEBUG(EventSource::SYSTEM, "SerialRS232: %i baud", BAUD_RS232);
     LOG_DEBUG(EventSource::SYSTEM, "SerialESP32: %i baud", BAUD_ESP32);
     LOG_DEBUG(EventSource::SYSTEM, "SerialIMU: %i baud", BAUD_IMU);
@@ -84,57 +84,7 @@ bool SerialManager::initializeSerialPorts()
     return true;
 }
 
-// Removed all GPS and IMU detection methods - all detection moved to NAVProcessor
-
-// Removed GPS helper methods - GPS detection moved to NAVProcessor
-
-// Removed getIMUTypeName - all detection moved to NAVProcessor
-
-void SerialManager::processGPS1()
-{
-    // Only handle bridge mode - GPS data is processed in main.cpp
-    if (isGPS1Bridged())
-    {
-        handleGPS1BridgeMode();
-    }
-    // Don't read GPS data here - it's handled in main.cpp loop
-}
-
-void SerialManager::processGPS2()
-{
-    // Only handle bridge mode - GPS data is processed in main.cpp
-    if (isGPS2Bridged())
-    {
-        handleGPS2BridgeMode();
-    }
-    // Don't read GPS data here - it's handled in main.cpp loop
-}
-
-void SerialManager::processRTK()
-{
-    // RTK/RTCM processing
-    if (SerialRTK.available())
-    {
-        uint8_t rtcmByte = SerialRTK.read();
-
-        // Forward RTCM to GPS1 (unless bridged)
-        if (!isGPS1Bridged())
-        {
-            SerialGPS1.write(rtcmByte);
-        }
-
-        // Optionally forward to GPS2 for special setups
-        // if (!isGPS2Bridged()) {
-        //     SerialGPS2.write(rtcmByte);
-        // }
-    }
-}
-
-void SerialManager::processRS232()
-{
-    // RS232 is typically output only for NMEA sentences
-    // Add any RS232 input processing here if needed
-}
+// Device detection handled by NAVProcessor
 
 void SerialManager::processESP32()
 {
@@ -167,31 +117,12 @@ void SerialManager::processESP32()
     }
 }
 
-void SerialManager::processIMU()
-{
-    // IMU processing - placeholder for future implementation
-    if (serialIMU->available())
-    {
-        uint8_t imuByte = serialIMU->read();
-        // Process IMU data here
-        (void)imuByte; // Suppress unused variable warning
-    }
-}
-
-void SerialManager::updateBridgeMode()
-{
-    // Bridge mode detection - simplified for now
-#if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
-    // Update bridge mode status based on USB DTR lines
-    // This will be enhanced when USB bridge functionality is needed
-#endif
-}
 
 bool SerialManager::isGPS1Bridged() const
 {
 #if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
     // Return USB1DTR status when available
-    return false; // Placeholder
+    return false;
 #else
     return false;
 #endif
@@ -201,7 +132,7 @@ bool SerialManager::isGPS2Bridged() const
 {
 #if defined(USB_TRIPLE_SERIAL)
     // Return USB2DTR status when available
-    return false; // Placeholder
+    return false;
 #else
     return false;
 #endif
@@ -288,9 +219,9 @@ int32_t SerialManager::getGPSBaudRate() const
     return BAUD_GPS;
 }
 
-int32_t SerialManager::getRTKBaudRate() const
+int32_t SerialManager::getRadioBaudRate() const
 {
-    return BAUD_RTK;
+    return BAUD_RADIO;
 }
 
 int32_t SerialManager::getESP32BaudRate() const
@@ -315,7 +246,7 @@ void SerialManager::printSerialStatus()
     LOG_INFO(EventSource::SYSTEM, "GPS1 Bridged: %s", isGPS1Bridged() ? "YES" : "NO");
     LOG_INFO(EventSource::SYSTEM, "GPS2 Bridged: %s", isGPS2Bridged() ? "YES" : "NO");
 
-    // Device detection moved to NAVProcessor
+    // Device detection handled by NAVProcessor
 
     printSerialConfiguration();
     LOG_INFO(EventSource::SYSTEM, "=============================");
@@ -326,7 +257,7 @@ void SerialManager::printSerialConfiguration()
     LOG_INFO(EventSource::SYSTEM, "--- Serial Configuration ---");
     LOG_INFO(EventSource::SYSTEM, "SerialGPS1 (Serial5): %i baud", BAUD_GPS);
     LOG_INFO(EventSource::SYSTEM, "SerialGPS2 (Serial8): %i baud", BAUD_GPS);
-    LOG_INFO(EventSource::SYSTEM, "SerialRTK (Serial3): %i baud", BAUD_RTK);
+    LOG_INFO(EventSource::SYSTEM, "SerialRadio (Serial3): %i baud", BAUD_RADIO);
     LOG_INFO(EventSource::SYSTEM, "SerialRS232 (Serial7): %i baud", BAUD_RS232);
     LOG_INFO(EventSource::SYSTEM, "SerialESP32 (Serial2): %i baud", BAUD_ESP32);
     LOG_INFO(EventSource::SYSTEM, "SerialIMU (Serial4): %i baud", BAUD_IMU);

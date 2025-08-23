@@ -57,7 +57,5 @@ void CANManager::pollForDevices() {
     }
     
     // Skip CAN1 and CAN2 if not in use
-    // Uncomment when needed:
-    // if (can1->read(msg)) { can1Active = true; }
-    // if (can2->read(msg)) { can2Active = true; }
+    // CAN polling not currently used - motor drivers handle CAN directly
 }

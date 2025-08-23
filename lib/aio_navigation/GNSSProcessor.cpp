@@ -1094,8 +1094,7 @@ void GNSSProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t 
 void GNSSProcessor::sendGPSData()
 {
     // PGN 214 (0xD6) - GPS data format is complex (51 bytes)
-    // For now this is just a placeholder for future implementation
-    // when AgIO supports GPS data via PGN
+    // Not yet implemented - AgIO doesn't currently support GPS data via PGN
     
     if (!gpsData.isValid)
         return;

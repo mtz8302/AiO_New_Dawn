@@ -191,8 +191,8 @@ void AutosteerProcessor::initializeFusion() {
         
         // Load fusion config from saved values
         WheelAngleFusion::Config fusionConfig = wheelAngleFusionPtr->getConfig();
-        fusionConfig.wheelbase = 2.5f;  // TODO: Load from config
-        fusionConfig.countsPerDegree = 100.0f;  // TODO: Load from calibration
+        fusionConfig.wheelbase = 2.5f;  // Default wheelbase - not yet configurable
+        fusionConfig.countsPerDegree = 100.0f;  // Default counts - not yet configurable
         wheelAngleFusionPtr->setConfig(fusionConfig);
     } else {
         LOG_ERROR(EventSource::AUTOSTEER, "Failed to initialize Virtual WAS");
@@ -870,19 +870,6 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     lastCommandTime = millis();  // Update watchdog timer
     
     // Debug: Log raw PGN 254 data
-    // Commented out to reduce log noise
-    // static uint32_t lastRawLog = 0;
-    // if (millis() - lastRawLog > 500) { // Every 500ms
-    //     lastRawLog = millis();
-    //     char hexBuf[64];
-    //     int pos = 0;
-    //     for (int i = 0; i < len && i < 16 && pos < 60; i++) {
-    //         pos += snprintf(hexBuf + pos, sizeof(hexBuf) - pos, "%02X ", data[i]);
-    //     }
-    //     LOG_DEBUG(EventSource::AUTOSTEER, "PGN254 raw (%d bytes): %s", len, hexBuf);
-    // }
-    
-    
     // Data format (from PGNProcessor we get data starting at speed):
     // [0-1] = Speed (uint16, 0.1 km/h resolution)
     // [2] = Status byte
@@ -1283,7 +1270,7 @@ bool AutosteerProcessor::shouldSteerBeActive() const {
     // because AgOpenGPS may not set bit 6 until it receives confirmation from us
     bool active = guidanceActive &&           // Guidance line active (bit 0 from PGN 254)
                   (steerState == 0) &&        // Our button/OSB state (0=active)
-                  (vehicleSpeed > 0.1f);      // Moving (TODO: use MinSpeed from config)
+                  (vehicleSpeed > (configManager.getMinSpeed() / 10.0f));  // Moving (MinSpeed is in 0.1 km/h units)
     
     // Debug logging for test mode
     static uint32_t lastDebugTime = 0;
