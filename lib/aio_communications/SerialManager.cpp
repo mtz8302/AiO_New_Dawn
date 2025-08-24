@@ -125,15 +125,15 @@ bool SerialManager::checkGPS1BridgeMode()
     if (USB1DTR != prevUSB1DTR) {
       Serial.printf("**SerialUSB1 %s", (USB1DTR ? "bridged with GPS1" : "disconnected"));
       if (USB1DTR) {
-        if (SerialUSB1.baud() == GPS1BAUD) Serial.printf(", baud set at %i (default)\r\n", BAUD_GPS);
+        if (SerialUSB1.baud() == GPS1BAUD) Serial.printf(", baud set at %i (default)", BAUD_GPS);
       } else {
         if (GPS1BAUD != BAUD_GPS){
           SerialGPS1.begin(BAUD_GPS);
           GPS1BAUD = BAUD_GPS;
           Serial.printf(", baud reverted back to default %i", GPS1BAUD);
         }
-        Serial.println();
       }
+      Serial.println();
       prevUSB1DTR = USB1DTR;
     }
 
@@ -156,15 +156,15 @@ bool SerialManager::checkGPS2BridgeMode()
     if (USB2DTR != prevUSB2DTR) {
       Serial.printf("**SerialUSB2 %s", (USB2DTR ? "bridged with GPS2" : "disconnected"));
       if (USB2DTR) {
-        if (SerialUSB2.baud() == GPS2BAUD) Serial.printf(", baud set at %i (default)\r\n", BAUD_GPS);
+        if (SerialUSB2.baud() == GPS2BAUD) Serial.printf(", baud set at %i (default)", BAUD_GPS);
       } else {
         if (GPS2BAUD != BAUD_GPS){
           SerialGPS2.begin(BAUD_GPS);
           GPS2BAUD = BAUD_GPS;
           Serial.printf(", baud reverted back to default %i", GPS1BAUD);
         }
-        Serial.println();
       }
+      Serial.println();
       prevUSB2DTR = USB2DTR;
     }
 
