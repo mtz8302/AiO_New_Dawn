@@ -17,20 +17,5 @@
 // External variables that SerialManager needs access to
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 extern UBX_Parser ubxParser;
-extern bool nmeaDebug;
-extern bool nmeaDebug2;
-extern uint32_t GPS1BAUD;
-extern uint32_t GPS2BAUD;
-extern bool USB1DTR;
-extern bool USB2DTR;
-
-// USB Serial declarations for bridge mode
-#if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
-extern usb_serial_class SerialUSB1;
-#endif
-
-#if defined(USB_TRIPLE_SERIAL)
-extern usb_serial_class SerialUSB2;
-#endif
 
 #endif // SERIALGLOBALS_H_

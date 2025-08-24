@@ -4,6 +4,12 @@
         "limits": "cpp",
         "array": "cpp",
         "string": "cpp",
-        "string_view": "cpp"
+        "string_view": "cpp",
+        "*.tpp": "cpp",
+        "deque": "cpp",
+        "unordered_map": "cpp",
+        "vector": "cpp",
+        "initializer_list": "cpp",
+        "regex": "cpp"
     }
 }

@@ -117,12 +117,74 @@ void SerialManager::processESP32()
     }
 }
 
+bool SerialManager::checkGPS1BridgeMode()
+{
+  #if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
+    //static bool prevUSB1DTR;
+    USB1DTR = SerialUSB1.dtr(); 
+    if (USB1DTR != prevUSB1DTR) {
+      Serial.printf("**SerialUSB1 %s", (USB1DTR ? "bridged with GPS1" : "disconnected"));
+      if (USB1DTR) {
+        if (SerialUSB1.baud() == GPS1BAUD) Serial.printf(", baud set at %i (default)", BAUD_GPS);
+      } else {
+        if (GPS1BAUD != BAUD_GPS){
+          SerialGPS1.begin(BAUD_GPS);
+          GPS1BAUD = BAUD_GPS;
+          Serial.printf(", baud reverted back to default %i", GPS1BAUD);
+        }
+      }
+      Serial.println();
+      prevUSB1DTR = USB1DTR;
+    }
+
+    if (USB1DTR) {
+      if (SerialUSB1.baud() != GPS1BAUD) {
+        GPS1BAUD = SerialUSB1.baud();
+        SerialGPS1.begin(GPS1BAUD);
+        Serial.printf("**GPS1 baud changed to %i %s\r\n", GPS1BAUD, (GPS1BAUD == BAUD_GPS) ? "(default)" : "");
+      }
+    }
+  #endif
+  return USB1DTR;
+}
+
+bool SerialManager::checkGPS2BridgeMode()
+{
+  #if defined(USB_TRIPLE_SERIAL)
+    static bool prevUSB2DTR;
+    USB2DTR = SerialUSB2.dtr(); 
+    if (USB2DTR != prevUSB2DTR) {
+      Serial.printf("**SerialUSB2 %s", (USB2DTR ? "bridged with GPS2" : "disconnected"));
+      if (USB2DTR) {
+        if (SerialUSB2.baud() == GPS2BAUD) Serial.printf(", baud set at %i (default)", BAUD_GPS);
+      } else {
+        if (GPS2BAUD != BAUD_GPS){
+          SerialGPS2.begin(BAUD_GPS);
+          GPS2BAUD = BAUD_GPS;
+          Serial.printf(", baud reverted back to default %i", GPS1BAUD);
+        }
+      }
+      Serial.println();
+      prevUSB2DTR = USB2DTR;
+    }
+
+    if (USB2DTR) {
+      if (SerialUSB2.baud() != GPS2BAUD) {
+        SerialGPS2.begin(SerialUSB2.baud());
+        GPS2BAUD = SerialUSB2.baud();
+        Serial.printf("**GPS2 baud changed to %i %s\r\n", GPS2BAUD, (GPS2BAUD == BAUD_GPS) ? "(default)" : "");
+      }
+    }
+  #endif
+  return USB2DTR;
+}
 
 bool SerialManager::isGPS1Bridged() const
 {
 #if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
     // Return USB1DTR status when available
-    return false;
+    //USB1DTR = SerialUSB1.dtr();   // updated in checkGPS1BridgeMode()
+    return USB1DTR;
 #else
     return false;
 #endif
@@ -132,7 +194,8 @@ bool SerialManager::isGPS2Bridged() const
 {
 #if defined(USB_TRIPLE_SERIAL)
     // Return USB2DTR status when available
-    return false;
+    //USB2DTR = SerialUSB2.dtr();   // updated in checkGPS2BridgeMode()
+    return USB2DTR;
 #else
     return false;
 #endif
