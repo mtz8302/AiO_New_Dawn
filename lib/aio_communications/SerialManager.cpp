@@ -5,7 +5,7 @@
 SerialManager *SerialManager::instance = nullptr;
 
 SerialManager::SerialManager()
-    : isInitialized(false), serialIMU(&Serial4), prevUSB1DTR(false), prevUSB2DTR(false)
+    : isInitialized(false), serialIMU(&Serial4)
 {
     instance = this;
 }
@@ -120,12 +120,14 @@ void SerialManager::processESP32()
 bool SerialManager::checkGPS1BridgeMode()
 {
   #if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
-    //static bool prevUSB1DTR;
+    static bool prevUSB1DTR;
+    static uint32_t GPS1BAUD = BAUD_GPS;  // to track baud changes for bridge mode
     USB1DTR = SerialUSB1.dtr(); 
     if (USB1DTR != prevUSB1DTR) {
       Serial.printf("**SerialUSB1 %s", (USB1DTR ? "bridged with GPS1" : "disconnected"));
       if (USB1DTR) {
         if (SerialUSB1.baud() == GPS1BAUD) Serial.printf(", baud set at %i (default)", BAUD_GPS);
+        SerialUSB1.println("**Connected to GPS1 \"Right\"");
       } else {
         if (GPS1BAUD != BAUD_GPS){
           SerialGPS1.begin(BAUD_GPS);
@@ -144,6 +146,14 @@ bool SerialManager::checkGPS1BridgeMode()
         Serial.printf("**GPS1 baud changed to %i %s\r\n", GPS1BAUD, (GPS1BAUD == BAUD_GPS) ? "(default)" : "");
       }
     }
+
+    uint32_t now = millis();
+    static uint32_t heatbeat = 0;
+    if (now - heatbeat > 5000) {
+      heatbeat = now;
+      SerialUSB1.println(F("$PAIOC,PORT,GPS1_Right*00"));
+    }
+
   #endif
   return USB1DTR;
 }
@@ -152,16 +162,18 @@ bool SerialManager::checkGPS2BridgeMode()
 {
   #if defined(USB_TRIPLE_SERIAL)
     static bool prevUSB2DTR;
+    static uint32_t GPS2BAUD = BAUD_GPS;
     USB2DTR = SerialUSB2.dtr(); 
     if (USB2DTR != prevUSB2DTR) {
       Serial.printf("**SerialUSB2 %s", (USB2DTR ? "bridged with GPS2" : "disconnected"));
       if (USB2DTR) {
         if (SerialUSB2.baud() == GPS2BAUD) Serial.printf(", baud set at %i (default)", BAUD_GPS);
+        SerialUSB2.println("**Connected to GPS2 \"Left\"");
       } else {
         if (GPS2BAUD != BAUD_GPS){
           SerialGPS2.begin(BAUD_GPS);
           GPS2BAUD = BAUD_GPS;
-          Serial.printf(", baud reverted back to default %i", GPS1BAUD);
+          Serial.printf(", baud reverted back to default %i", GPS2BAUD);
         }
       }
       Serial.println();
@@ -175,15 +187,21 @@ bool SerialManager::checkGPS2BridgeMode()
         Serial.printf("**GPS2 baud changed to %i %s\r\n", GPS2BAUD, (GPS2BAUD == BAUD_GPS) ? "(default)" : "");
       }
     }
-  #endif
-  return USB2DTR;
+
+    uint32_t now = millis();
+    static uint32_t heatbeat = 0;
+    if (now - heatbeat > 5000) {
+      heatbeat = now;
+      SerialUSB2.println(F("$PAIOC,PORT,GPS2_Left*00"));
+    }
+
+    #endif
+    return USB2DTR;
 }
 
 bool SerialManager::isGPS1Bridged() const
 {
 #if defined(USB_DUAL_SERIAL) || defined(USB_TRIPLE_SERIAL)
-    // Return USB1DTR status when available
-    //USB1DTR = SerialUSB1.dtr();   // updated in checkGPS1BridgeMode()
     return USB1DTR;
 #else
     return false;
@@ -193,8 +211,6 @@ bool SerialManager::isGPS1Bridged() const
 bool SerialManager::isGPS2Bridged() const
 {
 #if defined(USB_TRIPLE_SERIAL)
-    // Return USB2DTR status when available
-    //USB2DTR = SerialUSB2.dtr();   // updated in checkGPS2BridgeMode()
     return USB2DTR;
 #else
     return false;

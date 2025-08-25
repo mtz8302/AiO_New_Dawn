@@ -34,10 +34,6 @@ private:
     // Bridge mode tracking
     bool USB1DTR;
     bool USB2DTR;
-    bool prevUSB1DTR;
-    bool prevUSB2DTR;
-    uint32_t GPS1BAUD;  // to track baud changes for bridge mode
-    uint32_t GPS2BAUD;
 
 public:
     // Buffer sizes (matching pcb.h values - using existing global buffers)

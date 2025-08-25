@@ -430,9 +430,14 @@ void loop()
     }
   }
 
-  
+  static uint32_t lastBridgeModeCheck;
+  if (millis() - lastBridgeModeCheck > 100) { // Limit check to every 100ms
+    lastBridgeModeCheck = millis();
+    SerialManager::getInstance()->checkGPS1BridgeMode();
+    SerialManager::getInstance()->checkGPS2BridgeMode();
+  }
 
-  if (SerialManager::getInstance()->checkGPS1BridgeMode())
+  if (SerialManager::getInstance()->isGPS1Bridged())
   {
     SerialManager::getInstance()->handleGPS1BridgeMode();
   }
@@ -446,7 +451,7 @@ void loop()
     }
   }
 
-  if (SerialManager::getInstance()->checkGPS2BridgeMode())
+  if (SerialManager::getInstance()->isGPS2Bridged())
   {
     SerialManager::getInstance()->handleGPS2BridgeMode();
   }
