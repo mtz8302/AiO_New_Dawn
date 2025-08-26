@@ -696,6 +696,9 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     } else if (steerConfig.SteerSwitch) {
         steerType = "Switch";
     }
+
+    // Set WAS Invert in ADProcessor
+    adProcessor.setWASInvert(bool(steerConfig.InvertWAS));
     
     // Log all settings at INFO level in a single message so users see everything
     LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Pressure=%s Current=%s (max=%d) MotorType=%s", 

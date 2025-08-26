@@ -9,6 +9,7 @@ ADProcessor* ADProcessor::instance = nullptr;
 ADProcessor::ADProcessor() : 
     wasRaw(0),
     wasOffset(0),
+    wasInvert(false),
     wasCountsPerDegree(1.0f),
     kickoutAnalogRaw(0),
     pressureReading(0.0f),
@@ -295,6 +296,11 @@ float ADProcessor::getWASAngle() const
     // Use raw ADC value directly (no 3.23x scaling here)
     // The counts per degree from AgOpenGPS already accounts for the scaling
     float centeredWAS = wasRaw - 2048.0f - wasOffset;
+
+    // Apply inversion if configured
+    if (wasInvert) {
+        centeredWAS = -centeredWAS;
+    }
     
     // Calculate angle
     if (wasCountsPerDegree != 0) {

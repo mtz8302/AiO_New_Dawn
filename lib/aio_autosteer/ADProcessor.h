@@ -54,11 +54,13 @@ public:
     
     // Configuration
     void setWASOffset(int16_t offset) { wasOffset = offset; }
+    void setWASInvert(bool invert) { wasInvert = invert; }
     void setWASCountsPerDegree(float counts) { wasCountsPerDegree = counts; }
     void setDebounceTime(uint16_t ms) { debounceDelay = ms; }
     
     // Get configuration
     int16_t getWASOffset() const { return wasOffset; }
+    bool getWASInvert() const { return wasInvert; }
     float getWASCountsPerDegree() const { return wasCountsPerDegree; }
     
     // Analog work switch methods
@@ -103,6 +105,7 @@ private:
     // WAS data
     int16_t wasRaw;
     int16_t wasOffset;
+    bool wasInvert;
     float wasCountsPerDegree;
     
     // Kickout sensor data
