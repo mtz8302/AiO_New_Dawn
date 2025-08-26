@@ -530,6 +530,45 @@ bool GNSSProcessor::parseKSXT()
     if (fieldCount < 10)
         return false;
 
+    // Field 1: Timestamp (YYYYMMDDHHMMSS.SS format)
+    if (strlen(fields[1]) >= 14)
+    {
+        // Extract just HHMMSS.SS portion (skip YYYYMMDD)
+        const char* timeStr = fields[1] + 8; // Skip first 8 chars (YYYYMMDD)
+        float time = parseFloat(timeStr);
+        gpsData.fixTime = time;
+    }
+
+    // Field 2: Longitude (decimal degrees)
+    if (strlen(fields[2]) > 0)
+    {
+        gpsData.longitude = atof(fields[2]);
+    }
+
+    // Field 3: Latitude (decimal degrees)
+    if (strlen(fields[3]) > 0)
+    {
+        gpsData.latitude = atof(fields[3]);
+    }
+
+    // Field 4: Altitude
+    if (strlen(fields[4]) > 0)
+    {
+        gpsData.altitude = parseFloat(fields[4]);
+    }
+
+    // Field 5: Heading
+    if (strlen(fields[5]) > 0)
+    {
+        gpsData.dualHeading = parseFloat(fields[5]);
+    }
+
+    // Field 6: Pitch (used as roll in AOG)
+    if (strlen(fields[6]) > 0)
+    {
+        gpsData.dualRoll = parseFloat(fields[6]);
+    }
+
     // Field 10: Position quality (convert to GGA scheme)
     if (strlen(fields[10]) > 0)
     {
@@ -542,8 +581,27 @@ bool GNSSProcessor::parseKSXT()
         gpsData.fixQuality = ksxtQual;
         gpsData.hasPosition = (ksxtQual > 0);
         gpsData.isValid = gpsData.hasPosition;
+        gpsData.headingQuality = ksxtQual; // Use same quality for heading
     }
 
+    // Field 8: Speed in km/h - convert to knots
+    if (strlen(fields[8]) > 0)
+    {
+        float speedKmh = parseFloat(fields[8]);
+        gpsData.speedKnots = speedKmh * 0.539957f; // Convert km/h to knots
+    }
+
+    // Field 13: Number of satellites
+    if (fieldCount > 13 && strlen(fields[13]) > 0)
+    {
+        gpsData.numSatellites = atoi(fields[13]);
+    }
+
+    // Note: HDOP not directly available in KSXT, using default
+    gpsData.hdop = 0.0f;
+
+    gpsData.hasDualHeading = true;
+    gpsData.hasPosition = true;
     gpsData.messageTypeMask |= (1 << 6);  // Set KSXT bit
     
     if (enableDebug)

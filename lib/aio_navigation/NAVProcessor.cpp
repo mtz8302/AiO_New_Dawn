@@ -209,7 +209,7 @@ bool NAVProcessor::formatPAOGIMessage() {
     convertToNMEACoordinates(gnssData.longitude, true, lonNMEA, lonDir);
     
     // Get IMU data if available (for pitch and yaw rate)
-    int16_t pitch = -1;
+    int16_t pitch = 0;
     float yawRate = 0.0;
     
     // Prefer INS pitch if available (from UM981)
@@ -222,9 +222,8 @@ bool NAVProcessor::formatPAOGIMessage() {
         yawRate = imuData.yawRate;
     }
     
-    // Use dual GPS heading and roll
-    float dualHeading = gnssData.dualHeading;
-    int16_t roll = (int16_t)round(gnssData.dualRoll);
+    // Use dual GPS roll (from KSXT pitch field)
+    float roll = gnssData.dualRoll;
     
     // Format time - use UTC from GPS week/seconds if available
     float timeFloat;
@@ -239,21 +238,20 @@ bool NAVProcessor::formatPAOGIMessage() {
     // Build PAOGI message without checksum
     // NMEA format: Lat DDMM.MMMMM (4 digits before decimal), Lon DDDMM.MMMMM (5 digits before decimal)
     int len = snprintf(messageBuffer, BUFFER_SIZE - 4,
-        "$PAOGI,%.1f,%010.6f,%c,%011.6f,%c,%d,%d,%.1f,%.3f,%.1f,%.3f,%.1f,%d,%d,%.2f",
-        timeFloat,                          // Time
-        latNMEA, latDir,                   // Latitude
-        lonNMEA, lonDir,                   // Longitude
-        gnssData.fixQuality,               // Fix quality
-        gnssData.numSatellites,            // Satellites
-        gnssData.hdop,                     // HDOP
-        gnssData.altitude,                 // Altitude
-        (float)gnssData.ageDGPS,           // Age DGPS
-        gnssData.speedKnots,               // Speed
-        // Empty field for heading (double comma)
-        dualHeading,                       // Dual heading in degrees
-        roll,                              // Dual roll
-        pitch,                             // Pitch (from IMU)
-        yawRate                            // Yaw rate (from IMU)
+        "$PAOGI,%.1f,%010.6f,%c,%011.6f,%c,%d,%d,%.1f,%.3f,%.1f,%.3f,%.1f,%.2f,%d,%.2f",
+        timeFloat,                          // Field 1: Time
+        latNMEA, latDir,                   // Field 2-3: Latitude
+        lonNMEA, lonDir,                   // Field 4-5: Longitude
+        gnssData.fixQuality,               // Field 6: Fix quality
+        gnssData.numSatellites,            // Field 7: Satellites
+        gnssData.hdop,                     // Field 8: HDOP
+        gnssData.altitude,                 // Field 9: Altitude
+        (float)gnssData.ageDGPS,           // Field 10: Age DGPS
+        gnssData.speedKnots,               // Field 11: Speed
+        gnssData.dualHeading,              // Field 12: IMU Heading (from KSXT field 5)
+        roll,                              // Field 13: IMU Roll (from KSXT pitch field 6 used as roll)
+        pitch,                             // Field 14: IMU Pitch (from actual IMU if available)
+        yawRate                            // Field 15: IMU Yaw rate
     );
     
     // Calculate and append checksum
