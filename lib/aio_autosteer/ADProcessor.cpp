@@ -300,12 +300,18 @@ float ADProcessor::getWASAngle() const
     if (wasCountsPerDegree != 0) {
         float angle = centeredWAS / wasCountsPerDegree;
         
+        // Apply inversion from ConfigManager (runtime changeable)
+        extern ConfigManager configManager;
+        if (configManager.getInvertWAS()) {
+            angle = -angle;
+        }
+        
         // Debug logging
         static uint32_t lastWASDebug = 0;
         if (millis() - lastWASDebug > 2000) {
             lastWASDebug = millis();
-            LOG_DEBUG(EventSource::AUTOSTEER, "WAS: raw=%d, centered=%.0f, angle=%.2f°, offset=%d, CPD=%.1f", 
-                      wasRaw, centeredWAS, angle, wasOffset, wasCountsPerDegree);
+            LOG_DEBUG(EventSource::AUTOSTEER, "WAS: raw=%d, centered=%.0f, angle=%.2f°, offset=%d, CPD=%.1f, inverted=%d", 
+                      wasRaw, centeredWAS, angle, wasOffset, wasCountsPerDegree, configManager.getInvertWAS());
         }
         
         return angle;
