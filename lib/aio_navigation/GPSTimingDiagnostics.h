@@ -66,6 +66,12 @@ private:
     uint32_t sumParseTime = 0;
     uint16_t parseCount = 0;
     
+    // Message counters
+    uint32_t ksxtProcessed = 0;
+    uint32_t ggaProcessed = 0;
+    uint32_t rmcProcessed = 0;
+    uint32_t paogiSent = 0;
+    
     // Buffer stats
     uint16_t maxBufferDepth = 0;
     uint16_t bufferOverflows = 0;
@@ -86,10 +92,13 @@ public:
         
         if (strcmp(sentenceType, "KSXT") == 0) {
             ksxtStats.update(sentenceStartTime);
+            ksxtProcessed++;
         } else if (strcmp(sentenceType, "GGA") == 0) {
             ggaStats.update(sentenceStartTime);
+            ggaProcessed++;
         } else if (strcmp(sentenceType, "RMC") == 0) {
             rmcStats.update(sentenceStartTime);
+            rmcProcessed++;
         }
         
         sentenceCounter++;
@@ -112,6 +121,7 @@ public:
     void recordPAOGITransmit() {
         uint32_t currentTime = micros();
         paogiStats.update(currentTime);
+        paogiSent++;
     }
     
     // Record buffer statistics
@@ -136,36 +146,39 @@ private:
         // KSXT timing report
         if (ksxtStats.count > 0) {
             LOG_ERROR(EventSource::GNSS, 
-                "GPS Timing: KSXT avg=%lums min=%lums max=%lums late=%u/%u (%.1f%%)",
+                "GPS Timing: KSXT avg=%lums min=%lums max=%lums late=%u/%u (%.1f%%) processed=%lu",
                 ksxtStats.getAverage() / 1000,
                 ksxtStats.minDelta / 1000,
                 ksxtStats.maxDelta / 1000,
                 ksxtStats.lateCount,
                 ksxtStats.count,
-                ksxtStats.getLatePercentage()
+                ksxtStats.getLatePercentage(),
+                ksxtProcessed
             );
         }
         
         // GGA timing report
         if (ggaStats.count > 0) {
             LOG_ERROR(EventSource::GNSS,
-                "GPS Timing: GGA avg=%lums min=%lums max=%lums late=%u/%u (%.1f%%)",
+                "GPS Timing: GGA avg=%lums min=%lums max=%lums late=%u/%u (%.1f%%) processed=%lu",
                 ggaStats.getAverage() / 1000,
                 ggaStats.minDelta / 1000,
                 ggaStats.maxDelta / 1000,
                 ggaStats.lateCount,
                 ggaStats.count,
-                ggaStats.getLatePercentage()
+                ggaStats.getLatePercentage(),
+                ggaProcessed
             );
         }
         
         // PAOGI transmission timing
         if (paogiStats.count > 0) {
             LOG_ERROR(EventSource::GNSS,
-                "GPS Timing: PAOGI TX avg=%lums min=%lums max=%lums",
+                "GPS Timing: PAOGI TX avg=%lums min=%lums max=%lums sent=%lu",
                 paogiStats.getAverage() / 1000,
                 paogiStats.minDelta / 1000,
-                paogiStats.maxDelta / 1000
+                paogiStats.maxDelta / 1000,
+                paogiSent
             );
         }
         
@@ -195,6 +208,11 @@ private:
         maxParseTime = 0;
         sumParseTime = 0;
         parseCount = 0;
+        
+        ksxtProcessed = 0;
+        ggaProcessed = 0;
+        rmcProcessed = 0;
+        paogiSent = 0;
         
         maxBufferDepth = 0;
         bufferOverflows = 0;
