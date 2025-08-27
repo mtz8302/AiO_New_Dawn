@@ -7,6 +7,7 @@
 #include "Arduino.h"
 #include <stdint.h>
 #include "PGNProcessor.h"
+#include "GPSTimingDiagnostics.h"
 
 // PGN Constants for GPS module
 constexpr uint8_t GPS_SOURCE_ID = 0x78;     // 120 decimal - GPS source address (from PGN.md GPS Reply)
@@ -107,6 +108,10 @@ private:
 
     // Field parsing
     char fields[35][24]; // Max 35 fields, 24 chars each (increased for INSPVAXA)
+    
+#ifdef GPS_TIMING_DEBUG
+    uint32_t sentenceStartMicros = 0;  // Timestamp when sentence starts
+#endif
     uint8_t fieldCount;
 
     // Data storage

@@ -108,6 +108,10 @@ bool GNSSProcessor::processNMEAChar(char c)
             calculatedChecksum = 0;
             isUnicoreMessage = (c == '#');
             parseBuffer[bufferIndex++] = c;
+#ifdef GPS_TIMING_DEBUG
+            // We'll identify sentence type after we have more data
+            sentenceStartMicros = micros();
+#endif
         }
         break;
 
@@ -261,6 +265,9 @@ bool GNSSProcessor::validateChecksum()
 
 bool GNSSProcessor::processMessage()
 {
+#ifdef GPS_TIMING_DEBUG
+    gpsTimingDiag.recordParseStart();
+#endif
     
     parseFields();
 
@@ -282,6 +289,9 @@ bool GNSSProcessor::processMessage()
 
     if (strstr(msgType, "GGA"))
     {
+#ifdef GPS_TIMING_DEBUG
+        gpsTimingDiag.recordSentenceStart("GGA");
+#endif
         processed = parseGGA();
     }
     else if (strstr(msgType, "GNS"))
@@ -298,6 +308,9 @@ bool GNSSProcessor::processMessage()
     }
     else if (strstr(msgType, "KSXT"))
     {
+#ifdef GPS_TIMING_DEBUG
+        gpsTimingDiag.recordSentenceStart("KSXT");
+#endif
         processed = parseKSXT();
     }
     else if (strstr(msgType, "INSPVAA"))
@@ -329,6 +342,11 @@ bool GNSSProcessor::processMessage()
         // Valid GPS message received
         gpsData.lastUpdateTime = millis();
     }
+
+#ifdef GPS_TIMING_DEBUG
+    gpsTimingDiag.recordParseEnd();
+    gpsTimingDiag.reportIfNeeded();
+#endif
 
     resetParser();
     return processed;

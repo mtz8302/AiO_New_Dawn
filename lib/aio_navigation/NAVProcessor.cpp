@@ -4,6 +4,7 @@
 #include <cstring>
 #include "EventLogger.h"
 #include "ConfigManager.h"
+#include "GPSTimingDiagnostics.h"
 
 // External processor instances from main.cpp
 extern GNSSProcessor gnssProcessor;
@@ -270,6 +271,12 @@ void NAVProcessor::sendMessage(const char* message) {
     // Send via UDP to AgIO
     sendUDPbytes((uint8_t*)buffer, strlen(buffer));
     
+#ifdef GPS_TIMING_DEBUG
+    // Record PAOGI transmission timing
+    if (strstr(message, "$PAOGI") != nullptr) {
+        gpsTimingDiag.recordPAOGITransmit();
+    }
+#endif
 }
 
 void NAVProcessor::process() {

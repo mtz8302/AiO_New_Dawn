@@ -8,6 +8,7 @@
 #include "SerialManager.h"
 #include "SerialGlobals.h"
 #include "GNSSProcessor.h"
+#include "GPSTimingDiagnostics.h"
 #include "IMUProcessor.h" // Add this include
 #include "NAVProcessor.h"
 #include "I2CManager.h"
@@ -433,6 +434,11 @@ void loop()
   // Process GPS1 data if available - ONE byte per loop
   if (SerialGPS1.available())
   {
+#ifdef GPS_TIMING_DEBUG
+    // Record buffer depth before reading
+    int available = SerialGPS1.available();
+    gpsTimingDiag.recordBufferDepth(available);
+#endif
     char c = SerialGPS1.read();
     gnssProcessor.processNMEAChar(c);
   }
