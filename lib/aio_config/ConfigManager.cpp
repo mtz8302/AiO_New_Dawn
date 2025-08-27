@@ -233,6 +233,14 @@ void ConfigManager::saveMachineConfig()
     EEPROM.put(addr, raiseTime);
     addr += sizeof(raiseTime);
     EEPROM.put(addr, lowerTime);
+    addr += sizeof(lowerTime);
+    EEPROM.put(addr, user1);
+    addr += sizeof(user1);
+    EEPROM.put(addr, user2);
+    addr += sizeof(user2);
+    EEPROM.put(addr, user3);
+    addr += sizeof(user3);
+    EEPROM.put(addr, user4);
 }
 
 void ConfigManager::loadMachineConfig()
@@ -249,6 +257,14 @@ void ConfigManager::loadMachineConfig()
     EEPROM.get(addr, raiseTime);
     addr += sizeof(raiseTime);
     EEPROM.get(addr, lowerTime);
+    addr += sizeof(lowerTime);
+    EEPROM.get(addr, user1);
+    addr += sizeof(user1);
+    EEPROM.get(addr, user2);
+    addr += sizeof(user2);
+    EEPROM.get(addr, user3);
+    addr += sizeof(user3);
+    EEPROM.get(addr, user4);
 
     hydraulicLift = (machineConfigByte & 0x01) != 0;
     tramlineControl = (machineConfigByte & 0x02) != 0;
@@ -415,6 +431,10 @@ void ConfigManager::resetToDefaults()
     raiseTime = 2;
     lowerTime = 4;
     isPinActiveHigh = false;
+    user1 = 0;
+    user2 = 0;
+    user3 = 0;
+    user4 = 0;
 
     // KWAS config defaults
     kwasEnabled = false;

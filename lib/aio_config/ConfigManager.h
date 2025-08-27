@@ -5,6 +5,18 @@
 #include <EEPROM.h>
 #include "EEPROMLayout.h"
 
+// ConfigManager Pattern for PGN Settings Access
+// ============================================
+// All runtime access to PGN settings should go through ConfigManager methods.
+// Direct access to PGN data structures (e.g., steerSettings, machineConfig)
+// should only be used for:
+// 1. Parsing incoming PGN data
+// 2. Initial loading from ConfigManager to structs
+// 3. Logging what was received
+//
+// This ensures settings can be changed at runtime and take effect immediately.
+// The structs are maintained for backward compatibility and PGN parsing.
+
 class ConfigManager
 {
 private:
@@ -51,6 +63,10 @@ private:
     uint8_t raiseTime;
     uint8_t lowerTime;
     bool isPinActiveHigh;
+    uint8_t user1;
+    uint8_t user2;
+    uint8_t user3;
+    uint8_t user4;
 
     // KWAS configuration (EEPROM 600-699)
     bool kwasEnabled;
@@ -180,6 +196,14 @@ public:
     void setLowerTime(uint8_t value) { lowerTime = value; }
     bool getIsPinActiveHigh() const { return isPinActiveHigh; }
     void setIsPinActiveHigh(bool value) { isPinActiveHigh = value; }
+    uint8_t getUser1() const { return user1; }
+    void setUser1(uint8_t value) { user1 = value; }
+    uint8_t getUser2() const { return user2; }
+    void setUser2(uint8_t value) { user2 = value; }
+    uint8_t getUser3() const { return user3; }
+    void setUser3(uint8_t value) { user3 = value; }
+    uint8_t getUser4() const { return user4; }
+    void setUser4(uint8_t value) { user4 = value; }
 
     // KWAS configuration methods
     bool getKWASEnabled() const { return kwasEnabled; }
