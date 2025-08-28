@@ -241,6 +241,7 @@ void ConfigManager::saveMachineConfig()
     EEPROM.put(addr, user3);
     addr += sizeof(user3);
     EEPROM.put(addr, user4);
+    addr += sizeof(user4);
 }
 
 void ConfigManager::loadMachineConfig()

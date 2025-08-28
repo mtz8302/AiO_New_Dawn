@@ -2,7 +2,7 @@
 #define EEPROM_LAYOUT_H
 
 // EEPROM Version - increment this when EEPROM layout changes
-#define EEPROM_VERSION 108
+#define EEPROM_VERSION 109
 
 // EEPROM Address Map
 #define EE_VERSION_ADDR      1      // Version number (2 bytes)
