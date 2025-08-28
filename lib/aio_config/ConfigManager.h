@@ -104,8 +104,19 @@ private:
     uint8_t workSwitchHysteresis;   // 5-25% stored as 5-25
     bool invertWorkSwitch;
     
+    // Network configuration
+    uint8_t ipAddress[4];
+    uint8_t subnet[4];
+    uint8_t gateway[4];
+    uint8_t dns[4];
+    uint8_t destIP[4];
+    uint16_t destPort;
+    
     // Version control
     uint16_t eeVersion;
+    
+    // Initialization tracking
+    bool initialized;
 
 public:
     ConfigManager();
@@ -113,7 +124,7 @@ public:
 
     // Singleton access
     static ConfigManager *getInstance();
-    static void init();
+    void init();
 
     // Steer configuration methods
     bool getInvertWAS() const { return invertWAS; }
@@ -263,6 +274,20 @@ public:
     bool getInvertWorkSwitch() const { return invertWorkSwitch; }
     void setInvertWorkSwitch(bool value) { invertWorkSwitch = value; }
 
+    // Network configuration methods
+    void getIPAddress(uint8_t* ip) const { memcpy(ip, ipAddress, 4); }
+    void setIPAddress(const uint8_t* ip) { memcpy(ipAddress, ip, 4); }
+    void getSubnet(uint8_t* sub) const { memcpy(sub, subnet, 4); }
+    void setSubnet(const uint8_t* sub) { memcpy(subnet, sub, 4); }
+    void getGateway(uint8_t* gw) const { memcpy(gw, gateway, 4); }
+    void setGateway(const uint8_t* gw) { memcpy(gateway, gw, 4); }
+    void getDNS(uint8_t* d) const { memcpy(d, dns, 4); }
+    void setDNS(const uint8_t* d) { memcpy(dns, d, 4); }
+    void getDestIP(uint8_t* dest) const { memcpy(dest, destIP, 4); }
+    void setDestIP(const uint8_t* dest) { memcpy(destIP, dest, 4); }
+    uint16_t getDestPort() const { return destPort; }
+    void setDestPort(uint16_t port) { destPort = port; }
+
     // EEPROM operations
     void saveSteerConfig();
     void loadSteerConfig();
@@ -280,6 +305,8 @@ public:
     void loadTurnSensorConfig();
     void saveAnalogWorkSwitchConfig();
     void loadAnalogWorkSwitchConfig();
+    void saveNetworkConfig();
+    void loadNetworkConfig();
     void loadAllConfigs();
     void saveAllConfigs();
     void resetToDefaults();

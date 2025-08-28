@@ -8,6 +8,7 @@
 #include "RTCMProcessor.h"
 #include "EventLogger.h"
 #include "DHCPLite.h"
+#include "ConfigManager.h"
 
 using namespace qindesign::network;
 
@@ -19,8 +20,8 @@ EthernetUDP QNEthernetUDPHandler::udpSend;
 bool QNEthernetUDPHandler::dhcpServerEnabled = false;
 uint8_t QNEthernetUDPHandler::packetBuffer[512];
 
-// External network configuration
-extern struct NetworkConfig netConfig;
+// External ConfigManager
+extern ConfigManager configManager;
 
 void QNEthernetUDPHandler::init() {
     LOG_INFO(EventSource::NETWORK, "Initializing QNEthernet UDP handlers");
@@ -35,8 +36,10 @@ void QNEthernetUDPHandler::init() {
     IPAddress localIP = Ethernet.localIP();
     LOG_INFO(EventSource::NETWORK, "Local IP: %d.%d.%d.%d", 
              localIP[0], localIP[1], localIP[2], localIP[3]);
+    uint8_t destIP[4];
+    configManager.getDestIP(destIP);
     LOG_INFO(EventSource::NETWORK, "Broadcast IP: %d.%d.%d.%d", 
-             netConfig.destIP[0], netConfig.destIP[1], netConfig.destIP[2], netConfig.destIP[3]);
+             destIP[0], destIP[1], destIP[2], destIP[3]);
     LOG_INFO(EventSource::NETWORK, "Link Speed: %d Mbps, Full Duplex: %s", 
              Ethernet.linkSpeed(), Ethernet.linkIsFullDuplex() ? "Yes" : "No");
     
@@ -165,12 +168,13 @@ void QNEthernetUDPHandler::sendUDPPacket(uint8_t* data, int length) {
         return;
     }
     
-    // Use the broadcast address from netConfig (updated when IP changes)
-    IPAddress broadcastIP(netConfig.destIP[0], netConfig.destIP[1], 
-                         netConfig.destIP[2], netConfig.destIP[3]);
+    // Use the broadcast address from ConfigManager
+    uint8_t destIP[4];
+    configManager.getDestIP(destIP);
+    IPAddress broadcastIP(destIP[0], destIP[1], destIP[2], destIP[3]);
     
     // Send packet
-    udpSend.beginPacket(broadcastIP, netConfig.destPort);
+    udpSend.beginPacket(broadcastIP, configManager.getDestPort());
     udpSend.write(data, length);
     if (!udpSend.endPacket()) {
         LOG_ERROR(EventSource::NETWORK, "Failed to send UDP packet");

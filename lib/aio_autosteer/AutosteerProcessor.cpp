@@ -24,8 +24,8 @@ extern ADProcessor adProcessor;
 extern MotorDriverInterface* motorPTR;
 extern WheelAngleFusion* wheelAngleFusionPtr;
 
-// External network config
-extern struct NetworkConfig netConfig;
+// No longer need external network config - using ConfigManager
+// extern struct NetworkConfig netConfig;
 
 // Global pointer definition
 AutosteerProcessor* autosteerPTR = nullptr;
@@ -472,19 +472,21 @@ void AutosteerProcessor::sendHelloReply() {
 void AutosteerProcessor::sendScanReply() {
     // Scan reply from AutoSteer - PGN 203 (0xCB)
     // Format: {header, source, pgn, length, ip1, ip2, ip3, subnet1, subnet2, subnet3, checksum}
+    uint8_t ip[4];
+    configManager.getIPAddress(ip);
     
     uint8_t scanReply[] = {
         0x80, 0x81,                    // Header
         0x7E,                          // Source: Steer module
         0xCB,                          // PGN: 203 Scan reply
         0x07,                          // Length (data only)
-        netConfig.currentIP[0],        // IP octet 1
-        netConfig.currentIP[1],        // IP octet 2
-        netConfig.currentIP[2],        // IP octet 3
-        netConfig.currentIP[3],        // IP octet 4
-        netConfig.currentIP[0],        // Subnet octet 1 (repeat IP)
-        netConfig.currentIP[1],        // Subnet octet 2 (repeat IP)
-        netConfig.currentIP[2],        // Subnet octet 3 (repeat IP)
+        ip[0],        // IP octet 1
+        ip[1],        // IP octet 2
+        ip[2],        // IP octet 3
+        ip[3],        // IP octet 4
+        ip[0],        // Subnet octet 1 (repeat IP)
+        ip[1],        // Subnet octet 2 (repeat IP)
+        ip[2],        // Subnet octet 3 (repeat IP)
         0                              // CRC placeholder
     };
     

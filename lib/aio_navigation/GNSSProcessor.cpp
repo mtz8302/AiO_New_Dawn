@@ -1096,8 +1096,8 @@ bool GNSSProcessor::parseINSPVAXA()
 // External reference to NetworkBase send function
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 
-// External network config
-extern struct NetworkConfig netConfig;
+// Get ConfigManager instance
+extern ConfigManager configManager;
 
 // Removed registerPGNCallbacks - broadcast PGNs are handled automatically
 
@@ -1126,18 +1126,21 @@ void GNSSProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t 
         // Subnet GPS reply format from PGN.md:
         // Src: 0x78 (120), PGN: 0xCB (203), Len: 7
         // IP_One, IP_Two, IP_Three, IP_Four, Subnet_One, Subnet_Two, Subnet_Three
+        uint8_t ip[4];
+        configManager.getIPAddress(ip);
+        
         uint8_t subnetReply[] = {
             0x80, 0x81,              // PGN header
             GPS_SOURCE_ID,           // Source: 0x78 (120)
             0xCB,                    // PGN: 203
             7,                       // Data length
-            netConfig.currentIP[0],  // IP_One
-            netConfig.currentIP[1],  // IP_Two
-            netConfig.currentIP[2],  // IP_Three
-            netConfig.currentIP[3],  // IP_Four
-            netConfig.currentIP[0],  // Subnet_One
-            netConfig.currentIP[1],  // Subnet_Two
-            netConfig.currentIP[2],  // Subnet_Three
+            ip[0],  // IP_One
+            ip[1],  // IP_Two
+            ip[2],  // IP_Three
+            ip[3],  // IP_Four
+            ip[0],  // Subnet_One
+            ip[1],  // Subnet_Two
+            ip[2],  // Subnet_Three
             0                        // CRC placeholder
         };
         

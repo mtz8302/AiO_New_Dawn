@@ -13,8 +13,7 @@
 
 extern void sendUDPbytes(uint8_t *message, int msgLen);
 
-// External network configuration - defined elsewhere
-extern struct NetworkConfig netConfig;
+// Network configuration now handled by ConfigManager
 
 // External config manager instance
 extern ConfigManager configManager;
@@ -348,18 +347,21 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
     }
     else if (pgn == 202) {
         
+        uint8_t ip[4];
+        configManager.getIPAddress(ip);
+        
         uint8_t scanReply[] = {
             0x80, 0x81,                    // Header
             MACHINE_HELLO_REPLY,           // Source: Machine module (123)
             0xCB,                          // PGN: 203 Scan reply
             7,                             // Length
-            netConfig.currentIP[0],
-            netConfig.currentIP[1],
-            netConfig.currentIP[2],
-            netConfig.currentIP[3],
-            netConfig.currentIP[0],        // Subnet (repeat IP)
-            netConfig.currentIP[1],
-            netConfig.currentIP[2],
+            ip[0],
+            ip[1],
+            ip[2],
+            ip[3],
+            ip[0],        // Subnet (repeat IP)
+            ip[1],
+            ip[2],
             0                              // CRC placeholder
         };
         

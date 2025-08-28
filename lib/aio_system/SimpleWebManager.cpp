@@ -2,10 +2,10 @@
 // Web server implementation using SimpleHTTPServer to replace AsyncWebServer
 
 #include "SimpleWebManager.h"
+#include "ConfigManager.h"
 #include "EventLogger.h"
 #include "Version.h"
 #include "HardwareManager.h"
-#include "ConfigManager.h"
 #include "QNetworkBase.h"
 #include "ADProcessor.h"
 #include "EncoderProcessor.h"
@@ -388,44 +388,23 @@ void SimpleWebManager::handleNetworkConfig(EthernetClient& client, const String&
             uint8_t octet2 = ipArray[1];
             uint8_t octet3 = ipArray[2];
             
-            // Update network configuration
-            extern NetworkConfig netConfig;
-            extern void save_current_net();
+            // Update network configuration using ConfigManager
+            ConfigManager* config = ConfigManager::getInstance();
             
             // Update IP addresses (keeping 4th octet as 126)
-            netConfig.ipAddress[0] = octet1;
-            netConfig.ipAddress[1] = octet2;
-            netConfig.ipAddress[2] = octet3;
-            netConfig.ipAddress[3] = 126;
-            
-            // Update current IP to match
-            netConfig.currentIP[0] = octet1;
-            netConfig.currentIP[1] = octet2;
-            netConfig.currentIP[2] = octet3;
-            netConfig.currentIP[3] = 126;
-            netConfig.currentIP[4] = 0;
-            
-            // Update broadcast IP for the new subnet
-            netConfig.broadcastIP[0] = octet1;
-            netConfig.broadcastIP[1] = octet2;
-            netConfig.broadcastIP[2] = octet3;
-            netConfig.broadcastIP[3] = 255;
-            netConfig.broadcastIP[4] = 0;
+            uint8_t newIP[4] = {octet1, octet2, octet3, 126};
+            config->setIPAddress(newIP);
             
             // Update destination IP to broadcast on new subnet
-            netConfig.destIP[0] = octet1;
-            netConfig.destIP[1] = octet2;
-            netConfig.destIP[2] = octet3;
-            netConfig.destIP[3] = 255;
+            uint8_t newDest[4] = {octet1, octet2, octet3, 255};
+            config->setDestIP(newDest);
             
             // Update gateway to .1 on new subnet
-            netConfig.gateway[0] = octet1;
-            netConfig.gateway[1] = octet2;
-            netConfig.gateway[2] = octet3;
-            netConfig.gateway[3] = 1;
+            uint8_t newGateway[4] = {octet1, octet2, octet3, 1};
+            config->setGateway(newGateway);
             
             // Save to EEPROM
-            save_current_net();
+            config->saveNetworkConfig();
             
             LOG_INFO(EventSource::NETWORK, "Network IP saved: %d.%d.%d.126 (reboot required)", 
                      octet1, octet2, octet3);

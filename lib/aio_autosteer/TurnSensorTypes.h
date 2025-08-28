@@ -17,17 +17,4 @@ enum class EncoderType : uint8_t {
     QUADRATURE = 2    // Quadrature (dual channel) encoder
 };
 
-// Turn sensor configuration
-struct TurnSensorConfig {
-    TurnSensorType sensorType = TurnSensorType::NONE;
-    EncoderType encoderType = EncoderType::SINGLE;
-    uint8_t maxPulseCount = 5;        // Maximum pulse count before kickout
-    uint8_t pressureThreshold = 100;  // Pressure sensor threshold (0-255)
-    uint8_t currentThreshold = 100;   // Current sensor threshold (0-255)
-    uint16_t currentZeroOffset = 90;  // Zero current offset for calibration
-    
-    // Constructor with defaults
-    TurnSensorConfig() = default;
-};
-
 #endif // TURN_SENSOR_TYPES_H
