@@ -2,6 +2,7 @@
 #include "QNetworkBase.h"
 #include "LEDManagerFSM.h"
 #include "SerialManager.h"
+#include "EventLogger.h"
 
 // Just declare what we need, don't include pcb.h
 #define SerialGPS1 Serial5 // From pcb.h
@@ -44,13 +45,27 @@ void RTCMProcessor::processRTCM(const uint8_t* data, size_t len, const IPAddress
     if (!QNetworkBase::isConnected())
         return;
 
-    if (remotePort == 9999 && len >= 5)
+    // We receive RTCM on port 2233, regardless of source port
+    // Just check that we have valid RTCM data (min 5 bytes)
+    if (len >= 5)
     {
         // Write directly to serial port
         SerialGPS1.write(data, len);
         
         // Pulse GPS LED blue for RTCM packet
         ledManagerFSM.pulseRTCM();
+        
+        // Log RTCM activity periodically
+        static uint32_t lastRTCMLog = 0;
+        static uint32_t rtcmPacketCount = 0;
+        rtcmPacketCount++;
+        
+        if (millis() - lastRTCMLog > 5000) {
+            lastRTCMLog = millis();
+            LOG_DEBUG(EventSource::NETWORK, "RTCM: %lu packets from %d.%d.%d.%d:%d",
+                      rtcmPacketCount, remoteIP[0], remoteIP[1], remoteIP[2], remoteIP[3], remotePort);
+            rtcmPacketCount = 0;
+        }
     }
     // No need to delete buffer - QNEthernet handles memory management
 }
