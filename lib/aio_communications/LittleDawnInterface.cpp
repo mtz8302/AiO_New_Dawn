@@ -62,6 +62,14 @@ void LittleDawnInterface::sendToLittleDawn(uint8_t id, const uint8_t* data, uint
     memcpy(&buffer[2], data, length);
     buffer[2 + length] = calculateChecksum(buffer, 2 + length);
     
+    // Debug logging for first few messages
+    static int msgCount = 0;
+    if (msgCount < 5) {
+        LOG_DEBUG(EventSource::SYSTEM, "Little Dawn TX: id=0x%02X len=%d checksum=0x%02X", 
+                  id, length, buffer[2 + length]);
+        msgCount++;
+    }
+    
     SerialESP32.write(buffer, 3 + length);
 }
 
@@ -73,6 +81,8 @@ void LittleDawnInterface::sendMachineStatus() {
     float speedKmh = 0.0f;
     if (AutosteerProcessor::getInstance()) {
         speedKmh = AutosteerProcessor::getInstance()->getVehicleSpeed();
+    } else {
+        LOG_WARNING(EventSource::SYSTEM, "AutosteerProcessor instance is null!");
     }
     
     // Get WAS angle from ADProcessor
@@ -99,6 +109,11 @@ void LittleDawnInterface::sendMachineStatus() {
     status.steerAngle = (int16_t)(wasAngle * 10);    // Convert to 0.1 degree units
     
     // Send the data
+    static bool firstSend = true;
+    if (firstSend) {
+        LOG_INFO(EventSource::SYSTEM, "MachineStatus size: %d bytes", sizeof(status));
+        firstSend = false;
+    }
     sendToLittleDawn(MSG_MACHINE_STATUS, (uint8_t*)&status, sizeof(status));
 }
 
@@ -163,6 +178,10 @@ void LittleDawnInterface::processIncomingData() {
                         if (processMessage(msgId, rxBuffer, msgLen)) {
                             lastResponseTime = millis();
                         }
+                    } else {
+                        // Log checksum mismatch for debugging
+                        LOG_WARNING(EventSource::SYSTEM, "Little Dawn checksum mismatch: expected 0x%02X, got 0x%02X (id=0x%02X, len=%d)", 
+                                   calcChecksum, byte, msgId, msgLen);
                     }
                     
                     rxState = WAIT_ID;

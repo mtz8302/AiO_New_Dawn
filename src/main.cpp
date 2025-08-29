@@ -77,15 +77,24 @@ void setup()
   Serial.print(" ===\r\n");
   Serial.print("Initializing subsystems...");
 
-  // Initialize PGNProcessor first (needed by QNetworkBase)
+  // Initialize ConfigManager FIRST - it has no dependencies
+  configManager.init();
+  Serial.print("\r\n- ConfigManager initialized\r\n");
+
+  // Initialize EventLogger SECOND - so all subsequent messages are formatted
+  EventLogger::init();
+  Serial.print("\r\n- EventLogger initialized (startup mode)\r\n");
+  delay(10);  // Small delay to ensure EventLogger is fully initialized
+
+  // Initialize PGNProcessor (needed by QNetworkBase)
   PGNProcessor::init();
-  Serial.print("\r\n- PGNProcessor initialized\r\n");
+  LOG_INFO(EventSource::SYSTEM, "PGNProcessor initialized");
 
   // Network and communication setup
   QNetworkBase::init();
   
   // Wait for network speed to stabilize (some switches negotiate in steps)
-  Serial.print("\r\n- Waiting for network speed negotiation...");
+  LOG_INFO(EventSource::NETWORK, "Waiting for network speed negotiation...");
   uint32_t startWait = millis();
   int lastSpeed = 0;
   
@@ -93,14 +102,14 @@ void setup()
   while (millis() - startWait < 10000) {
     int currentSpeed = Ethernet.linkSpeed();
     if (currentSpeed != lastSpeed) {
-      Serial.printf("\r\n  Link speed changed: %d Mbps\r\n", currentSpeed);
+      LOG_INFO(EventSource::NETWORK, "Link speed changed: %d Mbps", currentSpeed);
       lastSpeed = currentSpeed;
       startWait = millis(); // Reset timer on speed change
     }
     
     // If we've been stable at 100Mbps for 2 seconds, we're good
     if (currentSpeed == 100 && millis() - startWait > 2000) {
-      Serial.print("\r\n  Link stable at 100 Mbps\r\n");
+      LOG_INFO(EventSource::NETWORK, "Link stable at 100 Mbps");
       break;
     }
     
@@ -108,31 +117,23 @@ void setup()
   }
   
   // Additional delay for network stack to stabilize
-  Serial.print("\r\n- Waiting for network stack to stabilize...");
+  LOG_INFO(EventSource::NETWORK, "Waiting for network stack to stabilize...");
   delay(2000);
   
   // Verify we have an IP address
   IPAddress localIP = Ethernet.localIP();
   if (localIP == IPAddress(0, 0, 0, 0)) {
-    Serial.print("\r\n- ERROR: No IP address assigned!\r\n");
+    LOG_ERROR(EventSource::NETWORK, "No IP address assigned!");
   } else {
-    Serial.printf("\r\n- IP ready: %d.%d.%d.%d\r\n", localIP[0], localIP[1], localIP[2], localIP[3]);
-    Serial.printf("\r\n- Final link speed: %d Mbps\r\n", Ethernet.linkSpeed());
+    LOG_INFO(EventSource::NETWORK, "IP ready: %d.%d.%d.%d", localIP[0], localIP[1], localIP[2], localIP[3]);
+    LOG_INFO(EventSource::NETWORK, "Final link speed: %d Mbps", Ethernet.linkSpeed());
   }
   
   // Network stack is ready but don't initialize AsyncUDP yet
-  Serial.print("\r\n- Network stack initialized\r\n");
+  LOG_INFO(EventSource::NETWORK, "Network stack initialized");
   
   // Initialize global CAN buses
   initializeGlobalCANBuses();
-
-  // ConfigManager is already constructed
-  Serial.print("\r\n- ConfigManager initialized\r\n");
-
-  // Initialize EventLogger early so other modules can use it
-  EventLogger::init();
-  Serial.print("\r\n- EventLogger initialized (startup mode)\r\n");
-  delay(10);  // Small delay to ensure EventLogger is fully initialized
   
   // Initialize RTCMProcessor
   RTCMProcessor::init();

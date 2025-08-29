@@ -24,8 +24,8 @@ extern ADProcessor adProcessor;
 extern MotorDriverInterface* motorPTR;
 extern WheelAngleFusion* wheelAngleFusionPtr;
 
-// External network config
-extern struct NetworkConfig netConfig;
+// No longer need external network config - using ConfigManager
+// extern struct NetworkConfig netConfig;
 
 // Global pointer definition
 AutosteerProcessor* autosteerPTR = nullptr;
@@ -34,18 +34,6 @@ AutosteerProcessor* autosteerPTR = nullptr;
 AutosteerProcessor* AutosteerProcessor::instance = nullptr;
 
 AutosteerProcessor::AutosteerProcessor() {
-    // Initialize config with defaults
-    memset(&steerConfig, 0, sizeof(SteerConfig));
-    memset(&steerSettings, 0, sizeof(SteerSettings));
-    
-    // Set some sensible defaults
-    steerSettings.Kp = 10;  // 1.0 * 10 (AgOpenGPS format)
-    steerSettings.highPWM = 255;
-    steerSettings.lowPWM = 10;
-    steerSettings.minPWM = 5;
-    steerSettings.steerSensorCounts = 1;  // Avoid divide by zero
-    steerSettings.wasOffset = 0;
-    steerSettings.AckermanFix = 1.0f;
 }
 
 AutosteerProcessor* AutosteerProcessor::getInstance() {
@@ -74,27 +62,9 @@ bool AutosteerProcessor::init() {
     instance = this;
     autosteerPTR = this;  // Also set global pointer
     
-    // Load steer config from EEPROM
-    steerConfig.InvertWAS = configManager.getInvertWAS();
-    steerConfig.IsRelayActiveHigh = configManager.getIsRelayActiveHigh();
-    steerConfig.MotorDriveDirection = configManager.getMotorDriveDirection();
-    steerConfig.CytronDriver = configManager.getCytronDriver();
-    steerConfig.SteerSwitch = configManager.getSteerSwitch();
-    steerConfig.SteerButton = configManager.getSteerButton();
-    steerConfig.PressureSensor = configManager.getPressureSensor();
-    steerConfig.CurrentSensor = configManager.getCurrentSensor();
-    steerConfig.PulseCountMax = configManager.getPulseCountMax();
-    steerConfig.MinSpeed = configManager.getMinSpeed();
-    steerConfig.MotorDriverConfig = configManager.getMotorDriverConfig();
-    LOG_DEBUG(EventSource::AUTOSTEER, "Loaded steer config from EEPROM: Pressure=%s, Current=%s, PulseMax=%d, RelayActive=%s", 
-              steerConfig.PressureSensor ? "Yes" : "No", 
-              steerConfig.CurrentSensor ? "Yes" : "No",
-              steerConfig.PulseCountMax,
-              steerConfig.IsRelayActiveHigh ? "HIGH" : "LOW");
-    
     // Initialize motor config tracking from EEPROM values
-    previousMotorConfig = steerConfig.MotorDriverConfig;
-    previousCytronDriver = steerConfig.CytronDriver ? 1 : 0;
+    previousMotorConfig = configManager.getMotorDriverConfig();
+    previousCytronDriver = configManager.getCytronDriver() ? 1 : 0;
     motorConfigInitialized = true;
     LOG_INFO(EventSource::AUTOSTEER, "Motor config tracking initialized: Config=0x%02X, Cytron=%d", 
              previousMotorConfig, previousCytronDriver);
@@ -115,20 +85,13 @@ bool AutosteerProcessor::init() {
     
     // Load steer settings from EEPROM
     configManager.loadSteerSettings();
-    steerSettings.Kp = configManager.getKp();
-    steerSettings.highPWM = configManager.getHighPWM();
-    steerSettings.lowPWM = configManager.getLowPWM();
-    steerSettings.minPWM = configManager.getMinPWM();
-    steerSettings.steerSensorCounts = configManager.getSteerSensorCounts();
-    steerSettings.wasOffset = configManager.getWasOffset();
-    steerSettings.AckermanFix = configManager.getAckermanFix();
-    
-    LOG_INFO(EventSource::AUTOSTEER, "Loaded steer settings from EEPROM: offset=%d, CPD=%d, highPWM=%d", 
-             steerSettings.wasOffset, steerSettings.steerSensorCounts, steerSettings.highPWM);
     
     // Update ADProcessor with loaded values
-    adProcessor.setWASOffset(steerSettings.wasOffset);
-    adProcessor.setWASCountsPerDegree(steerSettings.steerSensorCounts);
+    adProcessor.setWASOffset(configManager.getWasOffset());
+    adProcessor.setWASCountsPerDegree(configManager.getSteerSensorCounts());
+    
+    LOG_INFO(EventSource::AUTOSTEER, "Loaded steer settings from EEPROM: offset=%d, CPD=%d, highPWM=%d", 
+             configManager.getWasOffset(), configManager.getSteerSensorCounts(), configManager.getHighPWM());
     
     // PID functionality is now integrated directly in updateMotorControl()
     
@@ -230,8 +193,8 @@ void AutosteerProcessor::process() {
     }
     
     // === BUTTON/SWITCH LOGIC ===
-    if (steerConfig.SteerButton || steerConfig.SteerSwitch) {
-        if (steerConfig.SteerButton) {
+    if (configManager.getSteerButton() || configManager.getSteerSwitch()) {
+        if (configManager.getSteerButton()) {
             // BUTTON MODE - Toggle on press
             static bool lastButtonReading = HIGH;
             bool buttonReading = adProcessor.isSteerSwitchOn() ? LOW : HIGH;  // Convert to active low
@@ -303,7 +266,7 @@ void AutosteerProcessor::process() {
     // If AgOpenGPS has stopped steering, turn off after delay
     // BUT only if not using a physical switch in switch mode
     static int switchCounter = 0;
-    bool physicalSwitchActive = steerConfig.SteerSwitch && adProcessor.isSteerSwitchOn();
+    bool physicalSwitchActive = configManager.getSteerSwitch() && adProcessor.isSteerSwitchOn();
     
     if (steerState == 0 && !guidanceActive && !physicalSwitchActive) {
         if (switchCounter++ > 30) {  // 30 * 10ms = 300ms delay
@@ -326,10 +289,11 @@ void AutosteerProcessor::process() {
     
     // Pressure sensor kickout is now handled by KickoutMonitor
     static bool lastPressureSensorState = false;
-    if (steerConfig.PressureSensor != lastPressureSensorState) {
+    bool currentPressureSensorState = configManager.getPressureSensor();
+    if (currentPressureSensorState != lastPressureSensorState) {
         LOG_INFO(EventSource::AUTOSTEER, "Pressure sensor kickout %s", 
-                 steerConfig.PressureSensor ? "ENABLED" : "DISABLED");
-        lastPressureSensorState = steerConfig.PressureSensor;
+                 currentPressureSensorState ? "ENABLED" : "DISABLED");
+        lastPressureSensorState = currentPressureSensorState;
     }
     
     // Check motor status for errors (including CAN connection loss)
@@ -436,14 +400,15 @@ void AutosteerProcessor::process() {
     // Apply Ackerman fix to current angle if it's negative (left turn)
     actualAngle = currentAngle;
     if (actualAngle < 0) {
-        actualAngle = actualAngle * steerSettings.AckermanFix;
+        float ackermanFix = configManager.getAckermanFix();
+        actualAngle = actualAngle * ackermanFix;
         
         // Log Ackerman fix application periodically
         static uint32_t lastAckermanLog = 0;
         if (millis() - lastAckermanLog > 5000 && abs(actualAngle) > 1.0f) {
             lastAckermanLog = millis();
             LOG_DEBUG(EventSource::AUTOSTEER, "Ackerman fix applied: %.2f° * %.2f = %.2f°", 
-                     currentAngle, steerSettings.AckermanFix, actualAngle);
+                     currentAngle, ackermanFix, actualAngle);
         }
     }
     
@@ -507,19 +472,21 @@ void AutosteerProcessor::sendHelloReply() {
 void AutosteerProcessor::sendScanReply() {
     // Scan reply from AutoSteer - PGN 203 (0xCB)
     // Format: {header, source, pgn, length, ip1, ip2, ip3, subnet1, subnet2, subnet3, checksum}
+    uint8_t ip[4];
+    configManager.getIPAddress(ip);
     
     uint8_t scanReply[] = {
         0x80, 0x81,                    // Header
         0x7E,                          // Source: Steer module
         0xCB,                          // PGN: 203 Scan reply
         0x07,                          // Length (data only)
-        netConfig.currentIP[0],        // IP octet 1
-        netConfig.currentIP[1],        // IP octet 2
-        netConfig.currentIP[2],        // IP octet 3
-        netConfig.currentIP[3],        // IP octet 4
-        netConfig.currentIP[0],        // Subnet octet 1 (repeat IP)
-        netConfig.currentIP[1],        // Subnet octet 2 (repeat IP)
-        netConfig.currentIP[2],        // Subnet octet 3 (repeat IP)
+        ip[0],        // IP octet 1
+        ip[1],        // IP octet 2
+        ip[2],        // IP octet 3
+        ip[3],        // IP octet 4
+        ip[0],        // Subnet octet 1 (repeat IP)
+        ip[1],        // Subnet octet 2 (repeat IP)
+        ip[2],        // Subnet octet 3 (repeat IP)
         0                              // CRC placeholder
     };
     
@@ -577,131 +544,131 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     // [4-7] = reserved/unused
     
     uint8_t sett0 = data[0];
-    steerConfig.InvertWAS = bitRead(sett0, 0);
-    steerConfig.IsRelayActiveHigh = bitRead(sett0, 1);
-    steerConfig.MotorDriveDirection = bitRead(sett0, 2);
-    steerConfig.SingleInputWAS = bitRead(sett0, 3);
-    steerConfig.CytronDriver = bitRead(sett0, 4);
-    steerConfig.SteerSwitch = bitRead(sett0, 5);
-    steerConfig.SteerButton = bitRead(sett0, 6);
-    steerConfig.ShaftEncoder = bitRead(sett0, 7);
+    bool invertWAS = bitRead(sett0, 0);
+    bool isRelayActiveHigh = bitRead(sett0, 1);
+    bool motorDriveDirection = bitRead(sett0, 2);
+    bool singleInputWAS = bitRead(sett0, 3);
+    bool cytronDriver = bitRead(sett0, 4);
+    bool steerSwitch = bitRead(sett0, 5);
+    bool steerButton = bitRead(sett0, 6);
+    bool shaftEncoder = bitRead(sett0, 7);
     
-    steerConfig.PulseCountMax = data[1];  // Fixed: was data[2]
-    steerConfig.MinSpeed = data[2];       // Fixed: was data[3]
+    uint8_t pulseCountMax = data[1];  // Fixed: was data[2]
+    uint8_t minSpeed = data[2];       // Fixed: was data[3]
     
     uint8_t sett1 = data[3];              // Fixed: was data[4]
-    steerConfig.IsDanfoss = bitRead(sett1, 0);
-    steerConfig.PressureSensor = bitRead(sett1, 1);
-    steerConfig.CurrentSensor = bitRead(sett1, 2);
-    steerConfig.IsUseY_Axis = bitRead(sett1, 3);
+    bool isDanfoss = bitRead(sett1, 0);
+    bool pressureSensor = bitRead(sett1, 1);
+    bool currentSensor = bitRead(sett1, 2);
+    bool isUseYAxis = bitRead(sett1, 3);
     
     // When current sensor is enabled, data[1] (pulseCountMax) is repurposed as current threshold
-    if (steerConfig.CurrentSensor) {
+    if (currentSensor) {
         uint8_t currentThreshold = data[1];
         LOG_INFO(EventSource::AUTOSTEER, "Current sensor enabled - threshold=%d (%.1f%%)", 
                   currentThreshold, (currentThreshold * 100.0f) / 255.0f);
         configManager.setCurrentThreshold(currentThreshold);
-    } else if (steerConfig.PressureSensor) {
+    } else if (pressureSensor) {
         // When pressure sensor is enabled, data[1] might be pressure threshold
         uint8_t pressureThreshold = data[1];
         LOG_INFO(EventSource::AUTOSTEER, "Pressure sensor enabled - threshold=%d (%.1f%%)", 
                   pressureThreshold, (pressureThreshold * 100.0f) / 255.0f);
         configManager.setPressureThreshold(pressureThreshold);
-    } else if (steerConfig.ShaftEncoder) {
+    } else if (shaftEncoder) {
         // When encoder is enabled, data[1] is pulse count max
         LOG_INFO(EventSource::AUTOSTEER, "Shaft encoder enabled - pulseCountMax=%d", 
-                  steerConfig.PulseCountMax);
+                  pulseCountMax);
     }
     
     // Read motor driver configuration from byte 8 of the message (data array index 3)
     // Message structure: Header(5) + Data(8) + CRC(1) = 14 bytes total
     // Byte 8 of the message = data[3] (since data array starts after 5-byte header)
-    steerConfig.MotorDriverConfig = data[3];
+    uint8_t motorDriverConfig = data[3];
     
     // Workaround: Clear Cytron bit when Danfoss is selected
     // AgOpenGPS doesn't always clear this bit when switching to Danfoss
-    if (steerConfig.IsDanfoss || (steerConfig.MotorDriverConfig & 0x01)) {
-        steerConfig.CytronDriver = false;
+    if (isDanfoss || (motorDriverConfig & 0x01)) {
+        cytronDriver = false;
     }
     
     // Update motor driver manager with new configuration
-    MotorDriverManager::getInstance()->updateMotorConfig(steerConfig.MotorDriverConfig);
+    MotorDriverManager::getInstance()->updateMotorConfig(motorDriverConfig);
     
-    LOG_DEBUG(EventSource::AUTOSTEER, "InvertWAS: %d", steerConfig.InvertWAS);
-    LOG_DEBUG(EventSource::AUTOSTEER, "MotorDriveDirection: %d", steerConfig.MotorDriveDirection);
-    LOG_DEBUG(EventSource::AUTOSTEER, "SteerSwitch: %d", steerConfig.SteerSwitch);
-    LOG_DEBUG(EventSource::AUTOSTEER, "SteerButton: %d", steerConfig.SteerButton);
-    LOG_DEBUG(EventSource::AUTOSTEER, "PulseCountMax: %d", steerConfig.PulseCountMax);
-    LOG_DEBUG(EventSource::AUTOSTEER, "MinSpeed: %d", steerConfig.MinSpeed);
+    LOG_DEBUG(EventSource::AUTOSTEER, "InvertWAS: %d", invertWAS);
+    LOG_DEBUG(EventSource::AUTOSTEER, "MotorDriveDirection: %d", motorDriveDirection);
+    LOG_DEBUG(EventSource::AUTOSTEER, "SteerSwitch: %d", steerSwitch);
+    LOG_DEBUG(EventSource::AUTOSTEER, "SteerButton: %d", steerButton);
+    LOG_DEBUG(EventSource::AUTOSTEER, "PulseCountMax: %d", pulseCountMax);
+    LOG_DEBUG(EventSource::AUTOSTEER, "MinSpeed: %d", minSpeed);
     
     // Determine motor type from config
     const char* motorType = "Unknown";
     bool isDanfossConfig = false;
-    switch (steerConfig.MotorDriverConfig) {
-        case 0x00: motorType = steerConfig.CytronDriver ? "Cytron IBT2" : "DRV8701"; break;
+    switch (motorDriverConfig) {
+        case 0x00: motorType = cytronDriver ? "Cytron IBT2" : "DRV8701"; break;
         case 0x01: motorType = "Danfoss"; isDanfossConfig = true; break;
-        case 0x02: motorType = steerConfig.CytronDriver ? "Cytron IBT2" : "DRV8701"; break;
+        case 0x02: motorType = cytronDriver ? "Cytron IBT2" : "DRV8701"; break;
         case 0x03: motorType = "Danfoss"; isDanfossConfig = true; break;
-        case 0x04: motorType = steerConfig.CytronDriver ? "Cytron IBT2" : "DRV8701"; break;
+        case 0x04: motorType = cytronDriver ? "Cytron IBT2" : "DRV8701"; break;
         default: motorType = "Unknown"; break;
     }
     
     // Determine steer enable type
     const char* steerType = "None";
-    if (steerConfig.SteerButton) {
+    if (steerButton) {
         steerType = "Button";
-    } else if (steerConfig.SteerSwitch) {
+    } else if (steerSwitch) {
         steerType = "Switch";
     }
     
     // Log all settings at INFO level in a single message so users see everything
     LOG_INFO(EventSource::AUTOSTEER, "Steer config: WAS=%s Motor=%s MinSpeed=%d Steer=%s Encoder=%s Pressure=%s Current=%s (max=%d) MotorType=%s", 
-             steerConfig.InvertWAS ? "Inv" : "Norm",
-             steerConfig.MotorDriveDirection ? "Rev" : "Norm",
-             steerConfig.MinSpeed,
+             invertWAS ? "Inv" : "Norm",
+             motorDriveDirection ? "Rev" : "Norm",
+             minSpeed,
              steerType,
-             steerConfig.ShaftEncoder ? "Yes" : "No",
-             steerConfig.PressureSensor ? "Yes" : "No",
-             steerConfig.CurrentSensor ? "Yes" : "No",
-             steerConfig.PulseCountMax,
+             shaftEncoder ? "Yes" : "No",
+             pressureSensor ? "Yes" : "No",
+             currentSensor ? "Yes" : "No",
+             pulseCountMax,
              motorType);
              
     // Additional debug for encoder configuration
     LOG_DEBUG(EventSource::AUTOSTEER, "Encoder Debug: ShaftEncoder=%d, IsDanfoss=%d, MotorConfig=0x%02X, MotorType=%s",
-             steerConfig.ShaftEncoder, steerConfig.IsDanfoss, steerConfig.MotorDriverConfig, motorType);
+             shaftEncoder, isDanfoss, motorDriverConfig, motorType);
     
     
     // Save config to EEPROM
-    configManager.setInvertWAS(steerConfig.InvertWAS);
-    configManager.setIsRelayActiveHigh(steerConfig.IsRelayActiveHigh);
-    configManager.setMotorDriveDirection(steerConfig.MotorDriveDirection);
-    configManager.setCytronDriver(steerConfig.CytronDriver);
-    configManager.setSteerSwitch(steerConfig.SteerSwitch);
-    configManager.setSteerButton(steerConfig.SteerButton);
-    configManager.setShaftEncoder(steerConfig.ShaftEncoder);  // This was missing!
-    configManager.setPressureSensor(steerConfig.PressureSensor);
-    configManager.setCurrentSensor(steerConfig.CurrentSensor);
-    configManager.setPulseCountMax(steerConfig.PulseCountMax);
-    configManager.setMinSpeed(steerConfig.MinSpeed);
-    configManager.setMotorDriverConfig(steerConfig.MotorDriverConfig);
+    configManager.setInvertWAS(invertWAS);
+    configManager.setIsRelayActiveHigh(isRelayActiveHigh);
+    configManager.setMotorDriveDirection(motorDriveDirection);
+    configManager.setCytronDriver(cytronDriver);
+    configManager.setSteerSwitch(steerSwitch);
+    configManager.setSteerButton(steerButton);
+    configManager.setShaftEncoder(shaftEncoder);
+    configManager.setPressureSensor(pressureSensor);
+    configManager.setCurrentSensor(currentSensor);
+    configManager.setPulseCountMax(pulseCountMax);
+    configManager.setMinSpeed(minSpeed);
+    configManager.setMotorDriverConfig(motorDriverConfig);
     
     // Note: Sensor configuration updates would go here if we want dynamic changes
     // For now, sensor changes require reboot to ensure clean state
     
     // Check for motor type changes
     bool motorTypeChanged = false;
-    int8_t currentCytronDriver = steerConfig.CytronDriver ? 1 : 0;
+    int8_t currentCytronDriver = cytronDriver ? 1 : 0;
     
     // Only check for changes if we've initialized from EEPROM
     if (motorConfigInitialized) {
         LOG_DEBUG(EventSource::AUTOSTEER, "Current motor state: Config=0x%02X, Cytron=%d (previous: Config=0x%02X, Cytron=%d)",
-                  steerConfig.MotorDriverConfig, currentCytronDriver,
+                  motorDriverConfig, currentCytronDriver,
                   previousMotorConfig, previousCytronDriver);
         
         // Only check motor-relevant bits (bit 0 = Danfoss, CytronDriver is separate)
         // Ignore sensor bits (bits 1-2) when checking for motor changes
         uint8_t previousMotorBits = previousMotorConfig & 0x01;  // Danfoss bit only
-        uint8_t currentMotorBits = steerConfig.MotorDriverConfig & 0x01;
+        uint8_t currentMotorBits = motorDriverConfig & 0x01;
         
         if (previousMotorBits != currentMotorBits ||
             previousCytronDriver != currentCytronDriver) {
@@ -716,7 +683,7 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     }
     
     // Update tracked values
-    previousMotorConfig = steerConfig.MotorDriverConfig;
+    previousMotorConfig = motorDriverConfig;
     previousCytronDriver = currentCytronDriver;
     
     configManager.saveSteerConfig();
@@ -741,58 +708,41 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
         return;
     }
     
-    // Data array indices (after header/length removal):
-    // [0] = Kp (proportional gain)
-    // [1] = highPWM (max limit)
-    // [2] = lowPWM (minimum to move)
-    // [3] = minPWM
-    // [4] = steerSensorCounts
-    // [5-6] = wasOffset (int16)
-    // [7] = ackermanFix
-    
-    steerSettings.Kp = data[0];  // Raw byte value from AgOpenGPS
-    steerSettings.highPWM = data[1];
-    steerSettings.lowPWM = data[2];
-    steerSettings.minPWM = data[3];
+    // Parse PGN 252 data directly to local variables
+    uint8_t kp = data[0];  // Raw byte value from AgOpenGPS
+    uint8_t highPWM = data[1];
+    uint8_t lowPWM = data[2];
+    uint8_t minPWM = data[3];
     
     // V6-NG adjusts lowPWM
-    float temp = (float)steerSettings.minPWM * 1.2;
-    steerSettings.lowPWM = (uint8_t)temp;
+    float temp = (float)minPWM * 1.2;
+    lowPWM = (uint8_t)temp;
     
-    steerSettings.steerSensorCounts = data[4];
+    uint8_t steerSensorCounts = data[4];
     
     // WAS offset is int16
-    steerSettings.wasOffset = data[5] | (data[6] << 8);
+    int16_t wasOffset = data[5] | (data[6] << 8);
     
-    steerSettings.AckermanFix = (float)data[7] * 0.01f;
+    float ackermanFix = (float)data[7] * 0.01f;
     
-    
-    // Kp is used directly in updateMotorControl()
-    LOG_DEBUG(EventSource::AUTOSTEER, "Kp updated to %d", steerSettings.Kp);
+    // Log all settings at INFO level
+    LOG_INFO(EventSource::AUTOSTEER, "Steer settings: Kp=%d PWM=%d-%d-%d WAS_offset=%d counts=%d Ackerman=%.2f", 
+             kp, minPWM, lowPWM, highPWM, wasOffset, steerSensorCounts, ackermanFix);
     
     // Update ADProcessor with WAS calibration values
-    adProcessor.setWASOffset(steerSettings.wasOffset);
-    adProcessor.setWASCountsPerDegree(steerSettings.steerSensorCounts);
-    
-    // Log all settings at INFO level in a single message so users see everything
-    LOG_INFO(EventSource::AUTOSTEER, "Steer settings: Kp=%d PWM=%d-%d-%d WAS_offset=%d counts=%d Ackerman=%.2f", 
-             steerSettings.Kp,
-             steerSettings.minPWM, steerSettings.lowPWM, steerSettings.highPWM,
-             steerSettings.wasOffset, steerSettings.steerSensorCounts,
-             steerSettings.AckermanFix);
-    
-    // Also log that we updated the ADProcessor
+    adProcessor.setWASOffset(wasOffset);
+    adProcessor.setWASCountsPerDegree(steerSensorCounts);
     LOG_INFO(EventSource::AUTOSTEER, "Updated ADProcessor with offset=%d, CPD=%d", 
-             steerSettings.wasOffset, steerSettings.steerSensorCounts);
+             wasOffset, steerSensorCounts);
     
-    // Save steer settings to EEPROM
-    configManager.setKp(steerSettings.Kp);
-    configManager.setHighPWM(steerSettings.highPWM);
-    configManager.setLowPWM(steerSettings.lowPWM);
-    configManager.setMinPWM(steerSettings.minPWM);
-    configManager.setSteerSensorCounts(steerSettings.steerSensorCounts);
-    configManager.setWasOffset(steerSettings.wasOffset);
-    configManager.setAckermanFix(steerSettings.AckermanFix);
+    // Save steer settings to ConfigManager
+    configManager.setKp(kp);
+    configManager.setHighPWM(highPWM);
+    configManager.setLowPWM(lowPWM);
+    configManager.setMinPWM(minPWM);
+    configManager.setSteerSensorCounts(steerSensorCounts);
+    configManager.setWasOffset(wasOffset);
+    configManager.setAckermanFix(ackermanFix);
     configManager.saveSteerSettings();
     LOG_INFO(EventSource::AUTOSTEER, "Steer settings saved to EEPROM");
 }
@@ -1064,29 +1014,34 @@ void AutosteerProcessor::updateMotorControl() {
     float angleError = actualAngle - targetAngle;
     float errorAbs = abs(angleError);
     
+    // Get PWM settings from ConfigManager (cached for performance)
+    uint8_t kp = configManager.getKp();
+    uint8_t highPWM = configManager.getHighPWM();
+    uint8_t minPWM = configManager.getMinPWM();
+    
     // Calculate base PWM output (error * Kp)
-    int16_t pValue = steerSettings.Kp * angleError;
+    int16_t pValue = kp * angleError;
     
     // Apply PWM calculation similar to V6
-    if (steerSettings.highPWM > 0) {  // Check if we have valid settings
+    if (highPWM > 0) {  // Check if we have valid settings
         // Start with base P value
         int16_t pwmDrive = pValue;
         
         // Add min throttle factor so no delay from motor resistance
         if (pwmDrive < 0) {
-            pwmDrive -= steerSettings.minPWM;
+            pwmDrive -= minPWM;
         } else if (pwmDrive > 0) {
-            pwmDrive += steerSettings.minPWM;
+            pwmDrive += minPWM;
         } else {
             // Dead zone - set pwmDrive to 0
             pwmDrive = 0;
         }
         
         // Limit the PWM drive to highPWM setting
-        if (pwmDrive > steerSettings.highPWM) {
-            pwmDrive = steerSettings.highPWM;
-        } else if (pwmDrive < -steerSettings.highPWM) {
-            pwmDrive = -steerSettings.highPWM;
+        if (pwmDrive > highPWM) {
+            pwmDrive = highPWM;
+        } else if (pwmDrive < -highPWM) {
+            pwmDrive = -highPWM;
         }
         
         // Store final PWM value
@@ -1097,7 +1052,7 @@ void AutosteerProcessor::updateMotorControl() {
         if (millis() - lastPWMCalcLog > 5000) {  // Every 5 seconds
             lastPWMCalcLog = millis();
             LOG_DEBUG(EventSource::AUTOSTEER, "PWM calc: actual=%.1f° - target=%.1f° = error=%.1f° * Kp=%d = %d, +minPWM=%d, limit=%d, final=%d", 
-                     actualAngle, targetAngle, angleError, steerSettings.Kp, pValue, steerSettings.minPWM, steerSettings.highPWM, pwmDrive);
+                     actualAngle, targetAngle, angleError, kp, pValue, minPWM, highPWM, pwmDrive);
         }
         
         // Debug log final motor PWM periodically
@@ -1105,7 +1060,7 @@ void AutosteerProcessor::updateMotorControl() {
         if (millis() - lastMotorPWMLog > 1000 && abs(motorPWM) > 10) {
             lastMotorPWMLog = millis();
             LOG_DEBUG(EventSource::AUTOSTEER, "Motor PWM: %d (highPWM=%d)", 
-                      motorPWM, steerSettings.highPWM);
+                      motorPWM, highPWM);
         }
         
         // Apply soft-start if active
@@ -1124,7 +1079,8 @@ void AutosteerProcessor::updateMotorControl() {
                     float sineRamp = sin(rampProgress * PI / 2.0f);
                     
                     // Calculate soft-start limit based on lowPWM
-                    int16_t softStartLimit = (int16_t)(steerSettings.lowPWM * softStartMaxPWM * sineRamp);
+                    uint8_t lowPWM = configManager.getLowPWM();
+                    int16_t softStartLimit = (int16_t)(lowPWM * softStartMaxPWM * sineRamp);
                     
                     // Apply limit in direction of motor PWM
                     if (motorPWM > 0) {
@@ -1160,8 +1116,9 @@ void AutosteerProcessor::updateMotorControl() {
     static uint32_t lastPWMSettingsLog = 0;
     if (millis() - lastPWMSettingsLog > 30000) {  // Log every 30 seconds
         lastPWMSettingsLog = millis();
+        // Note: PWM settings now come from ConfigManager
         LOG_DEBUG(EventSource::AUTOSTEER, "PWM Settings: highPWM=%d, lowPWM=%d, minPWM=%d", 
-                  steerSettings.highPWM, steerSettings.lowPWM, steerSettings.minPWM);
+                  configManager.getHighPWM(), configManager.getLowPWM(), configManager.getMinPWM());
     }
     
     // Motor speed is now properly scaled to respect highPWM limit
