@@ -320,7 +320,7 @@ void setup()
   Serial.println("=== AiO New Dawn - System Ready ===");
   Serial.println("========================================");
   Serial.printf("IP Address: %d.%d.%d.%d\r\n", localIP[0], localIP[1], localIP[2], localIP[3]);
-  Serial.println("Web Interface: http://192.168.5.126");
+  Serial.printf("Web Interface: http://%d.%d.%d.%d\r\n", localIP[0], localIP[1], localIP[2], localIP[3]);
   Serial.println("DHCP Server: Enabled");
   Serial.println("========================================");
   Serial.println();
