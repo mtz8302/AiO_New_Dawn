@@ -29,6 +29,9 @@ private:
     // Track when we last sent GPS data to AgIO
     uint32_t lastGPSMessageTime;
     
+    // Track last GPS update time to detect duplicates
+    uint32_t lastGPSUpdateTime;
+    
     // Private constructor for singleton
     NAVProcessor();
     
@@ -53,6 +56,9 @@ public:
     
     // Main processing method
     void process();
+    
+    // Check if we have new GPS data since last send
+    bool hasNewGPSData() const;
     
     // Configuration
     void setMessageRate(uint32_t intervalMs);

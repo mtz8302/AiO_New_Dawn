@@ -27,6 +27,7 @@ public:
         double longitude; // decimal degrees
         float altitude;   // meters
         uint32_t fixTime; // HHMMSS as integer
+        float fixTimeFractional; // Fractional seconds (0.0-0.999)
         
         // GPS time data (for UTC conversion)
         uint16_t gpsWeek;    // GPS week number

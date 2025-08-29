@@ -26,6 +26,7 @@ GNSSProcessor::GNSSProcessor() : bufferIndex(0),
     // Initialize data
 
     gpsData.hdop = 99.9f;
+    gpsData.fixTimeFractional = 0.0f;
     resetParser();
     
     // Initialize UBX parser
@@ -369,7 +370,7 @@ bool GNSSProcessor::parseGGA()
     if (fieldCount < 9)
         return false;
 
-    // Field 1: Time
+    // Field 1: Time (HHMMSS.SS format)
     gpsData.fixTime = parseTime(fields[1]);
 
     // Fields 2-3: Latitude
@@ -419,7 +420,7 @@ bool GNSSProcessor::parseGNS()
     if (fieldCount < 6)
         return false;
 
-    // Field 1: Time
+    // Field 1: Time (HHMMSS.SS format)
     gpsData.fixTime = parseTime(fields[1]);
 
     // Fields 2-3: Latitude
@@ -536,7 +537,8 @@ bool GNSSProcessor::parseKSXT()
         // Extract just HHMMSS.SS portion (skip YYYYMMDD)
         const char* timeStr = fields[1] + 8; // Skip first 8 chars (YYYYMMDD)
         float time = parseFloat(timeStr);
-        gpsData.fixTime = time;
+        gpsData.fixTime = (uint32_t)time;  // Integer part (HHMMSS)
+        gpsData.fixTimeFractional = time - (uint32_t)time;  // Fractional part (.SS)
     }
 
     // Field 2: Longitude (decimal degrees)
@@ -903,8 +905,10 @@ bool GNSSProcessor::parseINSPVAA()
         float seconds = gpsData.gpsSeconds;
         int hours = (int)(seconds / 3600) % 24;
         int minutes = (int)((seconds - hours * 3600) / 60);
-        int secs = (int)(seconds) % 60;
-        gpsData.fixTime = hours * 10000 + minutes * 100 + secs;
+        float secs = seconds - hours * 3600 - minutes * 60;
+        int intSecs = (int)secs;
+        gpsData.fixTime = hours * 10000 + minutes * 100 + intSecs;
+        gpsData.fixTimeFractional = secs - intSecs;
     }
     
     gpsData.hasINS = true;
@@ -1064,8 +1068,10 @@ bool GNSSProcessor::parseINSPVAXA()
         float seconds = gpsData.gpsSeconds;
         int hours = (int)(seconds / 3600) % 24;
         int minutes = (int)((seconds - hours * 3600) / 60);
-        int secs = (int)(seconds) % 60;
-        gpsData.fixTime = hours * 10000 + minutes * 100 + secs;
+        float secs = seconds - hours * 3600 - minutes * 60;
+        int intSecs = (int)secs;
+        gpsData.fixTime = hours * 10000 + minutes * 100 + intSecs;
+        gpsData.fixTimeFractional = secs - intSecs;
     }
     
     gpsData.hasINS = true;

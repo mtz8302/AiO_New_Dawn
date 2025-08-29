@@ -143,6 +143,12 @@ bool NAVProcessor::formatPANDAMessage() {
         return false;
     }
     
+    // Check if GPS data is fresh (max 150ms old for 10Hz GPS)
+    if (!gnssProcessor.isDataFresh(150)) {
+        LOG_ERROR(EventSource::GNSS, "Skipping PANDA - GPS data too old: %lums", gnssProcessor.getDataAge());
+        return false;
+    }
+    
     const auto& gnssData = gnssProcessor.getData();
     
     // Convert coordinates to NMEA format
@@ -166,8 +172,8 @@ bool NAVProcessor::formatPANDAMessage() {
     }
     
     // Format time (HHMMSS.S)
-    // fixTime is stored as HHMMSS integer, convert to float with decimal
-    float timeFloat = gnssData.fixTime + (millis() % 1000) / 1000.0;
+    // Use the fractional seconds from the GPS data if available
+    float timeFloat = gnssData.fixTime + gnssData.fixTimeFractional;
     
     // Build PANDA message without checksum
     int len = snprintf(messageBuffer, BUFFER_SIZE - 4,
@@ -200,6 +206,12 @@ bool NAVProcessor::formatPAOGIMessage() {
     }
     // Allow PAOGI even without valid position for INS_ALIGNING state
     
+    // Check if GPS data is fresh (max 150ms old for 10Hz GPS)
+    if (!gnssProcessor.isDataFresh(150)) {
+        LOG_ERROR(EventSource::GNSS, "Skipping PAOGI - GPS data too old: %lums", gnssProcessor.getDataAge());
+        return false;
+    }
+    
     const auto& gnssData = gnssProcessor.getData();
     
     // Convert coordinates to NMEA format
@@ -231,8 +243,8 @@ bool NAVProcessor::formatPAOGIMessage() {
         // Convert GPS time to UTC
         timeFloat = convertGPStoUTC(gnssData.gpsWeek, gnssData.gpsSeconds);
     } else {
-        // Fallback to fixTime with milliseconds
-        timeFloat = gnssData.fixTime + (millis() % 1000) / 1000.0;
+        // Fallback to fixTime with fractional seconds from GPS
+        timeFloat = gnssData.fixTime + gnssData.fixTimeFractional;
     }
     
     // Build PAOGI message without checksum
@@ -326,7 +338,7 @@ void NAVProcessor::process() {
             if (success) {
                 sendMessage(messageBuffer);
                 // Message sent successfully
-                
+                lastGPSUpdateTime = gnssProcessor.getData().lastUpdateTime;
             }
             break;
             
@@ -335,7 +347,7 @@ void NAVProcessor::process() {
             if (success) {
                 sendMessage(messageBuffer);
                 // Message sent successfully
-                
+                lastGPSUpdateTime = gnssProcessor.getData().lastUpdateTime;
             }
             break;
             
@@ -401,4 +413,9 @@ void NAVProcessor::printStatus() {
     } else {
         LOG_INFO(EventSource::GNSS, "  IMU: Not detected");
     }
+}
+
+bool NAVProcessor::hasNewGPSData() const {
+    const auto& gnssData = gnssProcessor.getData();
+    return gnssData.lastUpdateTime > lastGPSUpdateTime;
 }
