@@ -99,6 +99,13 @@ bool GNSSProcessor::setup(bool enableDebug, bool enableNoiseFilter)
 
 bool GNSSProcessor::processNMEAChar(char c)
 {
+    // Periodic status logging
+    static uint32_t lastStatusLog = 0;
+    if (millis() - lastStatusLog > 10000) {
+        lastStatusLog = millis();
+        LOG_INFO(EventSource::GNSS, "GNSSProcessor status: passthrough=%d", udpPassthroughEnabled);
+    }
+    
     switch (state)
     {
     case WAIT_START:
@@ -115,7 +122,10 @@ bool GNSSProcessor::processNMEAChar(char c)
     case READ_DATA:
         if (c == '*')
         {
-            parseBuffer[bufferIndex] = '\0';
+            // Store the asterisk
+            if (bufferIndex < sizeof(parseBuffer) - 1) {
+                parseBuffer[bufferIndex++] = c;
+            }
             state = READ_CHECKSUM;
             receivedChecksum = 0;
             receivedChecksum32 = 0;
@@ -123,7 +133,7 @@ bool GNSSProcessor::processNMEAChar(char c)
         }
         else if (c == '\r' || c == '\n')
         {
-            // Message without checksum
+            // Message without checksum - shouldn't happen for valid NMEA
             parseBuffer[bufferIndex] = '\0';
             return processMessage();
         }
@@ -143,6 +153,11 @@ bool GNSSProcessor::processNMEAChar(char c)
     case READ_CHECKSUM:
         if (isHex(c))
         {
+            // Store checksum characters
+            if (bufferIndex < sizeof(parseBuffer) - 1) {
+                parseBuffer[bufferIndex++] = c;
+            }
+            
             if (isUnicoreMessage)
             {
                 // Unicore uses 32-bit CRC (8 hex digits)
@@ -152,16 +167,20 @@ bool GNSSProcessor::processNMEAChar(char c)
                     checksumIndex++;
                     if (checksumIndex == 8)
                     {
-                        if (validateChecksum())
-                        {
-                            // Send complete NMEA sentence via UDP if passthrough is enabled
-                            if (udpPassthroughEnabled && bufferIndex > 0) {
-                                sendNMEAViaUDP();
-                            }
-                            return processMessage();
+                        // Complete sentence received
+                        parseBuffer[bufferIndex] = '\0'; // Null terminate
+                        
+                        if (udpPassthroughEnabled) {
+                            // Just send via UDP and done
+                            sendCompleteNMEA();
+                            resetParser();
+                            return true;
                         }
-                        else
-                        {
+                        
+                        // Otherwise validate and process
+                        if (validateChecksum()) {
+                            return processMessage();
+                        } else {
                             resetParser();
                         }
                     }
@@ -178,16 +197,21 @@ bool GNSSProcessor::processNMEAChar(char c)
                 else
                 {
                     receivedChecksum |= hexToInt(c);
-                    if (validateChecksum())
-                    {
-                        // Send complete NMEA sentence via UDP if passthrough is enabled
-                        if (udpPassthroughEnabled && bufferIndex > 0) {
-                            sendNMEAViaUDP();
-                        }
-                        return processMessage();
+                    
+                    // Complete sentence received
+                    parseBuffer[bufferIndex] = '\0'; // Null terminate
+                    
+                    if (udpPassthroughEnabled) {
+                        // Send complete NMEA sentence via UDP
+                        sendCompleteNMEA();
+                        resetParser();
+                        return true;
                     }
-                    else
-                    {
+                    
+                    // Otherwise validate and process
+                    if (validateChecksum()) {
+                        return processMessage();
+                    } else {
                         resetParser();
                     }
                 }
@@ -195,7 +219,7 @@ bool GNSSProcessor::processNMEAChar(char c)
         }
         else if (c == '\r' || c == '\n')
         {
-            resetParser();
+            // End of sentence - ignore trailing CR/LF
         }
         break;
     }
@@ -299,6 +323,7 @@ bool GNSSProcessor::processMessage()
     }
     else if (strstr(msgType, "KSXT"))
     {
+        LOG_INFO(EventSource::GNSS, "Processing KSXT message");
         processed = parseKSXT();
     }
     else if (strstr(msgType, "INSPVAA"))
@@ -1170,30 +1195,22 @@ void GNSSProcessor::sendGPSData()
     // Format is defined in PGN.md - Main Antenna section
 }
 
-void GNSSProcessor::sendNMEAViaUDP()
+void GNSSProcessor::sendCompleteNMEA()
 {
-    // Send raw NMEA sentence directly to AgIO when passthrough is enabled
-    // This bypasses PANDA/PAOGI formatting and sends the original GPS data
+    // Send complete NMEA sentence including checksum with CRLF appended
+    // This is called when UDP passthrough is enabled
+    // The parseBuffer contains the complete sentence including $ or #, data, *, and checksum
     
-    if (!udpPassthroughEnabled || bufferIndex == 0)
+    if (bufferIndex == 0) {
         return;
-    
-    // Build complete sentence with checksum and CRLF
-    uint8_t sentence[310];  // 300 for parseBuffer + 10 extra for checksum and CRLF
-    
-    // Copy the sentence data
-    memcpy(sentence, parseBuffer, bufferIndex);
-    int len = bufferIndex;
-    
-    // Add asterisk if not present
-    if (sentence[len-1] != '*') {
-        sentence[len++] = '*';
     }
     
-    // Add checksum (2 hex digits)
-    uint8_t checksum = calculatedChecksum;
-    sentence[len++] = "0123456789ABCDEF"[(checksum >> 4) & 0x0F];
-    sentence[len++] = "0123456789ABCDEF"[checksum & 0x0F];
+    // Build complete sentence with CRLF
+    uint8_t sentence[310];  // 300 for parseBuffer + 10 extra for CRLF
+    
+    // Copy the complete sentence (includes $/#, data, *, and checksum)
+    memcpy(sentence, parseBuffer, bufferIndex);
+    int len = bufferIndex;
     
     // Add CRLF
     sentence[len++] = '\r';
@@ -1203,8 +1220,13 @@ void GNSSProcessor::sendNMEAViaUDP()
     sendUDPbytes(sentence, len);
     
     // Debug logging
-    if (enableDebug) {
-        sentence[len-2] = '\0';  // Null terminate for logging (remove CRLF)
-        LOG_DEBUG(EventSource::GNSS, "UDP Passthrough: %s", sentence);
+    static uint32_t lastPassthroughLog = 0;
+    static uint32_t passthroughCount = 0;
+    passthroughCount++;
+    
+    if (millis() - lastPassthroughLog > 5000) {
+        lastPassthroughLog = millis();
+        LOG_INFO(EventSource::GNSS, "UDP Passthrough: %lu sentences sent", passthroughCount);
+        passthroughCount = 0;
     }
 }

@@ -7,6 +7,7 @@
 #include "Arduino.h"
 #include <stdint.h>
 #include "PGNProcessor.h"
+#include "EventLogger.h"
 
 // PGN Constants for GPS module
 constexpr uint8_t GPS_SOURCE_ID = 0x78;     // 120 decimal - GPS source address (from PGN.md GPS Reply)
@@ -84,7 +85,10 @@ public:
     };
 
     // UDP passthrough control
-    void setUDPPassthrough(bool enabled) { udpPassthroughEnabled = enabled; }
+    void setUDPPassthrough(bool enabled) { 
+        udpPassthroughEnabled = enabled; 
+        LOG_INFO(EventSource::GNSS, "UDP Passthrough %s", enabled ? "ENABLED" : "DISABLED");
+    }
     bool isUDPPassthroughEnabled() const { return udpPassthroughEnabled; }
 
 private:
@@ -139,7 +143,7 @@ private:
     bool parseINSPVAXA();
     
     // UDP passthrough
-    void sendNMEAViaUDP();
+    void sendCompleteNMEA();
 
     // Field parsing utilities
     double parseLatitude(const char *lat, const char *ns);

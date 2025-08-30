@@ -467,6 +467,9 @@ void SimpleWebManager::handleDeviceSettings(EthernetClient& client, const String
         config->saveSteerConfig();       // This saves PWM brake mode
         config->saveGPSConfig();         // This saves GPS passthrough
         
+        // Update GNSSProcessor with new passthrough setting
+        gnssProcessor.setUDPPassthrough(udpPassthrough);
+        
         LOG_INFO(EventSource::NETWORK, "Device settings saved: UDP=%d, Brake=%d, Encoder=%d", 
                  udpPassthrough, pwmBrakeMode, encoderType);
         
