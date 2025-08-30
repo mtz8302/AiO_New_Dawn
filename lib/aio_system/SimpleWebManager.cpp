@@ -470,8 +470,8 @@ void SimpleWebManager::handleDeviceSettings(EthernetClient& client, const String
         // Update GNSSProcessor with new passthrough setting
         gnssProcessor.setUDPPassthrough(udpPassthrough);
         
-        LOG_INFO(EventSource::NETWORK, "Device settings saved: UDP=%d, Brake=%d, Encoder=%d", 
-                 udpPassthrough, pwmBrakeMode, encoderType);
+        LOG_DEBUG(EventSource::NETWORK, "Device settings saved: UDP=%d, Brake=%d, Encoder=%d", 
+                  udpPassthrough, pwmBrakeMode, encoderType);
         
         SimpleHTTPServer::sendJSON(client, "{\"status\":\"saved\"}");
         

@@ -87,7 +87,7 @@ public:
     // UDP passthrough control
     void setUDPPassthrough(bool enabled) { 
         udpPassthroughEnabled = enabled; 
-        LOG_INFO(EventSource::GNSS, "UDP Passthrough %s", enabled ? "ENABLED" : "DISABLED");
+        LOG_DEBUG(EventSource::GNSS, "UDP Passthrough %s", enabled ? "ENABLED" : "DISABLED");
     }
     bool isUDPPassthroughEnabled() const { return udpPassthroughEnabled; }
 

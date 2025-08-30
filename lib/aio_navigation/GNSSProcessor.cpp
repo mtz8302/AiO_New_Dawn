@@ -49,8 +49,8 @@ bool GNSSProcessor::init()
     // Load UDP passthrough setting from ConfigManager
     extern ConfigManager configManager;
     udpPassthroughEnabled = configManager.getGPSPassThrough();
-    LOG_INFO(EventSource::GNSS, "UDP Passthrough %s (from EEPROM)", 
-             udpPassthroughEnabled ? "enabled" : "disabled");
+    LOG_DEBUG(EventSource::GNSS, "UDP Passthrough %s (from EEPROM)", 
+              udpPassthroughEnabled ? "enabled" : "disabled");
     
     // Register with PGNProcessor to receive broadcast messages
     if (PGNProcessor::instance)
@@ -101,7 +101,7 @@ bool GNSSProcessor::processNMEAChar(char c)
 {
     // Periodic status logging
     static uint32_t lastStatusLog = 0;
-    if (millis() - lastStatusLog > 10000) {
+    if (millis() - lastStatusLog > 60000) {  // Every minute
         lastStatusLog = millis();
         LOG_INFO(EventSource::GNSS, "GNSSProcessor status: passthrough=%d", udpPassthroughEnabled);
     }
@@ -323,7 +323,7 @@ bool GNSSProcessor::processMessage()
     }
     else if (strstr(msgType, "KSXT"))
     {
-        LOG_INFO(EventSource::GNSS, "Processing KSXT message");
+        LOG_DEBUG(EventSource::GNSS, "Processing KSXT message");
         processed = parseKSXT();
     }
     else if (strstr(msgType, "INSPVAA"))
@@ -901,9 +901,9 @@ bool GNSSProcessor::parseINSPVAA()
             gpsData.fixQuality = 1;  // Basic fix
         }
         
-        // Debug output - always show INS status for now
-        LOG_INFO(EventSource::GNSS, "INS Status: '%s' (alignment=%d, fixQuality=%d)", 
-                 fields[21], gpsData.insAlignmentStatus, gpsData.fixQuality);
+        // Debug output
+        LOG_DEBUG(EventSource::GNSS, "INS Status: '%s' (alignment=%d, fixQuality=%d)", 
+                  fields[21], gpsData.insAlignmentStatus, gpsData.fixQuality);
     }
     else
     {
@@ -1226,7 +1226,7 @@ void GNSSProcessor::sendCompleteNMEA()
     
     if (millis() - lastPassthroughLog > 5000) {
         lastPassthroughLog = millis();
-        LOG_INFO(EventSource::GNSS, "UDP Passthrough: %lu sentences sent", passthroughCount);
+        LOG_DEBUG(EventSource::GNSS, "UDP Passthrough: %lu sentences sent", passthroughCount);
         passthroughCount = 0;
     }
 }
