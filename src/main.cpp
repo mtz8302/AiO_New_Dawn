@@ -442,7 +442,8 @@ void loop()
   if (SerialGPS2.available())
   {
     uint8_t b = SerialGPS2.read();
-    gnssProcessor.processUBXByte(b);
+    //gnssProcessor.processUBXByte(b);
+    SerialRS232.write(b);  // forward UM982 com2 to RS232 for GS3 2630 harvest documentation
   }
 
   // Loop timing - ultra lightweight, just increment counter
