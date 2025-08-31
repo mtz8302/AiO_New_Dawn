@@ -256,7 +256,6 @@ void GNSSProcessor::resetParser()
     checksumIndex = 0;
     isUnicoreMessage = false;
     memset(parseBuffer, 0, sizeof(parseBuffer));
-    memset(fields, 0, sizeof(fields));
 }
 
 bool GNSSProcessor::validateChecksum()
@@ -301,16 +300,13 @@ bool GNSSProcessor::processMessage()
         return false;
     }
 
-    // For now, still populate the legacy fields array for compatibility
-    // This will be removed once all parsers are converted
-    for (uint8_t i = 0; i < fieldCount && i < 35; i++) {
-        uint8_t copyLen = min(fieldRefs[i].length, (uint8_t)23);
-        memcpy(fields[i], fieldRefs[i].start, copyLen);
-        fields[i][copyLen] = '\0';
-    }
-
     // Determine message type and process
-    const char *msgType = fields[0];  // Will use fieldRefs[0] directly later
+    // Extract message type from first field for detection
+    char msgTypeBuffer[16];
+    uint8_t msgTypeLen = min(fieldRefs[0].length, (uint8_t)15);
+    memcpy(msgTypeBuffer, fieldRefs[0].start, msgTypeLen);
+    msgTypeBuffer[msgTypeLen] = '\0';
+    const char *msgType = msgTypeBuffer;
     bool processed = false;
     
     // Debug enabled for testing
@@ -345,7 +341,7 @@ bool GNSSProcessor::processMessage()
             break;
             
         case MSG_INSPVAA:
-            processed = parseINSPVAAZeroCopy();  // Use zero-copy version
+            processed = parseINSPVAA();  // Already converted to zero-copy
             break;
             
         case MSG_INSPVAXA:
@@ -382,196 +378,10 @@ bool GNSSProcessor::processMessage()
     return processed;
 }
 
-void GNSSProcessor::parseFields()
-{
-    fieldCount = 0;
-    uint8_t fieldIndex = 0;
 
-    // Skip the '$' or '#' and parse comma-separated fields
-    for (int i = 1; i < bufferIndex && fieldCount < 35; i++)
-    {
-        char c = parseBuffer[i];
 
-        if (c == ',' || c == ';' || c == '\0')
-        {
-            fields[fieldCount][fieldIndex] = '\0';
-            fieldCount++;
-            fieldIndex = 0;
-        }
-        else if (fieldIndex < 23)  // Increased from 15 to 23 to match field size
-        {
-            fields[fieldCount][fieldIndex++] = c;
-        }
-    }
-    
-    // Handle the last field if we haven't terminated it yet
-    if (fieldIndex > 0 && fieldCount < 35)
-    {
-        fields[fieldCount][fieldIndex] = '\0';
-        fieldCount++;
-    }
-}
 
-bool GNSSProcessor::parseGGA()
-{
-    if (fieldCount < 9)
-        return false;
 
-    // Field 1: Time (HHMMSS.SS format)
-    gpsData.fixTime = parseTime(fields[1]);
-
-    // Fields 2-3: Latitude
-    gpsData.latitude = parseLatitude(fields[2], fields[3]);
-
-    // Fields 4-5: Longitude
-    gpsData.longitude = parseLongitude(fields[4], fields[5]);
-
-    // Field 6: Fix quality
-    gpsData.fixQuality = parseFixQuality(fields[6]);
-
-    // Field 7: Number of satellites
-    gpsData.numSatellites = atoi(fields[7]);
-
-    // Field 8: HDOP
-    gpsData.hdop = parseFloat(fields[8]);
-
-    // Field 9: Altitude
-    gpsData.altitude = parseFloat(fields[9]);
-
-    // Field 13: Age of DGPS (if present)
-    if (fieldCount > 13 && strlen(fields[13]) > 0)
-    {
-        gpsData.ageDGPS = atoi(fields[13]);
-    }
-
-    // Check if we have valid position data
-    // Need fix quality > 0 AND non-empty lat/lon fields
-    bool hasValidCoords = (strlen(fields[2]) > 0 && strlen(fields[3]) > 0 && 
-                          strlen(fields[4]) > 0 && strlen(fields[5]) > 0);
-    
-    gpsData.hasPosition = (gpsData.fixQuality > 0) && hasValidCoords && 
-                         (gpsData.latitude != 0.0 || gpsData.longitude != 0.0);
-    gpsData.isValid = gpsData.hasPosition;
-    gpsData.messageTypeMask |= (1 << 0);  // Set GGA bit
-
-    if (enableDebug)
-    {
-        logDebug("GGA processed");
-    }
-
-    return true;
-}
-
-bool GNSSProcessor::parseGNS()
-{
-    if (fieldCount < 6)
-        return false;
-
-    // Field 1: Time (HHMMSS.SS format)
-    gpsData.fixTime = parseTime(fields[1]);
-
-    // Fields 2-3: Latitude
-    gpsData.latitude = parseLatitude(fields[2], fields[3]);
-
-    // Fields 4-5: Longitude
-    gpsData.longitude = parseLongitude(fields[4], fields[5]);
-
-    // Field 6: Mode indicator (convert to fix quality)
-    gpsData.fixQuality = parseFixQuality(fields[6], true);
-
-    // Fields 7-8: Satellites, HDOP (if present)
-    if (fieldCount > 7 && strlen(fields[7]) > 0)
-    {
-        gpsData.numSatellites = atoi(fields[7]);
-    }
-    if (fieldCount > 8 && strlen(fields[8]) > 0)
-    {
-        gpsData.hdop = parseFloat(fields[8]);
-    }
-    if (fieldCount > 9 && strlen(fields[9]) > 0)
-    {
-        gpsData.altitude = parseFloat(fields[9]);
-    }
-
-    gpsData.hasPosition = (gpsData.fixQuality > 0);
-    gpsData.isValid = gpsData.hasPosition;
-    gpsData.messageTypeMask |= (1 << 2);  // Set GNS bit
-
-    if (enableDebug)
-    {
-        logDebug("GNS processed");
-    }
-
-    return true;
-}
-
-bool GNSSProcessor::parseVTG()
-{
-    if (fieldCount < 5)
-        return false;
-
-    // Field 1: True heading
-    if (strlen(fields[1]) > 0)
-    {
-        gpsData.headingTrue = parseFloat(fields[1]);
-    }
-
-    // Field 5: Speed in knots
-    if (strlen(fields[5]) > 0)
-    {
-        gpsData.speedKnots = parseFloat(fields[5]);
-
-        // Apply F9P noise filtering if enabled
-        if (enableNoiseFilter && gpsData.speedKnots < 0.1f)
-        {
-            gpsData.speedKnots = 0.0f;
-        }
-    }
-
-    gpsData.hasVelocity = true;
-    gpsData.messageTypeMask |= (1 << 1);  // Set VTG bit
-
-    if (enableDebug)
-    {
-        logDebug("VTG processed");
-    }
-
-    return true;
-}
-
-bool GNSSProcessor::parseHPR()
-{
-    if (fieldCount < 5)
-        return false;
-
-    // Field 2: Heading
-    if (strlen(fields[2]) > 0)
-    {
-        gpsData.dualHeading = parseFloat(fields[2]);
-    }
-
-    // Field 3: Roll
-    if (strlen(fields[3]) > 0)
-    {
-        gpsData.dualRoll = parseFloat(fields[3]);
-    }
-
-    // Field 5: Solution quality
-    if (strlen(fields[5]) > 0)
-    {
-        gpsData.headingQuality = atoi(fields[5]);
-    }
-
-    gpsData.hasDualHeading = true;
-    gpsData.messageTypeMask |= (1 << 5);  // Set HPR bit
-
-    if (enableDebug)
-    {
-        logDebug("HPR processed");
-    }
-
-    return true;
-}
 
 bool GNSSProcessor::parseKSXT()
 {
@@ -579,52 +389,65 @@ bool GNSSProcessor::parseKSXT()
         return false;
 
     // Field 1: Timestamp (YYYYMMDDHHMMSS.SS format)
-    if (strlen(fields[1]) >= 14)
+    if (fieldRefs[1].length >= 14)
     {
         // Extract just HHMMSS.SS portion (skip YYYYMMDD)
-        const char* timeStr = fields[1] + 8; // Skip first 8 chars (YYYYMMDD)
-        float time = parseFloat(timeStr);
-        gpsData.fixTime = (uint32_t)time;  // Integer part (HHMMSS)
-        gpsData.fixTimeFractional = time - (uint32_t)time;  // Fractional part (.SS)
+        const char* timeStr = fieldRefs[1].start + 8; // Skip first 8 chars (YYYYMMDD)
+        
+        // Parse HHMMSS part manually
+        int hours = (timeStr[0] - '0') * 10 + (timeStr[1] - '0');
+        int mins = (timeStr[2] - '0') * 10 + (timeStr[3] - '0');
+        int secs = (timeStr[4] - '0') * 10 + (timeStr[5] - '0');
+        gpsData.fixTime = hours * 10000 + mins * 100 + secs;
+        
+        // Parse fractional seconds if present
+        if (timeStr[6] == '.' && fieldRefs[1].length >= 16)
+        {
+            gpsData.fixTimeFractional = (timeStr[7] - '0') * 0.1f + (timeStr[8] - '0') * 0.01f;
+        }
+        else
+        {
+            gpsData.fixTimeFractional = 0.0f;
+        }
     }
 
     // Field 2: Longitude (decimal degrees)
-    if (strlen(fields[2]) > 0)
+    if (fieldRefs[2].length > 0)
     {
-        gpsData.longitude = atof(fields[2]);
+        gpsData.longitude = parseDoubleZeroCopy(fieldRefs[2]);
     }
 
     // Field 3: Latitude (decimal degrees)
-    if (strlen(fields[3]) > 0)
+    if (fieldRefs[3].length > 0)
     {
-        gpsData.latitude = atof(fields[3]);
+        gpsData.latitude = parseDoubleZeroCopy(fieldRefs[3]);
     }
     
     // Cache NMEA format coordinates
     cacheNMEACoordinates(gpsData.latitude, gpsData.longitude);
 
     // Field 4: Altitude
-    if (strlen(fields[4]) > 0)
+    if (fieldRefs[4].length > 0)
     {
-        gpsData.altitude = parseFloat(fields[4]);
+        gpsData.altitude = parseFloatZeroCopy(fieldRefs[4]);
     }
 
     // Field 5: Heading
-    if (strlen(fields[5]) > 0)
+    if (fieldRefs[5].length > 0)
     {
-        gpsData.dualHeading = parseFloat(fields[5]);
+        gpsData.dualHeading = parseFloatZeroCopy(fieldRefs[5]);
     }
 
     // Field 6: Pitch (used as roll in AOG)
-    if (strlen(fields[6]) > 0)
+    if (fieldRefs[6].length > 0)
     {
-        gpsData.dualRoll = parseFloat(fields[6]);
+        gpsData.dualRoll = parseFloatZeroCopy(fieldRefs[6]);
     }
 
     // Field 10: Position quality (convert to GGA scheme)
-    if (strlen(fields[10]) > 0)
+    if (fieldRefs[10].length > 0)
     {
-        uint8_t ksxtQual = atoi(fields[10]);
+        uint8_t ksxtQual = parseIntZeroCopy(fieldRefs[10]);
         if (ksxtQual == 2)
             ksxtQual = 5; // FLOAT
         if (ksxtQual == 3)
@@ -637,16 +460,16 @@ bool GNSSProcessor::parseKSXT()
     }
 
     // Field 8: Speed in km/h - convert to knots
-    if (strlen(fields[8]) > 0)
+    if (fieldRefs[8].length > 0)
     {
-        float speedKmh = parseFloat(fields[8]);
+        float speedKmh = parseFloatZeroCopy(fieldRefs[8]);
         gpsData.speedKnots = speedKmh * 0.539957f; // Convert km/h to knots
     }
 
     // Field 13: Number of satellites
-    if (fieldCount > 13 && strlen(fields[13]) > 0)
+    if (fieldCount > 13 && fieldRefs[13].length > 0)
     {
-        gpsData.numSatellites = atoi(fields[13]);
+        gpsData.numSatellites = parseIntZeroCopy(fieldRefs[13]);
     }
 
     // Note: HDOP not directly available in KSXT, using default
@@ -854,21 +677,26 @@ bool GNSSProcessor::parseINSPVAA()
         LOG_DEBUG(EventSource::GNSS, "INSPVAA Fields (total=%d):", fieldCount);
         for (int i = 0; i < min(fieldCount, 25); i++)
         {
-            LOG_DEBUG(EventSource::GNSS, "  [%d]: %s", i, fields[i]);
+            // Convert field to string for debug output
+            char fieldBuf[32];
+            int len = fieldRefs[i].length < 31 ? fieldRefs[i].length : 31;
+            memcpy(fieldBuf, fieldRefs[i].start, len);
+            fieldBuf[len] = '\0';
+            LOG_DEBUG(EventSource::GNSS, "  [%d]: %s", i, fieldBuf);
         }
     }
     
     // Field 12: Latitude (degrees)
-    if (strlen(fields[12]) > 0)
+    if (fieldRefs[12].length > 0)
     {
-        gpsData.latitude = parseFloat(fields[12]);
+        gpsData.latitude = parseFloatZeroCopy(fieldRefs[12]);
         gpsData.hasPosition = true;
     }
     
     // Field 13: Longitude (degrees)
-    if (strlen(fields[13]) > 0)
+    if (fieldRefs[13].length > 0)
     {
-        gpsData.longitude = parseFloat(fields[13]);
+        gpsData.longitude = parseFloatZeroCopy(fieldRefs[13]);
     }
     
     // Cache NMEA format coordinates
@@ -877,17 +705,17 @@ bool GNSSProcessor::parseINSPVAA()
     }
     
     // Field 14: Height (meters)
-    if (strlen(fields[14]) > 0)
+    if (fieldRefs[14].length > 0)
     {
-        gpsData.altitude = parseFloat(fields[14]);
+        gpsData.altitude = parseFloatZeroCopy(fieldRefs[14]);
     }
     
     // Field 15,16,17: North, East, Up velocities (m/s)
-    if (strlen(fields[15]) > 0 && strlen(fields[16]) > 0 && strlen(fields[17]) > 0)
+    if (fieldRefs[15].length > 0 && fieldRefs[16].length > 0 && fieldRefs[17].length > 0)
     {
-        gpsData.northVelocity = parseFloat(fields[15]);
-        gpsData.eastVelocity = parseFloat(fields[16]);
-        gpsData.upVelocity = parseFloat(fields[17]);
+        gpsData.northVelocity = parseFloatZeroCopy(fieldRefs[15]);
+        gpsData.eastVelocity = parseFloatZeroCopy(fieldRefs[16]);
+        gpsData.upVelocity = parseFloatZeroCopy(fieldRefs[17]);
         
         // Calculate speed in knots from north/east velocities
         float speedMs = sqrt(gpsData.northVelocity * gpsData.northVelocity + 
@@ -897,11 +725,11 @@ bool GNSSProcessor::parseINSPVAA()
     }
     
     // Field 18,19,20: Roll, Pitch, Azimuth (degrees)
-    if (strlen(fields[18]) > 0 && strlen(fields[19]) > 0 && strlen(fields[20]) > 0)
+    if (fieldRefs[18].length > 0 && fieldRefs[19].length > 0 && fieldRefs[20].length > 0)
     {
-        gpsData.insRoll = parseFloat(fields[18]);
-        gpsData.insPitch = parseFloat(fields[19]);
-        gpsData.insHeading = parseFloat(fields[20]);
+        gpsData.insRoll = parseFloatZeroCopy(fieldRefs[18]);
+        gpsData.insPitch = parseFloatZeroCopy(fieldRefs[19]);
+        gpsData.insHeading = parseFloatZeroCopy(fieldRefs[20]);
         
         // For UM981, use INS heading/roll as dual antenna data
         gpsData.dualHeading = gpsData.insHeading;
@@ -915,20 +743,21 @@ bool GNSSProcessor::parseINSPVAA()
     }
     
     // Field 21: INS status (e.g., "INS_ALIGNING", "INS_SOLUTION_GOOD", etc.)
-    if (fieldCount > 21 && strlen(fields[21]) > 0)
+    if (fieldCount > 21 && fieldRefs[21].length > 0)
     {
         // Parse INS alignment status string
-        if (strstr(fields[21], "INS_ALIGNING"))
+        if (fieldStartsWith(fieldRefs[21], "INS_ALIGNING"))
         {
             gpsData.insAlignmentStatus = 7;  // Aligning
             gpsData.fixQuality = 0;  // No fix during alignment
         }
-        else if (strstr(fields[21], "INS_SOLUTION_GOOD") || strstr(fields[21], "INS_HIGH_VARIANCE"))
+        else if (fieldStartsWith(fieldRefs[21], "INS_SOLUTION_GOOD") || 
+                 fieldStartsWith(fieldRefs[21], "INS_HIGH_VARIANCE"))
         {
             gpsData.insAlignmentStatus = 3;  // Solution good
             gpsData.fixQuality = 4;  // RTK-like quality for good INS
         }
-        else if (strstr(fields[21], "INS_INACTIVE"))
+        else if (fieldStartsWith(fieldRefs[21], "INS_INACTIVE"))
         {
             gpsData.insAlignmentStatus = 0;  // Inactive
             gpsData.fixQuality = 1;  // Basic GPS fix
@@ -940,8 +769,14 @@ bool GNSSProcessor::parseINSPVAA()
         }
         
         // Debug output
-        LOG_DEBUG(EventSource::GNSS, "INS Status: '%s' (alignment=%d, fixQuality=%d)", 
-                  fields[21], gpsData.insAlignmentStatus, gpsData.fixQuality);
+        if (enableDebug) {
+            char statusBuf[32];
+            int len = fieldRefs[21].length < 31 ? fieldRefs[21].length : 31;
+            memcpy(statusBuf, fieldRefs[21].start, len);
+            statusBuf[len] = '\0';
+            LOG_DEBUG(EventSource::GNSS, "INS Status: '%s' (alignment=%d, fixQuality=%d)", 
+                      statusBuf, gpsData.insAlignmentStatus, gpsData.fixQuality);
+        }
     }
     else
     {
@@ -958,11 +793,11 @@ bool GNSSProcessor::parseINSPVAA()
     gpsData.hdop = 0.9f; // Good HDOP for INS solution
     
     // Set GPS time from fields 5,6 (week, seconds) from header
-    if (strlen(fields[5]) > 0 && strlen(fields[6]) > 0)
+    if (fieldRefs[5].length > 0 && fieldRefs[6].length > 0)
     {
         // Store GPS week and seconds for UTC conversion
-        gpsData.gpsWeek = (uint16_t)atoi(fields[5]);
-        gpsData.gpsSeconds = parseFloat(fields[6]);
+        gpsData.gpsWeek = (uint16_t)parseIntZeroCopy(fieldRefs[5]);
+        gpsData.gpsSeconds = parseFloatZeroCopy(fieldRefs[6]);
         
         // Also store as fixTime for compatibility
         float seconds = gpsData.gpsSeconds;
@@ -1006,7 +841,7 @@ bool GNSSProcessor::parseINSPVAXA()
     
     // Field 10: INS Status - check if still aligning
     bool insAligning = false;
-    if (strstr(fields[10], "INS_ALIGNING") != nullptr)
+    if (fieldStartsWith(fieldRefs[10], "INS_ALIGNING"))
     {
         insAligning = true;
         if (enableDebug)
@@ -1016,13 +851,13 @@ bool GNSSProcessor::parseINSPVAXA()
     }
     
     // Field 12: Latitude (degrees)
-    if (strlen(fields[12]) > 0)
+    if (fieldRefs[12].length > 0)
     {
         if (insAligning) {
             // Use Greenwich Observatory coordinates while aligning
             gpsData.latitude = 51.4779;  // Greenwich Observatory latitude
         } else {
-            gpsData.latitude = parseFloat(fields[12]);
+            gpsData.latitude = parseFloatZeroCopy(fieldRefs[12]);
         }
         // Only mark as having position if not aligning and coords are not 0,0
         gpsData.hasPosition = !insAligning && 
@@ -1030,13 +865,13 @@ bool GNSSProcessor::parseINSPVAXA()
     }
     
     // Field 13: Longitude (degrees)
-    if (strlen(fields[13]) > 0)
+    if (fieldRefs[13].length > 0)
     {
         if (insAligning) {
             // Use Greenwich Observatory coordinates while aligning
             gpsData.longitude = -0.0015;  // Greenwich Observatory longitude (slightly west)
         } else {
-            gpsData.longitude = parseFloat(fields[13]);
+            gpsData.longitude = parseFloatZeroCopy(fieldRefs[13]);
         }
     }
     
@@ -1044,22 +879,22 @@ bool GNSSProcessor::parseINSPVAXA()
     cacheNMEACoordinates(gpsData.latitude, gpsData.longitude);
     
     // Field 14: Height (meters)
-    if (strlen(fields[14]) > 0)
+    if (fieldRefs[14].length > 0)
     {
         if (insAligning) {
             gpsData.altitude = 100.0;  // Distinctive altitude for aligning state
         } else {
-            gpsData.altitude = parseFloat(fields[14]);
+            gpsData.altitude = parseFloatZeroCopy(fieldRefs[14]);
         }
     }
     
     // Field 15: Undulation (skip)
     // Field 16,17,18: North, East, Up velocities (m/s)
-    if (strlen(fields[16]) > 0 && strlen(fields[17]) > 0 && strlen(fields[18]) > 0)
+    if (fieldRefs[16].length > 0 && fieldRefs[17].length > 0 && fieldRefs[18].length > 0)
     {
-        gpsData.northVelocity = parseFloat(fields[16]);
-        gpsData.eastVelocity = parseFloat(fields[17]);
-        gpsData.upVelocity = parseFloat(fields[18]);
+        gpsData.northVelocity = parseFloatZeroCopy(fieldRefs[16]);
+        gpsData.eastVelocity = parseFloatZeroCopy(fieldRefs[17]);
+        gpsData.upVelocity = parseFloatZeroCopy(fieldRefs[18]);
         
         // Calculate speed in knots from north/east velocities
         float speedMs = sqrt(gpsData.northVelocity * gpsData.northVelocity + 
@@ -1069,11 +904,11 @@ bool GNSSProcessor::parseINSPVAXA()
     }
     
     // Field 19,20,21: Roll, Pitch, Azimuth (degrees)
-    if (strlen(fields[19]) > 0 && strlen(fields[20]) > 0 && strlen(fields[21]) > 0)
+    if (fieldRefs[19].length > 0 && fieldRefs[20].length > 0 && fieldRefs[21].length > 0)
     {
-        gpsData.insRoll = parseFloat(fields[19]);
-        gpsData.insPitch = parseFloat(fields[20]);
-        gpsData.insHeading = parseFloat(fields[21]);
+        gpsData.insRoll = parseFloatZeroCopy(fieldRefs[19]);
+        gpsData.insPitch = parseFloatZeroCopy(fieldRefs[20]);
+        gpsData.insHeading = parseFloatZeroCopy(fieldRefs[21]);
         
         // For UM981, use INS heading/roll as dual antenna data
         gpsData.dualHeading = gpsData.insHeading;
@@ -1083,19 +918,19 @@ bool GNSSProcessor::parseINSPVAXA()
     
     // Field 22: Reserved (skip)
     // Field 23,24,25: Position StdDev (lat, lon, height) in meters  
-    if (strlen(fields[23]) > 0 && strlen(fields[24]) > 0 && strlen(fields[25]) > 0)
+    if (fieldRefs[23].length > 0 && fieldRefs[24].length > 0 && fieldRefs[25].length > 0)
     {
-        gpsData.posStdDevLat = parseFloat(fields[23]);
-        gpsData.posStdDevLon = parseFloat(fields[24]);
-        gpsData.posStdDevAlt = parseFloat(fields[25]);
+        gpsData.posStdDevLat = parseFloatZeroCopy(fieldRefs[23]);
+        gpsData.posStdDevLon = parseFloatZeroCopy(fieldRefs[24]);
+        gpsData.posStdDevAlt = parseFloatZeroCopy(fieldRefs[25]);
     }
     
     // Field 26,27,28: Velocity StdDev (north, east, up) in m/s
-    if (strlen(fields[26]) > 0 && strlen(fields[27]) > 0 && strlen(fields[28]) > 0)
+    if (fieldRefs[26].length > 0 && fieldRefs[27].length > 0 && fieldRefs[28].length > 0)
     {
-        gpsData.velStdDevNorth = parseFloat(fields[26]);
-        gpsData.velStdDevEast = parseFloat(fields[27]);
-        gpsData.velStdDevUp = parseFloat(fields[28]);
+        gpsData.velStdDevNorth = parseFloatZeroCopy(fieldRefs[26]);
+        gpsData.velStdDevEast = parseFloatZeroCopy(fieldRefs[27]);
+        gpsData.velStdDevUp = parseFloatZeroCopy(fieldRefs[28]);
     }
     
     // Set fix quality and other parameters based on INS status
@@ -1124,11 +959,11 @@ bool GNSSProcessor::parseINSPVAXA()
     }
     
     // Set GPS time from fields 5,6 (week, seconds) from header
-    if (strlen(fields[5]) > 0 && strlen(fields[6]) > 0)
+    if (fieldRefs[5].length > 0 && fieldRefs[6].length > 0)
     {
         // Store GPS week and seconds for UTC conversion
-        gpsData.gpsWeek = (uint16_t)atoi(fields[5]);
-        gpsData.gpsSeconds = parseFloat(fields[6]);
+        gpsData.gpsWeek = (uint16_t)parseIntZeroCopy(fieldRefs[5]);
+        gpsData.gpsSeconds = parseFloatZeroCopy(fieldRefs[6]);
         
         // Also store as fixTime for compatibility
         float seconds = gpsData.gpsSeconds;
@@ -1677,118 +1512,3 @@ bool GNSSProcessor::parseHPRZeroCopy() {
     return true;
 }
 
-bool GNSSProcessor::parseINSPVAAZeroCopy() {
-    // INSPVAA format: #INSPVAA,header;week,seconds,lat,lon,height,north_vel,east_vel,up_vel,roll,pitch,azimuth,status*checksum
-    // Field 12 starts latitude (after header fields)
-    if (fieldCount < 18)
-        return false;
-    
-    // Debug field output
-    if (enableDebug) {
-        LOG_DEBUG(EventSource::GNSS, "INSPVAA Fields (zero-copy, total=%d)", fieldCount);
-    }
-    
-    // Field 12: Latitude (degrees)
-    if (fieldRefs[12].length > 0) {
-        gpsData.latitude = parseFloatZeroCopy(fieldRefs[12]);
-        gpsData.hasPosition = true;
-    }
-    
-    // Field 13: Longitude (degrees)  
-    if (fieldRefs[13].length > 0) {
-        gpsData.longitude = parseFloatZeroCopy(fieldRefs[13]);
-    }
-    
-    // Cache NMEA format coordinates
-    if (gpsData.hasPosition) {
-        cacheNMEACoordinates(gpsData.latitude, gpsData.longitude);
-    }
-    
-    // Field 14: Height (meters)
-    if (fieldRefs[14].length > 0) {
-        gpsData.altitude = parseFloatZeroCopy(fieldRefs[14]);
-    }
-    
-    // Field 15,16,17: North, East, Up velocities (m/s)
-    if (fieldRefs[15].length > 0 && fieldRefs[16].length > 0 && fieldRefs[17].length > 0) {
-        gpsData.northVelocity = parseFloatZeroCopy(fieldRefs[15]);
-        gpsData.eastVelocity = parseFloatZeroCopy(fieldRefs[16]);
-        gpsData.upVelocity = parseFloatZeroCopy(fieldRefs[17]);
-        
-        // Calculate speed in knots from north/east velocities
-        float speedMs = sqrt(gpsData.northVelocity * gpsData.northVelocity + 
-                            gpsData.eastVelocity * gpsData.eastVelocity);
-        gpsData.speedKnots = speedMs * 1.94384f;  // m/s to knots
-        gpsData.hasVelocity = true;
-    }
-    
-    // Field 18: Roll (degrees)
-    if (fieldRefs[18].length > 0) {
-        gpsData.insRoll = parseFloatZeroCopy(fieldRefs[18]);
-    }
-    
-    // Field 19: Pitch (degrees)
-    if (fieldRefs[19].length > 0) {
-        gpsData.insPitch = parseFloatZeroCopy(fieldRefs[19]);
-    }
-    
-    // Field 20: Azimuth/Heading (degrees)
-    if (fieldRefs[20].length > 0) {
-        gpsData.insHeading = parseFloatZeroCopy(fieldRefs[20]);
-        gpsData.headingTrue = gpsData.insHeading;  // Use INS heading as true heading
-    }
-    
-    // Field 21: INS Status
-    if (fieldCount > 21 && fieldRefs[21].length > 0) {
-        gpsData.insStatus = parseIntZeroCopy(fieldRefs[21]);
-    }
-    
-    // Field 10: Position type (determines fix quality)
-    if (fieldRefs[10].length > 0) {
-        gpsData.posType = parseIntZeroCopy(fieldRefs[10]);
-        
-        // Map position type to fix quality
-        switch(gpsData.posType) {
-            case 0:  gpsData.fixQuality = 0; break;  // NONE
-            case 1:  gpsData.fixQuality = 1; break;  // FIXEDPOS
-            case 2:  gpsData.fixQuality = 1; break;  // FIXEDHEIGHT
-            case 8:  gpsData.fixQuality = 2; break;  // SINGLE
-            case 16: gpsData.fixQuality = 2; break;  // PSRDIFF
-            case 17: gpsData.fixQuality = 2; break;  // WAAS
-            case 32: gpsData.fixQuality = 5; break;  // L1_FLOAT
-            case 34: gpsData.fixQuality = 5; break;  // NARROW_FLOAT
-            case 48: gpsData.fixQuality = 4; break;  // L1_INT (Fixed)
-            case 50: gpsData.fixQuality = 4; break;  // NARROW_INT (Fixed)
-            default: 
-                if (gpsData.posType >= 48) {
-                    gpsData.fixQuality = 4;  // Various RTK fixed modes
-                } else if (gpsData.posType >= 32) {
-                    gpsData.fixQuality = 5;  // Various RTK float modes
-                } else {
-                    gpsData.fixQuality = 1;  // Other modes
-                }
-                break;
-        }
-    }
-    
-    // Extract INS alignment status from field 10 if it contains "INS_"
-    if (fieldRefs[10].length > 4 && fieldStartsWith(fieldRefs[10], "INS_")) {
-        if (fieldEquals(fieldRefs[10], "INS_INACTIVE")) {
-            gpsData.insAlignmentStatus = 0;
-        } else if (fieldEquals(fieldRefs[10], "INS_ALIGNING")) {
-            gpsData.insAlignmentStatus = 7;
-        } else if (fieldEquals(fieldRefs[10], "INS_SOLUTION_GOOD")) {
-            gpsData.insAlignmentStatus = 3;
-        }
-    }
-    
-    // Set status flags
-    gpsData.hasINS = true;
-    gpsData.messageTypeMask |= (1 << 7);  // Set INSPVAA bit
-    
-    if (enableDebug) {
-        logDebug("INSPVAA processed (zero-copy)");
-    }
-    
-    return true;
-}

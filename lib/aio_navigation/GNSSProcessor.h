@@ -139,8 +139,6 @@ private:
     FieldRef fieldRefs[35];  // References to fields in parseBuffer
     uint8_t fieldCount;
     
-    // Legacy field storage for compatibility during transition
-    char fields[35][24]; // Will be removed after full conversion
 
     // Data storage
     GNSSData gpsData;
@@ -158,22 +156,16 @@ private:
     // Internal parsing methods
     void resetParser();
     bool validateChecksum();
-    void parseFields();
     void parseFieldsZeroCopy();  // New zero-copy field parser
     bool processMessage();
 
     // Message handlers
-    bool parseGGA();
-    bool parseGGAZeroCopy();  // Zero-copy version
-    bool parseGNS();
-    bool parseGNSZeroCopy();  // Zero-copy version
-    bool parseVTG();
-    bool parseVTGZeroCopy();  // Zero-copy version
-    bool parseHPR();
-    bool parseHPRZeroCopy();  // Zero-copy version
+    bool parseGGAZeroCopy();
+    bool parseGNSZeroCopy();
+    bool parseVTGZeroCopy();
+    bool parseHPRZeroCopy();
     bool parseKSXT();
     bool parseINSPVAA();
-    bool parseINSPVAAZeroCopy();  // Zero-copy version
     bool parseINSPVAXA();
     
     // UDP passthrough
