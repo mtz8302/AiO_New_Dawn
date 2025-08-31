@@ -166,10 +166,14 @@ private:
     bool parseGGA();
     bool parseGGAZeroCopy();  // Zero-copy version
     bool parseGNS();
+    bool parseGNSZeroCopy();  // Zero-copy version
     bool parseVTG();
+    bool parseVTGZeroCopy();  // Zero-copy version
     bool parseHPR();
+    bool parseHPRZeroCopy();  // Zero-copy version
     bool parseKSXT();
     bool parseINSPVAA();
+    bool parseINSPVAAZeroCopy();  // Zero-copy version
     bool parseINSPVAXA();
     
     // UDP passthrough
