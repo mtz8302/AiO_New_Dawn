@@ -372,6 +372,15 @@ bool GNSSProcessor::processMessage()
     {
         // Valid GPS message received
         gpsData.lastUpdateTime = millis();
+        
+        // Debug log to track hasDualHeading status after each message
+        static uint32_t lastTraceTime = 0;
+        if (millis() - lastTraceTime > 500) {  // Log every 500ms to avoid spam
+            lastTraceTime = millis();
+            LOG_DEBUG(EventSource::GNSS, "After %s: hasDualHeading=%d, hasINS=%d, hasPosition=%d, fixQual=%d, msgMask=0x%02X", 
+                      msgType, gpsData.hasDualHeading, gpsData.hasINS, gpsData.hasPosition, 
+                      gpsData.fixQuality, gpsData.messageTypeMask);
+        }
     }
 
     resetParser();
@@ -1477,6 +1486,9 @@ bool GNSSProcessor::parseHPRZeroCopy() {
     }
     // Always set hasDualHeading for HPR messages - even if heading is 0
     gpsData.hasDualHeading = true;
+    
+    // Debug log
+    LOG_DEBUG(EventSource::GNSS, "HPR: Setting hasDualHeading=true, heading=%.1f", gpsData.dualHeading);
 
     // Field 6: Pitch
     // Not used for AgOpenGPS

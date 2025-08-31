@@ -67,6 +67,15 @@ void NAVProcessor::init() {
 NavMessageType NAVProcessor::selectMessageType() {
     const auto& gnssData = gnssProcessor.getData();
     
+    // Debug logging
+    static uint32_t lastDebugTime = 0;
+    if (millis() - lastDebugTime > 1000) {  // Log once per second
+        lastDebugTime = millis();
+        LOG_DEBUG(EventSource::GNSS, "selectMessageType: hasDualHeading=%d, hasINS=%d, hasFix=%d, hasGPS=%d, msgMask=0x%02X", 
+                  gnssData.hasDualHeading, gnssData.hasINS, gnssProcessor.hasFix(), 
+                  gnssProcessor.hasGPS(), gnssData.messageTypeMask);
+    }
+    
     // For dual/INS systems, send PAOGI even without fix (for INS_ALIGNING state)
     if (gnssData.hasDualHeading || gnssData.hasINS) {
         return NavMessageType::PAOGI;  // Dual GPS/INS detected
