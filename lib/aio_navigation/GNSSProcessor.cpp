@@ -183,11 +183,19 @@ bool GNSSProcessor::processNMEAChar(char c)
                             }
                         }
                         
-                        // Log INSPVAA messages for debugging (only occasionally)
-                        if (parseBuffer[1] == 'I' && strstr(parseBuffer, "INSPVAA") != nullptr) {
-                            static uint32_t inspvaaLogCount = 0;
-                            if (++inspvaaLogCount % 100 == 1) {  // Log every 100th message
-                                LOG_DEBUG(EventSource::GNSS, "INSPVAA complete: %.80s...", parseBuffer);
+                        // Log INSPVAA/INSPVAXA messages for debugging (only occasionally)
+                        if (parseBuffer[1] == 'I') {
+                            if (strstr(parseBuffer, "INSPVAXA") != nullptr) {
+                                static uint32_t inspvaxaLogCount = 0;
+                                if (++inspvaxaLogCount % 100 == 1) {  // Log every 100th message
+                                    LOG_DEBUG(EventSource::GNSS, "INSPVAXA complete: %.80s...", parseBuffer);
+                                }
+                            }
+                            else if (strstr(parseBuffer, "INSPVAA") != nullptr) {
+                                static uint32_t inspvaaLogCount = 0;
+                                if (++inspvaaLogCount % 100 == 1) {  // Log every 100th message
+                                    LOG_DEBUG(EventSource::GNSS, "INSPVAA complete: %.80s...", parseBuffer);
+                                }
                             }
                         }
                         
@@ -205,13 +213,24 @@ bool GNSSProcessor::processNMEAChar(char c)
                         
                         // Otherwise validate and process
                         bool checksumOK = validateChecksum();
-                        if (parseBuffer[1] == 'I' && strstr(parseBuffer, "INSPVAA") != nullptr) {
-                            static uint32_t msgCount = 0;
-                            msgCount++;
-                            // Show every 100th message in debug mode
-                            if (enableDebug && msgCount % 100 == 0) {
-                                LOG_DEBUG(EventSource::GNSS, "INSPVAA #%u checksum %s", 
-                                         msgCount, checksumOK ? "PASSED" : "FAILED");
+                        if (parseBuffer[1] == 'I') {
+                            if (strstr(parseBuffer, "INSPVAXA") != nullptr) {
+                                static uint32_t msgCountXA = 0;
+                                msgCountXA++;
+                                // Show every 100th message in debug mode
+                                if (enableDebug && msgCountXA % 100 == 0) {
+                                    LOG_DEBUG(EventSource::GNSS, "INSPVAXA #%u checksum %s", 
+                                             msgCountXA, checksumOK ? "PASSED" : "FAILED");
+                                }
+                            }
+                            else if (strstr(parseBuffer, "INSPVAA") != nullptr) {
+                                static uint32_t msgCount = 0;
+                                msgCount++;
+                                // Show every 100th message in debug mode
+                                if (enableDebug && msgCount % 100 == 0) {
+                                    LOG_DEBUG(EventSource::GNSS, "INSPVAA #%u checksum %s", 
+                                             msgCount, checksumOK ? "PASSED" : "FAILED");
+                                }
                             }
                         }
                         
@@ -367,18 +386,33 @@ bool GNSSProcessor::processMessage()
     // Use fast message type detection
     MessageType type = detectMessageType(msgType);
     
-    // Special logging and handling for INSPVAA
-    if (msgTypeBuffer[0] == 'I' && strstr(msgTypeBuffer, "INSPVAA") != nullptr) {
-        if (enableDebug) {
-            LOG_DEBUG(EventSource::GNSS, "INSPVAA processMessage: msgType='%s', fieldCount=%d, detected type=%d", 
-                     msgTypeBuffer, fieldCount, type);
-        }
-        // Force INSPVAA type if detection failed
-        if (type != MSG_INSPVAA) {
+    // Special logging and handling for INSPVAA/INSPVAXA
+    if (msgTypeBuffer[0] == 'I') {
+        if (strstr(msgTypeBuffer, "INSPVAA") != nullptr && strstr(msgTypeBuffer, "INSPVAXA") == nullptr) {
             if (enableDebug) {
-                LOG_DEBUG(EventSource::GNSS, "Forcing INSPVAA type (was %d)", type);
+                LOG_DEBUG(EventSource::GNSS, "INSPVAA processMessage: msgType='%s', fieldCount=%d, detected type=%d", 
+                         msgTypeBuffer, fieldCount, type);
             }
-            type = MSG_INSPVAA;
+            // Force INSPVAA type if detection failed
+            if (type != MSG_INSPVAA) {
+                if (enableDebug) {
+                    LOG_DEBUG(EventSource::GNSS, "Forcing INSPVAA type (was %d)", type);
+                }
+                type = MSG_INSPVAA;
+            }
+        }
+        else if (strstr(msgTypeBuffer, "INSPVAXA") != nullptr) {
+            if (enableDebug) {
+                LOG_DEBUG(EventSource::GNSS, "INSPVAXA processMessage: msgType='%s', fieldCount=%d, detected type=%d", 
+                         msgTypeBuffer, fieldCount, type);
+            }
+            // Force INSPVAXA type if detection failed
+            if (type != MSG_INSPVAXA) {
+                if (enableDebug) {
+                    LOG_DEBUG(EventSource::GNSS, "Forcing INSPVAXA type (was %d)", type);
+                }
+                type = MSG_INSPVAXA;
+            }
         }
     }
     
@@ -430,11 +464,13 @@ bool GNSSProcessor::processMessage()
                 LOG_DEBUG(EventSource::GNSS, "INSPVAXA detected, fieldCount=%d, bufferIndex=%d", fieldCount, bufferIndex);
             }
             processed = parseINSPVAXA();
-            if (processed) {
-                if (enableDebug) {
-                    LOG_DEBUG(EventSource::GNSS, "INSPVAXA parsed successfully");
+            if (processed && enableDebug) {
+                static uint32_t inspvaxaProcessCount = 0;
+                if (++inspvaxaProcessCount % 100 == 1) {  // Log every 100th successful parse
+                    LOG_DEBUG(EventSource::GNSS, "INSPVAXA parsed - hasINS=%d, hasDualHeading=%d, lat=%.8f, fixQuality=%d", 
+                             gpsData.hasINS, gpsData.hasDualHeading, gpsData.latitude, gpsData.fixQuality);
                 }
-            } else if (enableDebug) {
+            } else if (!processed && enableDebug) {
                 LOG_DEBUG(EventSource::GNSS, "INSPVAXA parse failed");
             }
             break;
@@ -929,78 +965,132 @@ bool GNSSProcessor::parseINSPVAA()
 bool GNSSProcessor::parseINSPVAXA()
 {
     // INSPVAXA format (from UM981):
-    // #INSPVAXA,header,reserved;week,seconds,lat,lon,height,undulation,north_vel,east_vel,up_vel,
-    // roll,pitch,azimuth,reserved,lat_std,lon_std,height_std,north_vel_std,east_vel_std,up_vel_std,
-    // ext_sol_stat,time_since_update*checksum
-    // NOTE: Field 15 is undulation, velocities start at field 16
+    // #INSPVAXA,port,seq,idle%,time_status,week,seconds,receiver_status,reserved1,reserved2;
+    // INS_status,position_type,lat,lon,height,north_vel,east_vel,up_vel,roll,pitch,azimuth,
+    // lat_σ,lon_σ,height_σ,north_vel_σ,east_vel_σ,up_vel_σ,ext_sol_stat,time_since_update,reserved*checksum
+    // Header (before semicolon) is field 0, then: 1=INS_status, 2=position_type, 3=lat, 4=lon, etc.
     
-    
-    // INSPVAXA typically has 32-33 fields depending on trailing fields
-    if (fieldCount < 32)
+    if (fieldCount < 29)  // Need at least up to time_since_update field
     {
         if (enableDebug)
         {
-            LOG_WARNING(EventSource::GNSS, "INSPVAXA: Not enough fields! Expected 32+, got %d", fieldCount);
+            LOG_WARNING(EventSource::GNSS, "INSPVAXA: Not enough fields! Expected 20+, got %d", fieldCount);
         }
         return false;
     }
     
-    // Field 10: INS Status - check if still aligning
-    bool insAligning = false;
-    if (fieldStartsWith(fieldRefs[10], "INS_ALIGNING"))
+    // Debug output removed - field mapping confirmed
+    
+    // Field 10: INS Status (after 10 header fields)
+    bool insValid = true;
+    if (fieldCount > 10 && fieldRefs[10].length > 0)
     {
-        insAligning = true;
-        if (enableDebug)
+        // Parse INS status and map to GPS fix quality
+        if (fieldStartsWith(fieldRefs[10], "INS_INACTIVE"))
         {
-            LOG_INFO(EventSource::GNSS, "UM981 INS is still aligning - waiting for movement");
+            gpsData.insAlignmentStatus = 0;  // Binary 0
+            gpsData.fixQuality = 0;  // No fix - IMU data invalid
+            insValid = false;
+        }
+        else if (fieldStartsWith(fieldRefs[10], "INS_ALIGNING"))
+        {
+            gpsData.insAlignmentStatus = 1;  // Binary 1
+            gpsData.fixQuality = 1;  // Basic GPS fix during alignment
+        }
+        else if (fieldStartsWith(fieldRefs[10], "INS_HIGH_VARIANCE"))
+        {
+            gpsData.insAlignmentStatus = 2;  // Binary 2
+            gpsData.fixQuality = 2;  // DGPS-like quality (degraded)
+        }
+        else if (fieldStartsWith(fieldRefs[10], "INS_SOLUTION_GOOD"))
+        {
+            gpsData.insAlignmentStatus = 3;  // Binary 3
+            gpsData.fixQuality = 4;  // RTK Fixed quality
+        }
+        else if (fieldStartsWith(fieldRefs[10], "INS_SOLUTION_FREE"))
+        {
+            gpsData.insAlignmentStatus = 6;  // Binary 6
+            gpsData.fixQuality = 1;  // Basic fix (DR mode, no GNSS)
+        }
+        else if (fieldStartsWith(fieldRefs[10], "INS_ALIGNMENT_COMPLETE"))
+        {
+            gpsData.insAlignmentStatus = 7;  // Binary 7
+            gpsData.fixQuality = 5;  // RTK Float quality
+        }
+        else
+        {
+            // Unknown status - default to basic fix
+            gpsData.insAlignmentStatus = 0;
+            gpsData.fixQuality = 1;
+        }
+    }
+    
+    // Field 11: Position type - update fix quality based on position type
+    if (fieldCount > 11 && fieldRefs[11].length > 0)
+    {
+        if (fieldStartsWith(fieldRefs[11], "INS_RTKFIXED"))
+        {
+            gpsData.posType = 56;  // INS_RTKFIXED from spec
+            gpsData.fixQuality = 4;  // RTK Fixed
+        }
+        else if (fieldStartsWith(fieldRefs[11], "INS_RTKFLOAT"))
+        {
+            gpsData.posType = 55;  // INS_RTKFLOAT from spec
+            gpsData.fixQuality = 5;  // RTK Float
+        }
+        else if (fieldStartsWith(fieldRefs[11], "INS_PSRDIFF"))
+        {
+            gpsData.posType = 54;  // INS_PSRDIFF from spec
+            gpsData.fixQuality = 2;  // DGPS
+        }
+        else if (fieldStartsWith(fieldRefs[11], "INS_PSRSP"))
+        {
+            gpsData.posType = 53;  // INS_PSRSP from spec
+            gpsData.fixQuality = 1;  // Basic GPS
+        }
+        else if (fieldStartsWith(fieldRefs[2], "INS"))
+        {
+            gpsData.posType = 52;  // INS only from spec
+            gpsData.fixQuality = 1;  // Basic fix
+        }
+        else
+        {
+            gpsData.posType = 0;  // NONE
+            if (insValid) gpsData.fixQuality = 1;  // Keep INS status based quality
         }
     }
     
     // Field 12: Latitude (degrees)
     if (fieldRefs[12].length > 0)
     {
-        if (insAligning) {
-            // Use Greenwich Observatory coordinates while aligning
-            gpsData.latitude = 51.4779;  // Greenwich Observatory latitude
-        } else {
-            gpsData.latitude = parseFloatZeroCopy(fieldRefs[12]);
-        }
-        // Only mark as having position if not aligning and coords are not 0,0
-        gpsData.hasPosition = !insAligning && 
+        gpsData.latitude = parseFloatZeroCopy(fieldRefs[12]);
+        gpsData.hasPosition = insValid && 
                              (gpsData.latitude != 0.0 || gpsData.longitude != 0.0);
     }
     
     // Field 13: Longitude (degrees)
     if (fieldRefs[13].length > 0)
     {
-        if (insAligning) {
-            // Use Greenwich Observatory coordinates while aligning
-            gpsData.longitude = -0.0015;  // Greenwich Observatory longitude (slightly west)
-        } else {
-            gpsData.longitude = parseFloatZeroCopy(fieldRefs[13]);
-        }
+        gpsData.longitude = parseFloatZeroCopy(fieldRefs[13]);
     }
     
     // Cache NMEA format coordinates
-    cacheNMEACoordinates(gpsData.latitude, gpsData.longitude);
+    if (gpsData.hasPosition) {
+        cacheNMEACoordinates(gpsData.latitude, gpsData.longitude);
+    }
     
     // Field 14: Height (meters)
     if (fieldRefs[14].length > 0)
     {
-        if (insAligning) {
-            gpsData.altitude = 100.0;  // Distinctive altitude for aligning state
-        } else {
-            gpsData.altitude = parseFloatZeroCopy(fieldRefs[14]);
-        }
+        gpsData.altitude = parseFloatZeroCopy(fieldRefs[14]);
     }
     
-    // Field 15: Undulation (skip)
-    // Field 16,17,18: North, East, Up velocities (m/s)
-    if (fieldRefs[16].length > 0 && fieldRefs[17].length > 0 && fieldRefs[18].length > 0)
+    // Field 15,16,17: North, East, Up velocities (m/s)
+    if (fieldRefs[15].length > 0 && fieldRefs[16].length > 0 && fieldRefs[17].length > 0)
     {
-        gpsData.northVelocity = parseFloatZeroCopy(fieldRefs[16]);
-        gpsData.eastVelocity = parseFloatZeroCopy(fieldRefs[17]);
-        gpsData.upVelocity = parseFloatZeroCopy(fieldRefs[18]);
+        gpsData.northVelocity = parseFloatZeroCopy(fieldRefs[15]);
+        gpsData.eastVelocity = parseFloatZeroCopy(fieldRefs[16]);
+        gpsData.upVelocity = parseFloatZeroCopy(fieldRefs[17]);
         
         // Calculate speed in knots from north/east velocities
         float speedMs = sqrt(gpsData.northVelocity * gpsData.northVelocity + 
@@ -1012,9 +1102,15 @@ bool GNSSProcessor::parseINSPVAXA()
     // Field 19,20,21: Roll, Pitch, Azimuth (degrees)
     if (fieldRefs[19].length > 0 && fieldRefs[20].length > 0 && fieldRefs[21].length > 0)
     {
-        gpsData.insRoll = parseFloatZeroCopy(fieldRefs[19]);
-        gpsData.insPitch = parseFloatZeroCopy(fieldRefs[20]);
-        gpsData.insHeading = parseFloatZeroCopy(fieldRefs[21]);
+        float roll = parseFloatZeroCopy(fieldRefs[19]);
+        float pitch = parseFloatZeroCopy(fieldRefs[20]);
+        float azimuth = parseFloatZeroCopy(fieldRefs[21]);
+        
+        // Debug logging removed - axis mapping confirmed working
+        
+        gpsData.insRoll = roll;
+        gpsData.insPitch = pitch;
+        gpsData.insHeading = azimuth;
         
         // For UM981, use INS heading/roll as dual antenna data
         gpsData.dualHeading = gpsData.insHeading;
@@ -1022,49 +1118,67 @@ bool GNSSProcessor::parseINSPVAXA()
         gpsData.hasDualHeading = true;
     }
     
-    // Field 22: Reserved (skip)
-    // Field 23,24,25: Position StdDev (lat, lon, height) in meters  
-    if (fieldRefs[23].length > 0 && fieldRefs[24].length > 0 && fieldRefs[25].length > 0)
+    // Field 22,23,24: Position StdDev (lat, lon, height) in meters  
+    if (fieldRefs[22].length > 0 && fieldRefs[23].length > 0 && fieldRefs[24].length > 0)
     {
-        gpsData.posStdDevLat = parseFloatZeroCopy(fieldRefs[23]);
-        gpsData.posStdDevLon = parseFloatZeroCopy(fieldRefs[24]);
-        gpsData.posStdDevAlt = parseFloatZeroCopy(fieldRefs[25]);
+        gpsData.posStdDevLat = parseFloatZeroCopy(fieldRefs[22]);
+        gpsData.posStdDevLon = parseFloatZeroCopy(fieldRefs[23]);
+        gpsData.posStdDevAlt = parseFloatZeroCopy(fieldRefs[24]);
     }
     
-    // Field 26,27,28: Velocity StdDev (north, east, up) in m/s
-    if (fieldRefs[26].length > 0 && fieldRefs[27].length > 0 && fieldRefs[28].length > 0)
+    // Field 25,26,27: Velocity StdDev (north, east, up) in m/s
+    if (fieldRefs[25].length > 0 && fieldRefs[26].length > 0 && fieldRefs[27].length > 0)
     {
-        gpsData.velStdDevNorth = parseFloatZeroCopy(fieldRefs[26]);
-        gpsData.velStdDevEast = parseFloatZeroCopy(fieldRefs[27]);
-        gpsData.velStdDevUp = parseFloatZeroCopy(fieldRefs[28]);
+        gpsData.velStdDevNorth = parseFloatZeroCopy(fieldRefs[25]);
+        gpsData.velStdDevEast = parseFloatZeroCopy(fieldRefs[26]);
+        gpsData.velStdDevUp = parseFloatZeroCopy(fieldRefs[27]);
     }
     
-    // Set fix quality and other parameters based on INS status
-    if (insAligning) {
-        gpsData.fixQuality = 0;     // No fix while aligning
-        gpsData.posType = 0;        // No position type
-        gpsData.insStatus = 0;      // INS not ready
-        gpsData.numSatellites = 0;  // No solution yet
-        gpsData.hdop = 99.9f;       // Poor HDOP
-        
-        // Important: Mark that we have INS/dual antenna system
-        // This allows PAOGI messages to be sent even without fix
-        gpsData.hasINS = true;
-        gpsData.hasDualHeading = true;
-        
-        // Clear position but keep message tracking
-        gpsData.hasPosition = false;
-    } else {
-        gpsData.fixQuality = 1;     // Good INS solution (will be updated based on position type)
-        gpsData.posType = 16;       // INS position
-        gpsData.insStatus = 1;      // Mark as having INS
-        gpsData.numSatellites = 12; // Typical for INS solution
-        gpsData.hdop = 0.9f;        // Good HDOP for INS solution
-        gpsData.hasINS = true;
-        gpsData.hasDualHeading = true;
+    // Field 28: Extended solution status
+    if (fieldCount > 28 && fieldRefs[28].length > 0)
+    {
+        gpsData.extSolStatus = (uint16_t)parseIntZeroCopy(fieldRefs[28]);
     }
     
-    // Set GPS time from fields 5,6 (week, seconds) from header
+    // Field 32: Contains time since update followed by *checksum
+    // Format: "value*checksum" e.g. "0*cd793b60"
+    if (fieldCount > 32 && fieldRefs[32].length > 0)
+    {
+        // Find the asterisk position
+        const char* asteriskPos = nullptr;
+        for (int i = 0; i < fieldRefs[32].length; i++) {
+            if (fieldRefs[32].start[i] == '*') {
+                asteriskPos = &fieldRefs[32].start[i];
+                break;
+            }
+        }
+        
+        if (asteriskPos) {
+            // Extract the number before the asterisk
+            int valueLen = asteriskPos - fieldRefs[32].start;
+            if (valueLen > 0) {
+                FieldRef timeField;
+                timeField.start = fieldRefs[32].start;
+                timeField.length = valueLen;
+                gpsData.timeSinceUpdate = (uint32_t)parseIntZeroCopy(timeField);
+                
+                if (enableDebug) {
+                    LOG_DEBUG(EventSource::GNSS, "INSPVAXA: Time since update = %u seconds", gpsData.timeSinceUpdate);
+                }
+                
+                // Use time since update as age of DGPS for PAOGI message
+                gpsData.ageDGPS = (uint16_t)gpsData.timeSinceUpdate;
+            }
+        }
+    }
+    
+    // Set number of satellites (not directly available in INSPVAXA, use a reasonable value)
+    gpsData.numSatellites = 12; // Typical for INS solution
+    gpsData.hdop = 0.9f; // Good HDOP for INS solution
+    gpsData.insStatus = 1; // Mark as having INS
+    gpsData.hasINS = true;
+    
+    // GPS time from header fields 5 (week) and 6 (seconds)
     if (fieldRefs[5].length > 0 && fieldRefs[6].length > 0)
     {
         // Store GPS week and seconds for UTC conversion

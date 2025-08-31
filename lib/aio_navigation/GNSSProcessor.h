@@ -73,6 +73,8 @@ public:
         float velStdDevNorth;   // Velocity std dev north (m/s)
         float velStdDevEast;    // Velocity std dev east (m/s)
         float velStdDevUp;      // Velocity std dev up (m/s)
+        uint16_t extSolStatus;  // Extended solution status
+        uint32_t timeSinceUpdate; // Time since last ZUPT or position update (seconds)
 
         // Status flags
         uint32_t lastUpdateTime;
