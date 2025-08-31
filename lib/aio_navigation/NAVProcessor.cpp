@@ -139,7 +139,8 @@ float NAVProcessor::convertGPStoUTC(uint16_t gpsWeek, float gpsSeconds) {
 }
 
 bool NAVProcessor::formatPANDAMessage() {
-    if (!gnssProcessor.isValid()) {
+    if (!gnssProcessor.hasGPS()) {
+        LOG_DEBUG(EventSource::GNSS, "PANDA format failed - No GPS data");
         return false;
     }
     
