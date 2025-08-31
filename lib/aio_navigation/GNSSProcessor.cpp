@@ -1633,8 +1633,9 @@ bool GNSSProcessor::parseHPRZeroCopy() {
     // Field 5: Heading (dual antenna)
     if (fieldRefs[5].length > 0) {
         gpsData.dualHeading = parseFloatZeroCopy(fieldRefs[5]);
-        gpsData.hasDualHeading = true;
     }
+    // Always set hasDualHeading for HPR messages - even if heading is 0
+    gpsData.hasDualHeading = true;
 
     // Field 6: Pitch
     // Not used for AgOpenGPS
@@ -1669,7 +1670,8 @@ bool GNSSProcessor::parseHPRZeroCopy() {
     gpsData.messageTypeMask |= (1 << 4);  // Set HPR bit
 
     if (enableDebug) {
-        logDebug("HPR processed (zero-copy)");
+        LOG_DEBUG(EventSource::GNSS, "HPR processed (zero-copy): heading=%.1f, hasDual=%d", 
+                  gpsData.dualHeading, gpsData.hasDualHeading);
     }
 
     return true;
