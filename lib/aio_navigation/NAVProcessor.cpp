@@ -69,7 +69,7 @@ NavMessageType NAVProcessor::selectMessageType() {
     
     // Debug logging
     static uint32_t lastDebugTime = 0;
-    if (millis() - lastDebugTime > 1000) {  // Log once per second
+    if (millis() - lastDebugTime > 10000) {  // Log every 10 seconds
         lastDebugTime = millis();
         LOG_DEBUG(EventSource::GNSS, "selectMessageType: hasDualHeading=%d, hasINS=%d, hasFix=%d, hasGPS=%d, msgMask=0x%02X", 
                   gnssData.hasDualHeading, gnssData.hasINS, gnssProcessor.hasFix(), 
@@ -336,8 +336,8 @@ void NAVProcessor::process() {
     
     if (msgType != lastMsgType) {
         if (msgType != NavMessageType::NONE) {
-            LOG_INFO(EventSource::GNSS, "Switching to %s messages", 
-                     msgType == NavMessageType::PANDA ? "PANDA" : "PAOGI");
+            LOG_DEBUG(EventSource::GNSS, "Switching to %s messages", 
+                      msgType == NavMessageType::PANDA ? "PANDA" : "PAOGI");
         }
         lastMsgType = msgType;
     }
