@@ -477,6 +477,7 @@ bool GNSSProcessor::parseKSXT()
 
     gpsData.hasDualHeading = true;
     gpsData.hasPosition = true;
+    gpsData.lastUpdateTime = millis();
     gpsData.messageTypeMask |= (1 << 6);  // Set KSXT bit
     
     if (enableDebug)
@@ -1334,6 +1335,8 @@ bool GNSSProcessor::parseGGAZeroCopy() {
     // Set status flags
     gpsData.hasPosition = (gpsData.latitude != 0.0 || gpsData.longitude != 0.0) && 
                          gpsData.fixQuality >= 1;
+    gpsData.isValid = gpsData.hasPosition;  // GGA messages need valid flag
+    gpsData.lastUpdateTime = millis();
     gpsData.messageTypeMask |= (1 << 0);  // Set GGA bit
 
     if (enableDebug) {
@@ -1399,6 +1402,8 @@ bool GNSSProcessor::parseGNSZeroCopy() {
     // Set status flags
     gpsData.hasPosition = (gpsData.latitude != 0.0 || gpsData.longitude != 0.0) && 
                          gpsData.fixQuality >= 1;
+    gpsData.isValid = gpsData.hasPosition;  // GNS messages need valid flag
+    gpsData.lastUpdateTime = millis();
     gpsData.messageTypeMask |= (1 << 1);  // Set GNS bit
 
     if (enableDebug) {
@@ -1427,6 +1432,7 @@ bool GNSSProcessor::parseVTGZeroCopy() {
     // We use knots, but can validate if both are present
 
     // Set status flags
+    gpsData.lastUpdateTime = millis();
     gpsData.messageTypeMask |= (1 << 2);  // Set VTG bit
 
     if (enableDebug) {
@@ -1502,6 +1508,8 @@ bool GNSSProcessor::parseHPRZeroCopy() {
 
     // Set status flags
     gpsData.hasPosition = (gpsData.latitude != 0.0 || gpsData.longitude != 0.0);
+    gpsData.isValid = gpsData.hasPosition;  // HPR messages need valid flag
+    gpsData.lastUpdateTime = millis();
     gpsData.messageTypeMask |= (1 << 4);  // Set HPR bit
 
     if (enableDebug) {
