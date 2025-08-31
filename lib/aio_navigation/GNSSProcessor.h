@@ -30,6 +30,12 @@ public:
         uint32_t fixTime; // HHMMSS as integer
         float fixTimeFractional; // Fractional seconds (0.0-0.999)
         
+        // NMEA format cached coordinates (to avoid repeated conversions)
+        double latitudeNMEA;  // DDMM.MMMM format
+        double longitudeNMEA; // DDDMM.MMMM format
+        char latDir;          // 'N' or 'S'
+        char lonDir;          // 'E' or 'W'
+        
         // GPS time data (for UTC conversion)
         uint16_t gpsWeek;    // GPS week number
         float gpsSeconds;    // Seconds of week
@@ -110,9 +116,31 @@ private:
     uint8_t checksumIndex;
     bool isUnicoreMessage;        // Track if current message starts with #
 
-    // Field parsing
-    char fields[35][24]; // Max 35 fields, 24 chars each (increased for INSPVAXA)
+    // Message type enum for fast detection
+    enum MessageType {
+        MSG_UNKNOWN = 0,
+        MSG_GGA,
+        MSG_GNS,
+        MSG_VTG,
+        MSG_RMC,
+        MSG_HPR,
+        MSG_KSXT,
+        MSG_INSPVAA,
+        MSG_INSPVAXA,
+        MSG_BESTGNSSPOS,
+        MSG_AVR
+    };
+
+    // Field parsing - zero-copy approach
+    struct FieldRef {
+        const char* start;
+        uint8_t length;
+    };
+    FieldRef fieldRefs[35];  // References to fields in parseBuffer
     uint8_t fieldCount;
+    
+    // Legacy field storage for compatibility during transition
+    char fields[35][24]; // Will be removed after full conversion
 
     // Data storage
     GNSSData gpsData;
@@ -131,10 +159,12 @@ private:
     void resetParser();
     bool validateChecksum();
     void parseFields();
+    void parseFieldsZeroCopy();  // New zero-copy field parser
     bool processMessage();
 
     // Message handlers
     bool parseGGA();
+    bool parseGGAZeroCopy();  // Zero-copy version
     bool parseGNS();
     bool parseVTG();
     bool parseHPR();
@@ -154,6 +184,23 @@ private:
     uint8_t hexToInt(char c);
     bool isHex(char c);
     void logDebug(const char *msg);
+    
+    // Fast message type detection
+    MessageType detectMessageType(const char* msgType);
+    
+    // Convert decimal degrees to NMEA format and cache
+    void cacheNMEACoordinates(double lat, double lon);
+    
+    // Zero-copy string utilities
+    float parseFloatZeroCopy(const FieldRef& field);
+    double parseDoubleZeroCopy(const FieldRef& field);
+    int parseIntZeroCopy(const FieldRef& field);
+    bool fieldEquals(const FieldRef& field, const char* str);
+    bool fieldStartsWith(const FieldRef& field, const char* prefix);
+    
+    // Zero-copy coordinate parsers
+    double parseLatitudeZeroCopy(const FieldRef& lat, const FieldRef& ns);
+    double parseLongitudeZeroCopy(const FieldRef& lon, const FieldRef& ew);
 
 public:
     GNSSProcessor();

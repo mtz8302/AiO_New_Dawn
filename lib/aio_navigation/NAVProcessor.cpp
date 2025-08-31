@@ -151,11 +151,11 @@ bool NAVProcessor::formatPANDAMessage() {
     
     const auto& gnssData = gnssProcessor.getData();
     
-    // Convert coordinates to NMEA format
-    double latNMEA, lonNMEA;
-    char latDir, lonDir;
-    convertToNMEACoordinates(gnssData.latitude, false, latNMEA, latDir);
-    convertToNMEACoordinates(gnssData.longitude, true, lonNMEA, lonDir);
+    // Use cached NMEA coordinates - no conversion needed!
+    double latNMEA = gnssData.latitudeNMEA;
+    double lonNMEA = gnssData.longitudeNMEA;
+    char latDir = gnssData.latDir;
+    char lonDir = gnssData.lonDir;
     
     // Get IMU data if available - using strings like old code
     char imuHeading[10] = "65535";  // Default "no IMU" value
@@ -214,11 +214,11 @@ bool NAVProcessor::formatPAOGIMessage() {
     
     const auto& gnssData = gnssProcessor.getData();
     
-    // Convert coordinates to NMEA format
-    double latNMEA, lonNMEA;
-    char latDir, lonDir;
-    convertToNMEACoordinates(gnssData.latitude, false, latNMEA, latDir);
-    convertToNMEACoordinates(gnssData.longitude, true, lonNMEA, lonDir);
+    // Use cached NMEA coordinates - no conversion needed!
+    double latNMEA = gnssData.latitudeNMEA;
+    double lonNMEA = gnssData.longitudeNMEA;
+    char latDir = gnssData.latDir;
+    char lonDir = gnssData.lonDir;
     
     // Get IMU data if available (for pitch and yaw rate)
     int16_t pitch = 0;

@@ -286,8 +286,8 @@ bool GNSSProcessor::validateChecksum()
 
 bool GNSSProcessor::processMessage()
 {
-    
-    parseFields();
+    // Use zero-copy parsing
+    parseFieldsZeroCopy();
 
     if (fieldCount < 1)
     {
@@ -295,8 +295,16 @@ bool GNSSProcessor::processMessage()
         return false;
     }
 
+    // For now, still populate the legacy fields array for compatibility
+    // This will be removed once all parsers are converted
+    for (uint8_t i = 0; i < fieldCount && i < 35; i++) {
+        uint8_t copyLen = min(fieldRefs[i].length, (uint8_t)23);
+        memcpy(fields[i], fieldRefs[i].start, copyLen);
+        fields[i][copyLen] = '\0';
+    }
+
     // Determine message type and process
-    const char *msgType = fields[0];
+    const char *msgType = fields[0];  // Will use fieldRefs[0] directly later
     bool processed = false;
     
     // Debug enabled for testing
@@ -305,49 +313,57 @@ bool GNSSProcessor::processMessage()
         LOG_DEBUG(EventSource::GNSS, "Message type: %s, fields: %d", msgType, fieldCount);
     }
 
-    if (strstr(msgType, "GGA"))
-    {
-        processed = parseGGA();
-    }
-    else if (strstr(msgType, "GNS"))
-    {
-        processed = parseGNS();
-    }
-    else if (strstr(msgType, "VTG"))
-    {
-        processed = parseVTG();
-    }
-    else if (strstr(msgType, "HPR"))
-    {
-        processed = parseHPR();
-    }
-    else if (strstr(msgType, "KSXT"))
-    {
-        LOG_DEBUG(EventSource::GNSS, "Processing KSXT message");
-        processed = parseKSXT();
-    }
-    else if (strstr(msgType, "INSPVAA"))
-    {
-        processed = parseINSPVAA();
-    }
-    else if (strstr(msgType, "INSPVAXA"))
-    {
-        if (enableDebug)
-        {
-            LOG_DEBUG(EventSource::GNSS, "INSPVAXA detected, fieldCount=%d, bufferIndex=%d", fieldCount, bufferIndex);
-        }
-        processed = parseINSPVAXA();
-        if (processed)
-        {
-            if (enableDebug)
-            {
-                LOG_DEBUG(EventSource::GNSS, "INSPVAXA parsed successfully");
+    // Use fast message type detection
+    MessageType type = detectMessageType(msgType);
+    
+    switch(type) {
+        case MSG_GGA:
+            processed = parseGGAZeroCopy();  // Use zero-copy version
+            break;
+            
+        case MSG_GNS:
+            processed = parseGNS();
+            break;
+            
+        case MSG_VTG:
+            processed = parseVTG();
+            break;
+            
+        case MSG_HPR:
+            processed = parseHPR();
+            break;
+            
+        case MSG_KSXT:
+            LOG_DEBUG(EventSource::GNSS, "Processing KSXT message");
+            processed = parseKSXT();
+            break;
+            
+        case MSG_INSPVAA:
+            processed = parseINSPVAA();
+            break;
+            
+        case MSG_INSPVAXA:
+            if (enableDebug) {
+                LOG_DEBUG(EventSource::GNSS, "INSPVAXA detected, fieldCount=%d, bufferIndex=%d", fieldCount, bufferIndex);
             }
-        }
-        else if (enableDebug)
-        {
-            LOG_DEBUG(EventSource::GNSS, "INSPVAXA parse failed");
-        }
+            processed = parseINSPVAXA();
+            if (processed) {
+                if (enableDebug) {
+                    LOG_DEBUG(EventSource::GNSS, "INSPVAXA parsed successfully");
+                }
+            } else if (enableDebug) {
+                LOG_DEBUG(EventSource::GNSS, "INSPVAXA parse failed");
+            }
+            break;
+            
+        case MSG_BESTGNSSPOS:
+        case MSG_RMC:
+        case MSG_AVR:
+        case MSG_UNKNOWN:
+        default:
+            // Messages we don't currently parse
+            processed = false;
+            break;
     }
 
     if (processed)
@@ -577,6 +593,9 @@ bool GNSSProcessor::parseKSXT()
     {
         gpsData.latitude = atof(fields[3]);
     }
+    
+    // Cache NMEA format coordinates
+    cacheNMEACoordinates(gpsData.latitude, gpsData.longitude);
 
     // Field 4: Altitude
     if (strlen(fields[4]) > 0)
@@ -645,7 +664,11 @@ double GNSSProcessor::parseLatitude(const char *lat, const char *ns)
     if (!lat || !ns || strlen(lat) < 4)
         return 0.0;
 
-    double degrees = atof(lat) / 100.0;
+    // Cache the original NMEA value and direction
+    gpsData.latitudeNMEA = atof(lat);
+    gpsData.latDir = ns[0];
+
+    double degrees = gpsData.latitudeNMEA / 100.0;
     int wholeDegrees = (int)degrees;
     double minutes = (degrees - wholeDegrees) * 100.0;
 
@@ -662,7 +685,11 @@ double GNSSProcessor::parseLongitude(const char *lon, const char *ew)
     if (!lon || !ew || strlen(lon) < 5)
         return 0.0;
 
-    double degrees = atof(lon) / 100.0;
+    // Cache the original NMEA value and direction
+    gpsData.longitudeNMEA = atof(lon);
+    gpsData.lonDir = ew[0];
+
+    double degrees = gpsData.longitudeNMEA / 100.0;
     int wholeDegrees = (int)degrees;
     double minutes = (degrees - wholeDegrees) * 100.0;
 
@@ -838,6 +865,11 @@ bool GNSSProcessor::parseINSPVAA()
         gpsData.longitude = parseFloat(fields[13]);
     }
     
+    // Cache NMEA format coordinates
+    if (gpsData.hasPosition) {
+        cacheNMEACoordinates(gpsData.latitude, gpsData.longitude);
+    }
+    
     // Field 14: Height (meters)
     if (strlen(fields[14]) > 0)
     {
@@ -1001,6 +1033,9 @@ bool GNSSProcessor::parseINSPVAXA()
             gpsData.longitude = parseFloat(fields[13]);
         }
     }
+    
+    // Cache NMEA format coordinates
+    cacheNMEACoordinates(gpsData.latitude, gpsData.longitude);
     
     // Field 14: Height (meters)
     if (strlen(fields[14]) > 0)
@@ -1229,4 +1264,240 @@ void GNSSProcessor::sendCompleteNMEA()
         LOG_DEBUG(EventSource::GNSS, "UDP Passthrough: %lu sentences sent", passthroughCount);
         passthroughCount = 0;
     }
+}
+
+GNSSProcessor::MessageType GNSSProcessor::detectMessageType(const char* msgType) {
+    // Fast message type detection using character comparison
+    // Skip past the talker ID (GP, GN, etc.) if present
+    const char* typeStart = msgType;
+    
+    // Find where the actual message type starts (after talker ID)
+    if (strlen(msgType) >= 5) {
+        // Standard NMEA has 2-char talker ID
+        if (msgType[2] >= 'A' && msgType[2] <= 'Z') {
+            typeStart = msgType + 2;
+        }
+    }
+    
+    // Now do fast character comparison
+    switch(typeStart[0]) {
+        case 'G':
+            if (typeStart[1] == 'G' && typeStart[2] == 'A') return MSG_GGA;
+            if (typeStart[1] == 'N' && typeStart[2] == 'S') return MSG_GNS;
+            break;
+            
+        case 'V':
+            if (typeStart[1] == 'T' && typeStart[2] == 'G') return MSG_VTG;
+            break;
+            
+        case 'R':
+            if (typeStart[1] == 'M' && typeStart[2] == 'C') return MSG_RMC;
+            break;
+            
+        case 'H':
+            if (typeStart[1] == 'P' && typeStart[2] == 'R') return MSG_HPR;
+            break;
+            
+        case 'K':
+            if (typeStart[1] == 'S' && typeStart[2] == 'X' && typeStart[3] == 'T') return MSG_KSXT;
+            break;
+            
+        case 'I':
+            if (strncmp(typeStart, "INSPVAA", 7) == 0) return MSG_INSPVAA;
+            if (strncmp(typeStart, "INSPVAXA", 8) == 0) return MSG_INSPVAXA;
+            break;
+            
+        case 'B':
+            if (strncmp(typeStart, "BESTGNSSPOS", 11) == 0) return MSG_BESTGNSSPOS;
+            break;
+            
+        case 'A':
+            if (typeStart[1] == 'V' && typeStart[2] == 'R') return MSG_AVR;
+            break;
+    }
+    
+    return MSG_UNKNOWN;
+}
+
+void GNSSProcessor::cacheNMEACoordinates(double lat, double lon) {
+    // Convert decimal degrees to NMEA format for caching
+    
+    // Latitude
+    gpsData.latDir = (lat < 0) ? 'S' : 'N';
+    double absLat = fabs(lat);
+    int latDegrees = (int)absLat;
+    double latMinutes = (absLat - latDegrees) * 60.0;
+    gpsData.latitudeNMEA = latDegrees * 100.0 + latMinutes;
+    
+    // Longitude
+    gpsData.lonDir = (lon < 0) ? 'W' : 'E';
+    double absLon = fabs(lon);
+    int lonDegrees = (int)absLon;
+    double lonMinutes = (absLon - lonDegrees) * 60.0;
+    gpsData.longitudeNMEA = lonDegrees * 100.0 + lonMinutes;
+}
+
+void GNSSProcessor::parseFieldsZeroCopy() {
+    fieldCount = 0;
+    
+    // Skip the '$' or '#' and start parsing
+    const char* fieldStart = parseBuffer + 1;
+    
+    for (int i = 1; i < bufferIndex && fieldCount < 35; i++) {
+        char c = parseBuffer[i];
+        
+        if (c == ',' || c == ';' || c == '\0') {
+            // Found end of field
+            fieldRefs[fieldCount].start = fieldStart;
+            fieldRefs[fieldCount].length = (parseBuffer + i) - fieldStart;
+            fieldCount++;
+            
+            // Next field starts after the delimiter
+            fieldStart = parseBuffer + i + 1;
+        }
+    }
+    
+    // Handle the last field if buffer doesn't end with delimiter
+    if (fieldStart < parseBuffer + bufferIndex && fieldCount < 35) {
+        fieldRefs[fieldCount].start = fieldStart;
+        fieldRefs[fieldCount].length = (parseBuffer + bufferIndex) - fieldStart;
+        fieldCount++;
+    }
+}
+
+// Zero-copy utility functions
+float GNSSProcessor::parseFloatZeroCopy(const FieldRef& field) {
+    if (field.length == 0) return 0.0f;
+    
+    // Temporarily null-terminate the field
+    char saved = field.start[field.length];
+    const_cast<char*>(field.start)[field.length] = '\0';
+    float result = atof(field.start);
+    const_cast<char*>(field.start)[field.length] = saved;
+    
+    return result;
+}
+
+double GNSSProcessor::parseDoubleZeroCopy(const FieldRef& field) {
+    if (field.length == 0) return 0.0;
+    
+    // Temporarily null-terminate the field
+    char saved = field.start[field.length];
+    const_cast<char*>(field.start)[field.length] = '\0';
+    double result = atof(field.start);
+    const_cast<char*>(field.start)[field.length] = saved;
+    
+    return result;
+}
+
+int GNSSProcessor::parseIntZeroCopy(const FieldRef& field) {
+    if (field.length == 0) return 0;
+    
+    // Temporarily null-terminate the field
+    char saved = field.start[field.length];
+    const_cast<char*>(field.start)[field.length] = '\0';
+    int result = atoi(field.start);
+    const_cast<char*>(field.start)[field.length] = saved;
+    
+    return result;
+}
+
+bool GNSSProcessor::fieldEquals(const FieldRef& field, const char* str) {
+    size_t len = strlen(str);
+    if (field.length != len) return false;
+    return strncmp(field.start, str, len) == 0;
+}
+
+bool GNSSProcessor::fieldStartsWith(const FieldRef& field, const char* prefix) {
+    size_t len = strlen(prefix);
+    if (field.length < len) return false;
+    return strncmp(field.start, prefix, len) == 0;
+}
+
+double GNSSProcessor::parseLatitudeZeroCopy(const FieldRef& lat, const FieldRef& ns) {
+    if (lat.length < 4 || ns.length < 1) return 0.0;
+    
+    // Cache the original NMEA value and direction
+    gpsData.latitudeNMEA = parseDoubleZeroCopy(lat);
+    gpsData.latDir = ns.start[0];
+    
+    double degrees = gpsData.latitudeNMEA / 100.0;
+    int wholeDegrees = (int)degrees;
+    double minutes = (degrees - wholeDegrees) * 100.0;
+    
+    double result = wholeDegrees + (minutes / 60.0);
+    
+    if (ns.start[0] == 'S')
+        result = -result;
+        
+    return result;
+}
+
+double GNSSProcessor::parseLongitudeZeroCopy(const FieldRef& lon, const FieldRef& ew) {
+    if (lon.length < 5 || ew.length < 1) return 0.0;
+    
+    // Cache the original NMEA value and direction
+    gpsData.longitudeNMEA = parseDoubleZeroCopy(lon);
+    gpsData.lonDir = ew.start[0];
+    
+    double degrees = gpsData.longitudeNMEA / 100.0;
+    int wholeDegrees = (int)degrees;
+    double minutes = (degrees - wholeDegrees) * 100.0;
+    
+    double result = wholeDegrees + (minutes / 60.0);
+    
+    if (ew.start[0] == 'W')
+        result = -result;
+        
+    return result;
+}
+
+bool GNSSProcessor::parseGGAZeroCopy() {
+    if (fieldCount < 9)
+        return false;
+
+    // Field 1: Time (HHMMSS.SS format)
+    if (fieldRefs[1].length > 0) {
+        float time = parseFloatZeroCopy(fieldRefs[1]);
+        gpsData.fixTime = (uint32_t)time;
+        gpsData.fixTimeFractional = time - (uint32_t)time;
+    }
+
+    // Fields 2-3: Latitude
+    gpsData.latitude = parseLatitudeZeroCopy(fieldRefs[2], fieldRefs[3]);
+
+    // Fields 4-5: Longitude
+    gpsData.longitude = parseLongitudeZeroCopy(fieldRefs[4], fieldRefs[5]);
+
+    // Field 6: Fix quality
+    if (fieldRefs[6].length > 0) {
+        gpsData.fixQuality = fieldRefs[6].start[0] - '0';  // Direct digit conversion
+    }
+
+    // Field 7: Number of satellites
+    gpsData.numSatellites = parseIntZeroCopy(fieldRefs[7]);
+
+    // Field 8: HDOP
+    gpsData.hdop = parseFloatZeroCopy(fieldRefs[8]);
+
+    // Field 9: Altitude
+    if (fieldCount > 9) {
+        gpsData.altitude = parseFloatZeroCopy(fieldRefs[9]);
+    }
+
+    // Field 13: Age of DGPS
+    if (fieldCount > 13) {
+        gpsData.ageDGPS = parseIntZeroCopy(fieldRefs[13]);
+    }
+
+    // Set status flags
+    gpsData.hasPosition = (gpsData.latitude != 0.0 || gpsData.longitude != 0.0) && 
+                         gpsData.fixQuality >= 1;
+    gpsData.messageTypeMask |= (1 << 0);  // Set GGA bit
+
+    if (enableDebug) {
+        logDebug("GGA processed (zero-copy)");
+    }
+
+    return true;
 }
