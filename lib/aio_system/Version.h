@@ -2,7 +2,7 @@
 #define VERSION_H
 
 // AiO New Dawn firmware version
-#define FIRMWARE_VERSION "1.0.16-beta"
+#define FIRMWARE_VERSION "1.0.17-beta"
 
 // Teensy board type for OTA identification
 #define TEENSY_BOARD_TYPE "Teensy41"
