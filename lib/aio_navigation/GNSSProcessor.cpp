@@ -18,7 +18,8 @@ GNSSProcessor::GNSSProcessor() : bufferIndex(0),
                                  enableNoiseFilter(true),
                                  enableDebug(false),
                                  ubxParser(nullptr),
-                                 udpPassthroughEnabled(false)
+                                 udpPassthroughEnabled(false),
+                                 processingPaused(false)
 {
 
     // Initialize data structures
@@ -105,6 +106,11 @@ bool GNSSProcessor::setup(bool enableDebug, bool enableNoiseFilter)
 
 bool GNSSProcessor::processNMEAChar(char c)
 {
+    // Skip processing if paused
+    if (processingPaused) {
+        return false;
+    }
+    
     // Periodic status logging
     static uint32_t lastStatusLog = 0;
     if (millis() - lastStatusLog > 60000) {  // Every minute
@@ -285,6 +291,11 @@ bool GNSSProcessor::processNMEAChar(char c)
 
 uint16_t GNSSProcessor::processNMEAStream(const char *data, uint16_t length)
 {
+    // Skip processing if paused
+    if (processingPaused) {
+        return 0;
+    }
+    
     uint16_t processed = 0;
 
     for (uint16_t i = 0; i < length; i++)

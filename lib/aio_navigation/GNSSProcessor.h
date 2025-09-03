@@ -154,6 +154,9 @@ private:
     
     // UDP passthrough
     bool udpPassthroughEnabled;
+    
+    // Processing control
+    bool processingPaused;
 
     // Internal parsing methods
     void resetParser();
@@ -243,6 +246,11 @@ public:
     
     // Static callback for PGN Hello (200)
     static void handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size_t len);
+    
+    // Processing control - for UM98x configuration
+    void pauseProcessing() { processingPaused = true; }
+    void resumeProcessing() { processingPaused = false; }
+    bool isProcessingPaused() const { return processingPaused; }
 };
 
 // Global instance following established pattern
