@@ -68,6 +68,11 @@ private:
     void handleAnalogWorkSwitchSetpoint(EthernetClient& client);
     void handleOTAUpload(EthernetClient& client);
     
+    // UM98x GPS configuration handlers
+    void sendUM98xConfigPage(EthernetClient& client);
+    void handleUM98xRead(EthernetClient& client);
+    void handleUM98xWrite(EthernetClient& client);
+    
     // Helper to parse POST body
     String readPostBody(EthernetClient& client);
     
