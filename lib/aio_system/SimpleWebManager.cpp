@@ -21,9 +21,11 @@
 #include "web_pages/SimpleNetworkPage.h"  // Simple network settings page
 #include "web_pages/SimpleAnalogWorkSwitchPage.h"  // Analog work switch page
 #include "web_pages/SimpleOTAPageFixed.h"  // Fixed OTA update page
+#include "web_pages/SimpleUM98xConfigPage.h"  // UM98x GPS configuration page
 #include <ArduinoJson.h>
 #include <QNEthernet.h>
 #include "LittleDawnInterface.h"
+#include "UM98xManager.h"
 
 using namespace qindesign::network;
 
@@ -191,6 +193,28 @@ void SimpleWebManager::setupRoutes() {
     httpServer.on("/api/ota/upload", [this](EthernetClient& client, const String& method, const String& query) {
         if (method == "POST") {
             handleOTAUpload(client);
+        } else {
+            SimpleHTTPServer::send(client, 405, "text/plain", "Method Not Allowed");
+        }
+    });
+    
+    // UM98x GPS configuration page
+    httpServer.on("/um98x-config", [this](EthernetClient& client, const String& method, const String& query) {
+        sendUM98xConfigPage(client);
+    });
+    
+    // UM98x API endpoints
+    httpServer.on("/api/um98x/read", [this](EthernetClient& client, const String& method, const String& query) {
+        if (method == "GET") {
+            handleUM98xRead(client);
+        } else {
+            SimpleHTTPServer::send(client, 405, "text/plain", "Method Not Allowed");
+        }
+    });
+    
+    httpServer.on("/api/um98x/write", [this](EthernetClient& client, const String& method, const String& query) {
+        if (method == "POST") {
+            handleUM98xWrite(client);
         } else {
             SimpleHTTPServer::send(client, 405, "text/plain", "Method Not Allowed");
         }
@@ -837,4 +861,116 @@ void SimpleWebManager::broadcastTelemetry() {
     telemetryWS.broadcastBinary((const uint8_t*)&packet, sizeof(packet));
     
     lastTelemetryUpdate = now;
+}
+
+// UM98x GPS Configuration handlers
+
+void SimpleWebManager::sendUM98xConfigPage(EthernetClient& client) {
+    extern const char UM98X_CONFIG_PAGE[];
+    
+    // Send directly from PROGMEM to avoid String truncation
+    SimpleHTTPServer::sendP(client, 200, "text/html", UM98X_CONFIG_PAGE);
+}
+
+void SimpleWebManager::handleUM98xRead(EthernetClient& client) {
+    LOG_INFO(EventSource::NETWORK, "handleUM98xRead() called");
+    
+    // Create UM98xManager instance
+    static UM98xManager um98xManager;
+    static bool managerInitialized = false;
+    
+    if (!managerInitialized) {
+        // Initialize with GPS1 serial port (Serial5)
+        if (!um98xManager.init(&Serial5)) {
+            StaticJsonDocument<128> doc;
+            doc["success"] = false;
+            doc["error"] = "Failed to initialize UM98x manager";
+            
+            String response;
+            serializeJson(doc, response);
+            SimpleHTTPServer::send(client, 500, "application/json", response);
+            return;
+        }
+        managerInitialized = true;
+    }
+    
+    // Read configuration
+    UM98xManager::UM98xConfig config;
+    bool success = um98xManager.readConfiguration(config);
+    
+    // Build JSON response
+    StaticJsonDocument<2048> doc;
+    doc["success"] = success;
+    
+    if (success) {
+        doc["config"] = config.configCommands;
+        doc["mode"] = config.modeSettings;
+        doc["messages"] = config.messageSettings;
+    } else {
+        doc["error"] = "Failed to read GPS configuration";
+    }
+    
+    String response;
+    serializeJson(doc, response);
+    SimpleHTTPServer::send(client, success ? 200 : 500, "application/json", response);
+}
+
+void SimpleWebManager::handleUM98xWrite(EthernetClient& client) {
+    LOG_INFO(EventSource::NETWORK, "handleUM98xWrite() called");
+    
+    // Parse POST body
+    String body = readPostBody(client);
+    
+    StaticJsonDocument<2048> doc;
+    DeserializationError error = deserializeJson(doc, body);
+    
+    if (error) {
+        StaticJsonDocument<128> responseDoc;
+        responseDoc["success"] = false;
+        responseDoc["error"] = "Invalid JSON";
+        
+        String response;
+        serializeJson(responseDoc, response);
+        SimpleHTTPServer::send(client, 400, "application/json", response);
+        return;
+    }
+    
+    // Create UM98xManager instance
+    static UM98xManager um98xManager;
+    static bool managerInitialized = false;
+    
+    if (!managerInitialized) {
+        // Initialize with GPS1 serial port (Serial5)
+        if (!um98xManager.init(&Serial5)) {
+            StaticJsonDocument<128> responseDoc;
+            responseDoc["success"] = false;
+            responseDoc["error"] = "Failed to initialize UM98x manager";
+            
+            String response;
+            serializeJson(responseDoc, response);
+            SimpleHTTPServer::send(client, 500, "application/json", response);
+            return;
+        }
+        managerInitialized = true;
+    }
+    
+    // Extract configuration from JSON
+    UM98xManager::UM98xConfig config;
+    config.configCommands = doc["config"] | "";
+    config.modeSettings = doc["mode"] | "";
+    config.messageSettings = doc["messages"] | "";
+    
+    // Write configuration
+    bool success = um98xManager.writeConfiguration(config);
+    
+    // Build response
+    StaticJsonDocument<128> responseDoc;
+    responseDoc["success"] = success;
+    if (!success) {
+        responseDoc["error"] = "Failed to write GPS configuration";
+    }
+    
+    String response;
+    serializeJson(responseDoc, response);
+    SimpleHTTPServer::send(client, success ? 200 : 500, "application/json", response);
 }
