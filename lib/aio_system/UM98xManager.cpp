@@ -36,8 +36,18 @@ bool UM98xManager::readConfiguration(UM98xConfig& config) {
     
     bool success = true;
     String response;
+    String savedMessageSettings;
     
-    // First, stop all message outputs to avoid interference during read
+    // First, read current message settings before clearing
+    LOG_INFO(EventSource::SYSTEM, "Reading current message outputs before clearing...");
+    if (sendCommandAndWaitForResponse("UNILOGLIST", response)) {
+        parseLogListResponse(response, savedMessageSettings);
+        if (savedMessageSettings.length() > 0) {
+            LOG_INFO(EventSource::SYSTEM, "Found active messages: %s", savedMessageSettings.c_str());
+        }
+    }
+    
+    // Now clear all message outputs to avoid interference during read
     LOG_INFO(EventSource::SYSTEM, "Clearing all COM port logs before reading configuration...");
     
     // Clear all three COM ports
@@ -97,44 +107,53 @@ bool UM98xManager::readConfiguration(UM98xConfig& config) {
                 LOG_ERROR(EventSource::SYSTEM, "Failed to parse UNILOGLIST response");
                 success = false;
             }
+            // If UNILOGLIST is empty but we saved messages earlier, use those
+            if (config.messageSettings.length() == 0 && savedMessageSettings.length() > 0) {
+                LOG_INFO(EventSource::SYSTEM, "Using saved message settings for display");
+                config.messageSettings = savedMessageSettings;
+            }
         } else {
             LOG_ERROR(EventSource::SYSTEM, "UNILOGLIST command failed");
             success = false;
         }
     }
     
-    // Resume GNSSProcessor
-    gnssProcessor.resumeProcessing();
-    
     if (success) {
         LOG_INFO(EventSource::SYSTEM, "UM98x configuration read successfully");
         
-        // Restore the message outputs that we just read
-        if (config.messageSettings.length() > 0) {
-            LOG_INFO(EventSource::SYSTEM, "Restoring message outputs after read...");
+        // Restore the message outputs that we saved earlier
+        if (savedMessageSettings.length() > 0) {
+            LOG_INFO(EventSource::SYSTEM, "Restoring message outputs...");
             
             // Split and send each message setting
             int start = 0;
-            int end = config.messageSettings.indexOf('\n');
+            int end = savedMessageSettings.indexOf('\n');
             
-            while (end != -1 || start < (int)config.messageSettings.length()) {
+            while (end != -1 || start < (int)savedMessageSettings.length()) {
                 String line;
                 if (end != -1) {
-                    line = config.messageSettings.substring(start, end);
+                    line = savedMessageSettings.substring(start, end);
                     start = end + 1;
-                    end = config.messageSettings.indexOf('\n', start);
+                    end = savedMessageSettings.indexOf('\n', start);
                 } else {
-                    line = config.messageSettings.substring(start);
-                    start = config.messageSettings.length();
+                    line = savedMessageSettings.substring(start);
+                    start = savedMessageSettings.length();
                 }
                 
                 line.trim();
                 if (line.length() > 0) {
-                    sendCommandAndWaitForResponse(line, response);
+                    LOG_DEBUG(EventSource::SYSTEM, "Restoring: %s", line.c_str());
+                    String dummyResponse;
+                    if (!sendCommandAndWaitForResponse(line, dummyResponse)) {
+                        LOG_WARNING(EventSource::SYSTEM, "Failed to restore: %s", line.c_str());
+                    }
                 }
             }
         }
     }
+    
+    // Resume GNSSProcessor after all operations are complete
+    gnssProcessor.resumeProcessing();
     
     return success;
 }
@@ -296,7 +315,7 @@ bool UM98xManager::sendCommandAndWaitForResponse(const String& cmd, String& resp
                 if (cmd != "CONFIG" && cmd != "MODE" && cmd != "UNILOGLIST") {
                     return true;  // Non-query commands can return after OK
                 }
-                lastConfigTime = millis();
+                lastConfigTime = millis();  // Set initial time when we get ACK
             }
             // Check if this is CONFIG data
             else if (cmd == "CONFIG" && line.startsWith("$CONFIG,")) {
