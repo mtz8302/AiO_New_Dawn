@@ -4,6 +4,7 @@
 #include <cstring>
 #include "EventLogger.h"
 #include "ConfigManager.h"
+#include "MessageBuilder.h"
 
 // External processor instances from main.cpp
 extern GNSSProcessor gnssProcessor;
@@ -66,6 +67,15 @@ void NAVProcessor::init() {
 
 NavMessageType NAVProcessor::selectMessageType() {
     const auto& gnssData = gnssProcessor.getData();
+    
+    // Debug logging
+    static uint32_t lastDebugTime = 0;
+    if (millis() - lastDebugTime > 10000) {  // Log every 10 seconds
+        lastDebugTime = millis();
+        LOG_DEBUG(EventSource::GNSS, "selectMessageType: hasDualHeading=%d, hasINS=%d, hasFix=%d, hasGPS=%d, msgMask=0x%02X", 
+                  gnssData.hasDualHeading, gnssData.hasINS, gnssProcessor.hasFix(), 
+                  gnssProcessor.hasGPS(), gnssData.messageTypeMask);
+    }
     
     // For dual/INS systems, send PAOGI even without fix (for INS_ALIGNING state)
     if (gnssData.hasDualHeading || gnssData.hasINS) {
@@ -139,7 +149,8 @@ float NAVProcessor::convertGPStoUTC(uint16_t gpsWeek, float gpsSeconds) {
 }
 
 bool NAVProcessor::formatPANDAMessage() {
-    if (!gnssProcessor.isValid()) {
+    if (!gnssProcessor.hasGPS()) {
+        LOG_DEBUG(EventSource::GNSS, "PANDA format failed - No GPS data");
         return false;
     }
     
@@ -151,11 +162,11 @@ bool NAVProcessor::formatPANDAMessage() {
     
     const auto& gnssData = gnssProcessor.getData();
     
-    // Convert coordinates to NMEA format
-    double latNMEA, lonNMEA;
-    char latDir, lonDir;
-    convertToNMEACoordinates(gnssData.latitude, false, latNMEA, latDir);
-    convertToNMEACoordinates(gnssData.longitude, true, lonNMEA, lonDir);
+    // Use cached NMEA coordinates - no conversion needed!
+    double latNMEA = gnssData.latitudeNMEA;
+    double lonNMEA = gnssData.longitudeNMEA;
+    char latDir = gnssData.latDir;
+    char lonDir = gnssData.lonDir;
     
     // Get IMU data if available - using strings like old code
     char imuHeading[10] = "65535";  // Default "no IMU" value
@@ -175,27 +186,54 @@ bool NAVProcessor::formatPANDAMessage() {
     // Use the fractional seconds from the GPS data if available
     float timeFloat = gnssData.fixTime + gnssData.fixTimeFractional;
     
-    // Build PANDA message without checksum
-    int len = snprintf(messageBuffer, BUFFER_SIZE - 4,
-        "$PANDA,%.1f,%.6f,%c,%.6f,%c,%d,%d,%.1f,%.3f,%.1f,%.3f,%s,%s,%s,%s",
-        timeFloat,                          // Time
-        latNMEA, latDir,                   // Latitude
-        lonNMEA, lonDir,                   // Longitude
-        gnssData.fixQuality,               // Fix quality
-        gnssData.numSatellites,            // Satellites
-        gnssData.hdop,                     // HDOP
-        gnssData.altitude,                 // Altitude
-        (float)gnssData.ageDGPS,           // Age DGPS (always send value with decimal)
-        gnssData.speedKnots,               // Speed
-        imuHeading,                        // IMU Heading (65535 = no IMU)
-        imuRoll,                           // IMU Roll
-        imuPitch,                          // IMU Pitch
-        imuYawRate                         // IMU Yaw Rate
-    );
+    // Build PANDA message using MessageBuilder
+    NMEAMessageBuilder builder(messageBuffer);
     
-    // Calculate and append checksum
-    uint8_t checksum = calculateNMEAChecksum(messageBuffer);
-    snprintf(messageBuffer + len, 5, "*%02X", checksum);
+    builder.addString("$PANDA");
+    builder.addComma();
+    
+    // Add time
+    builder.addFloat(timeFloat, 1);
+    builder.addComma();
+    
+    // Add latitude
+    builder.addLatitude(latNMEA);
+    builder.addComma();
+    builder.addChar(latDir);
+    builder.addComma();
+    
+    // Add longitude
+    builder.addLongitude(lonNMEA);
+    builder.addComma();
+    builder.addChar(lonDir);
+    builder.addComma();
+    
+    // Add navigation fields
+    builder.addInt(gnssData.fixQuality);
+    builder.addComma();
+    builder.addInt(gnssData.numSatellites);
+    builder.addComma();
+    builder.addFloat(gnssData.hdop, 1);
+    builder.addComma();
+    builder.addFloat(gnssData.altitude, 3);
+    builder.addComma();
+    builder.addFloat((float)gnssData.ageDGPS, 1);
+    builder.addComma();
+    builder.addFloat(gnssData.speedKnots, 3);
+    builder.addComma();
+    
+    // Add IMU fields
+    builder.addString(imuHeading);
+    builder.addComma();
+    builder.addString(imuRoll);
+    builder.addComma();
+    builder.addString(imuPitch);
+    builder.addComma();
+    builder.addString(imuYawRate);
+    
+    // Add checksum and terminate
+    builder.addChecksum();
+    builder.terminate();
     
     return true;
 }
@@ -214,11 +252,11 @@ bool NAVProcessor::formatPAOGIMessage() {
     
     const auto& gnssData = gnssProcessor.getData();
     
-    // Convert coordinates to NMEA format
-    double latNMEA, lonNMEA;
-    char latDir, lonDir;
-    convertToNMEACoordinates(gnssData.latitude, false, latNMEA, latDir);
-    convertToNMEACoordinates(gnssData.longitude, true, lonNMEA, lonDir);
+    // Use cached NMEA coordinates - no conversion needed!
+    double latNMEA = gnssData.latitudeNMEA;
+    double lonNMEA = gnssData.longitudeNMEA;
+    char latDir = gnssData.latDir;
+    char lonDir = gnssData.lonDir;
     
     // Get IMU data if available (for pitch and yaw rate)
     int16_t pitch = 0;
@@ -247,28 +285,54 @@ bool NAVProcessor::formatPAOGIMessage() {
         timeFloat = gnssData.fixTime + gnssData.fixTimeFractional;
     }
     
-    // Build PAOGI message without checksum
-    // NMEA format: Lat DDMM.MMMMM (4 digits before decimal), Lon DDDMM.MMMMM (5 digits before decimal)
-    int len = snprintf(messageBuffer, BUFFER_SIZE - 4,
-        "$PAOGI,%.1f,%010.6f,%c,%011.6f,%c,%d,%d,%.1f,%.3f,%.1f,%.3f,%.1f,%.2f,%d,%.2f",
-        timeFloat,                          // Field 1: Time
-        latNMEA, latDir,                   // Field 2-3: Latitude
-        lonNMEA, lonDir,                   // Field 4-5: Longitude
-        gnssData.fixQuality,               // Field 6: Fix quality
-        gnssData.numSatellites,            // Field 7: Satellites
-        gnssData.hdop,                     // Field 8: HDOP
-        gnssData.altitude,                 // Field 9: Altitude
-        (float)gnssData.ageDGPS,           // Field 10: Age DGPS
-        gnssData.speedKnots,               // Field 11: Speed
-        gnssData.dualHeading,              // Field 12: IMU Heading (from KSXT field 5)
-        roll,                              // Field 13: IMU Roll (from KSXT pitch field 6 used as roll)
-        pitch,                             // Field 14: IMU Pitch (from actual IMU if available)
-        yawRate                            // Field 15: IMU Yaw rate
-    );
+    // Build PAOGI message using MessageBuilder
+    NMEAMessageBuilder builder(messageBuffer);
     
-    // Calculate and append checksum
-    uint8_t checksum = calculateNMEAChecksum(messageBuffer);
-    snprintf(messageBuffer + len, 5, "*%02X", checksum);
+    builder.addString("$PAOGI");
+    builder.addComma();
+    
+    // Add time
+    builder.addFloat(timeFloat, 1);
+    builder.addComma();
+    
+    // Add latitude
+    builder.addLatitude(latNMEA);
+    builder.addComma();
+    builder.addChar(latDir);
+    builder.addComma();
+    
+    // Add longitude
+    builder.addLongitude(lonNMEA);
+    builder.addComma();
+    builder.addChar(lonDir);
+    builder.addComma();
+    
+    // Add navigation fields
+    builder.addInt(gnssData.fixQuality);
+    builder.addComma();
+    builder.addInt(gnssData.numSatellites);
+    builder.addComma();
+    builder.addFloat(gnssData.hdop, 1);
+    builder.addComma();
+    builder.addFloat(gnssData.altitude, 3);
+    builder.addComma();
+    builder.addFloat((float)gnssData.ageDGPS, 1);
+    builder.addComma();
+    builder.addFloat(gnssData.speedKnots, 3);
+    builder.addComma();
+    
+    // Add IMU/dual antenna fields
+    builder.addFloat(gnssData.dualHeading, 1);
+    builder.addComma();
+    builder.addFloat(roll, 2);
+    builder.addComma();
+    builder.addInt(pitch);
+    builder.addComma();
+    builder.addFloat(yawRate, 2);
+    
+    // Add checksum and terminate
+    builder.addChecksum();
+    builder.terminate();
     
     return true;
 }
@@ -326,8 +390,8 @@ void NAVProcessor::process() {
     
     if (msgType != lastMsgType) {
         if (msgType != NavMessageType::NONE) {
-            LOG_INFO(EventSource::GNSS, "Switching to %s messages", 
-                     msgType == NavMessageType::PANDA ? "PANDA" : "PAOGI");
+            LOG_DEBUG(EventSource::GNSS, "Switching to %s messages", 
+                      msgType == NavMessageType::PANDA ? "PANDA" : "PAOGI");
         }
         lastMsgType = msgType;
     }
