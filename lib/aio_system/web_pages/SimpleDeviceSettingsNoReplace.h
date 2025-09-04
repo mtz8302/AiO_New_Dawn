@@ -40,7 +40,9 @@ const char SIMPLE_DEVICE_SETTINGS_NO_REPLACE[] PROGMEM = R"rawliteral(
                 udpPassthrough: document.getElementById('udpPassthrough').checked,
                 sensorFusion: document.getElementById('sensorFusion').checked,
                 pwmBrakeMode: document.getElementById('pwmBrakeMode').checked,
-                encoderType: parseInt(document.getElementById('encoderType').value)
+                encoderType: parseInt(document.getElementById('encoderType').value),
+                jdPWMEnabled: document.getElementById('jdPWMEnabled').checked,
+                jdPWMThreshold: parseInt(document.getElementById('jdPWMThreshold').value)
             };
             
             fetch('/api/device/settings', {
@@ -74,10 +76,18 @@ const char SIMPLE_DEVICE_SETTINGS_NO_REPLACE[] PROGMEM = R"rawliteral(
                     document.getElementById('sensorFusion').checked = data.sensorFusion || false;
                     document.getElementById('pwmBrakeMode').checked = data.pwmBrakeMode || false;
                     document.getElementById('encoderType').value = data.encoderType || 1;
+                    document.getElementById('jdPWMEnabled').checked = data.jdPWMEnabled || false;
+                    document.getElementById('jdPWMThreshold').value = data.jdPWMThreshold || 20;
+                    toggleJDPWMThreshold();
                 })
                 .catch((error) => {
                     console.error('Error loading settings:', error);
                 });
+        }
+        
+        function toggleJDPWMThreshold() {
+            const enabled = document.getElementById('jdPWMEnabled').checked;
+            document.getElementById('jdPWMThresholdGroup').style.display = enabled ? 'block' : 'none';
         }
         
         window.onload = function() {
@@ -136,6 +146,25 @@ const char SIMPLE_DEVICE_SETTINGS_NO_REPLACE[] PROGMEM = R"rawliteral(
                 </select>
                 <div class='help-text' style='margin-top: 5px;'>
                     Single channel encoders use only the Kickout-D pin. Quadrature encoders use both Kickout-A and Kickout-D pins for direction sensing and higher resolution.
+                </div>
+            </div>
+            
+            <div class='form-group'>
+                <label class='checkbox-container' style='display: inline-flex; align-items: center;'>
+                    <input type='checkbox' id='jdPWMEnabled' name='jdPWMEnabled' onchange='toggleJDPWMThreshold()' style='margin-right: 10px;'>
+                    <span class='checkbox-label' style='white-space: nowrap;'>John Deere PWM Encoder Mode</span>
+                </label>
+                <div class='help-text' style='margin-left: 25px; margin-top: 5px;'>
+                    Enable John Deere Autotrac PWM encoder support. This uses the pressure sensor input (Kickout-A pin) to measure PWM duty cycle changes for steering wheel motion detection.
+                </div>
+            </div>
+            
+            <div class='form-group' id='jdPWMThresholdGroup' style='display: none; margin-left: 25px;'>
+                <label for='jdPWMThreshold'>JD PWM Motion Threshold:</label>
+                <input type='number' id='jdPWMThreshold' name='jdPWMThreshold' min='5' max='100' value='20' style='width: 80px; padding: 5px;'>
+                <span style='margin-left: 10px;'>(5-100)</span>
+                <div class='help-text' style='margin-top: 5px;'>
+                    Motion detection threshold for JD PWM encoder. Lower values = more sensitive. Default is 20.
                 </div>
             </div>
             

@@ -455,6 +455,8 @@ void SimpleWebManager::handleDeviceSettings(EthernetClient& client, const String
         doc["sensorFusion"] = false;  // Sensor fusion not implemented yet
         doc["pwmBrakeMode"] = config->getPWMBrakeMode();
         doc["encoderType"] = config->getEncoderType();
+        doc["jdPWMEnabled"] = config->getJDPWMEnabled();
+        doc["jdPWMThreshold"] = config->getJDPWMThreshold();
         
         String json;
         serializeJson(doc, json);
@@ -478,18 +480,26 @@ void SimpleWebManager::handleDeviceSettings(EthernetClient& client, const String
         bool sensorFusion = doc["sensorFusion"] | false;
         bool pwmBrakeMode = doc["pwmBrakeMode"] | false;
         int encoderType = doc["encoderType"] | 1;
+        bool jdPWMEnabled = doc["jdPWMEnabled"] | false;
+        int jdPWMThreshold = doc["jdPWMThreshold"] | 20;
         
         // Save to ConfigManager
         ConfigManager* config = ConfigManager::getInstance();
         config->setGPSPassThrough(udpPassthrough);
         config->setPWMBrakeMode(pwmBrakeMode);
         config->setEncoderType(encoderType);
+        config->setJDPWMEnabled(jdPWMEnabled);
+        config->setJDPWMThreshold(jdPWMThreshold);
         // Sensor fusion configuration not implemented yet
         
         // Save to EEPROM
-        config->saveTurnSensorConfig();  // This saves encoder type
+        config->saveTurnSensorConfig();  // This saves encoder type and JD PWM settings
         config->saveSteerConfig();       // This saves PWM brake mode
         config->saveGPSConfig();         // This saves GPS passthrough
+        
+        // Apply JD PWM mode change to ADProcessor
+        extern ADProcessor adProcessor;
+        adProcessor.setJDPWMMode(jdPWMEnabled);
         
         // Update GNSSProcessor with new passthrough setting
         gnssProcessor.setUDPPassthrough(udpPassthrough);
