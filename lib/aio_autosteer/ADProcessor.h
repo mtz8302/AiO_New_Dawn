@@ -52,6 +52,12 @@ public:
         return (currentReading < 0) ? 0 : (uint16_t)currentReading;
     }
     
+    // JD PWM encoder methods
+    void setJDPWMMode(bool enabled);
+    bool isJDPWMMode() const { return jdPWMMode; }
+    float getJDPWMMotionValue() const { return jdPWMMotionValue; }
+    uint32_t getJDPWMDutyTime() const { return jdPWMDutyTime; }
+    
     // Configuration
     void setWASOffset(int16_t offset) { wasOffset = offset; }
     void setWASCountsPerDegree(float counts) { wasCountsPerDegree = counts; }
@@ -80,6 +86,10 @@ public:
     // Static instance for singleton pattern
     static ADProcessor* instance;
     static ADProcessor* getInstance();
+    
+    // JD PWM interrupt handlers (must be static for ISR)
+    static void jdPWMRisingISR();
+    static void jdPWMFallingISR();
 
 private:
     // Pin assignments from pcb.h
@@ -110,6 +120,13 @@ private:
     float pressureReading;  // Filtered pressure sensor reading
     uint16_t motorCurrentRaw;
     float currentReading;   // Filtered current sensor reading
+    
+    // JD PWM encoder data
+    bool jdPWMMode;         // True when in JD PWM mode
+    volatile uint32_t jdPWMDutyTime;     // Current PWM duty time in microseconds
+    volatile uint32_t jdPWMDutyTimePrev; // Previous PWM duty time
+    volatile uint32_t jdPWMRiseTime;     // Time of last rising edge
+    float jdPWMMotionValue;              // Calculated motion value (0-255)
     
     // Analog work switch mode
     bool analogWorkSwitchEnabled;

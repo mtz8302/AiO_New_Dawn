@@ -478,6 +478,10 @@ void ConfigManager::resetToDefaults()
     currentThreshold = 100;  // Middle of range
     currentZeroOffset = 90;  // From NG-V6 code
     
+    // JD PWM defaults
+    jdPWMEnabled = false;
+    jdPWMThreshold = 20;     // Reasonable default for motion detection
+    
     // Analog work switch defaults
     analogWorkSwitchEnabled = false;
     workSwitchSetpoint = 50;     // 50%
@@ -539,6 +543,10 @@ void ConfigManager::saveTurnSensorConfig()
     EEPROM.put(addr, currentThreshold);
     addr += sizeof(currentThreshold);
     EEPROM.put(addr, currentZeroOffset);
+    addr += sizeof(currentZeroOffset);
+    EEPROM.put(addr, jdPWMEnabled);
+    addr += sizeof(jdPWMEnabled);
+    EEPROM.put(addr, jdPWMThreshold);
 }
 
 void ConfigManager::loadTurnSensorConfig()
@@ -555,9 +563,13 @@ void ConfigManager::loadTurnSensorConfig()
     EEPROM.get(addr, currentThreshold);
     addr += sizeof(currentThreshold);
     EEPROM.get(addr, currentZeroOffset);
+    addr += sizeof(currentZeroOffset);
+    EEPROM.get(addr, jdPWMEnabled);
+    addr += sizeof(jdPWMEnabled);
+    EEPROM.get(addr, jdPWMThreshold);
     
-    LOG_DEBUG(EventSource::CONFIG, "Loaded turn sensor config: Type=%d, EncoderType=%d", 
-              turnSensorType, encoderType);
+    LOG_DEBUG(EventSource::CONFIG, "Loaded turn sensor config: Type=%d, EncoderType=%d, JDPWM=%d", 
+              turnSensorType, encoderType, jdPWMEnabled);
 }
 
 void ConfigManager::saveAnalogWorkSwitchConfig()

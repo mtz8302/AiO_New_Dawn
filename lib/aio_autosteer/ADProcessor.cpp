@@ -34,6 +34,13 @@ ADProcessor::ADProcessor() :
     }
     currentRunningSum = 0.0f;
     
+    // Initialize JD PWM data
+    jdPWMMode = false;
+    jdPWMDutyTime = 0;
+    jdPWMDutyTimePrev = 0;
+    jdPWMRiseTime = 0;
+    jdPWMMotionValue = 0.0f;
+    
     instance = this;
 }
 
@@ -59,6 +66,13 @@ bool ADProcessor::init()
     LOG_INFO(EventSource::AUTOSTEER, "Analog work switch config: Enabled=%d, SP=%d%%, H=%d%%, Inv=%d",
              analogWorkSwitchEnabled, workSwitchSetpoint, workSwitchHysteresis, invertWorkSwitch);
     
+    // Check for JD PWM mode
+    jdPWMMode = configManager.getJDPWMEnabled();
+    if (jdPWMMode) {
+        LOG_INFO(EventSource::AUTOSTEER, "JD PWM encoder mode enabled, threshold=%d", 
+                 configManager.getJDPWMThreshold());
+    }
+    
     // Configure pins with ownership tracking
     pinMode(AD_STEER_PIN, INPUT_PULLUP);      // Steer switch with internal pullup
     
@@ -67,11 +81,22 @@ bool ADProcessor::init()
     
     pinMode(AD_WAS_PIN, INPUT_DISABLE);       // WAS analog input (no pullup)
     
-    // Request ownership of KICKOUT_A for pressure sensor mode
+    // Request ownership of KICKOUT_A for pressure sensor or JD PWM mode
     HardwareManager* hwMgr = HardwareManager::getInstance();
     if (hwMgr->requestPinOwnership(AD_KICKOUT_A_PIN, HardwareManager::OWNER_ADPROCESSOR, "ADProcessor")) {
-        pinMode(AD_KICKOUT_A_PIN, INPUT_DISABLE); // Pressure sensor analog input
-        hwMgr->updatePinMode(AD_KICKOUT_A_PIN, INPUT_DISABLE);
+        if (jdPWMMode) {
+            // Configure for digital input (JD PWM mode)
+            pinMode(AD_KICKOUT_A_PIN, INPUT);
+            hwMgr->updatePinMode(AD_KICKOUT_A_PIN, INPUT);
+            // Attach interrupt handlers for PWM measurement
+            attachInterrupt(digitalPinToInterrupt(AD_KICKOUT_A_PIN), jdPWMRisingISR, RISING);
+            LOG_INFO(EventSource::AUTOSTEER, "KICKOUT_A pin configured for JD PWM mode");
+        } else {
+            // Configure for analog input (pressure sensor mode)
+            pinMode(AD_KICKOUT_A_PIN, INPUT_DISABLE);
+            hwMgr->updatePinMode(AD_KICKOUT_A_PIN, INPUT_DISABLE);
+            LOG_INFO(EventSource::AUTOSTEER, "KICKOUT_A pin configured for analog pressure sensor");
+        }
     } else {
         LOG_WARNING(EventSource::AUTOSTEER, "Failed to get ownership of KICKOUT_A pin");
     }
@@ -169,24 +194,47 @@ void ADProcessor::process()
         // Update switches
         updateSwitches();
         
-        // Read kickout sensors
-        kickoutAnalogRaw = analogRead(AD_KICKOUT_A_PIN);
-        
-        // Debug current sensor reading
-        static uint32_t lastCurrentDebug = 0;
-        
-        if (millis() - lastCurrentDebug > 2000) {  // Every 2 seconds
-            lastCurrentDebug = millis();
-            LOG_DEBUG(EventSource::AUTOSTEER, "Current sensor: Averaged reading=%.1f (from %d samples)", 
-                      currentReading, CURRENT_BUFFER_SIZE);
+        if (jdPWMMode) {
+            // In JD PWM mode, calculate motion value from duty cycle
+            if (jdPWMDutyTime > 500 && jdPWMDutyTime < 4500) {
+                // Valid duty cycle range
+                if (abs((int32_t)jdPWMDutyTime - (int32_t)jdPWMDutyTimePrev) < 1000) {
+                    // Calculate motion based on duty cycle change
+                    float sensorSample = abs((double)jdPWMDutyTime - 2600) / 5.0;
+                    float motionDelta = abs((abs((double)jdPWMDutyTimePrev - 2600) / 5.0) - sensorSample);
+                    jdPWMMotionValue = min(motionDelta, 255.0f);
+                } else {
+                    // Large jump, reset
+                    jdPWMMotionValue = 0;
+                }
+                jdPWMDutyTimePrev = jdPWMDutyTime;
+            } else {
+                // Invalid duty cycle
+                jdPWMMotionValue = 0;
+            }
+            
+            // Use JD PWM value as pressure reading for compatibility
+            pressureReading = jdPWMMotionValue;
+        } else {
+            // Normal analog pressure sensor mode
+            kickoutAnalogRaw = analogRead(AD_KICKOUT_A_PIN);
+            
+            // Debug current sensor reading
+            static uint32_t lastCurrentDebug = 0;
+            
+            if (millis() - lastCurrentDebug > 2000) {  // Every 2 seconds
+                lastCurrentDebug = millis();
+                LOG_DEBUG(EventSource::AUTOSTEER, "Current sensor: Averaged reading=%.1f (from %d samples)", 
+                          currentReading, CURRENT_BUFFER_SIZE);
+            }
+            
+            // Update pressure sensor reading with filtering
+            // Scale 12-bit ADC (0-4095) to match NG-V6 behavior
+            float sensorSample = (float)kickoutAnalogRaw;
+            sensorSample *= 0.15f;  // Scale down to try matching old AIO
+            sensorSample = min(sensorSample, 255.0f);  // Limit to 1 byte (0-255)
+            pressureReading = pressureReading * 0.8f + sensorSample * 0.2f;  // 80/20 filter
         }
-        
-        // Update pressure sensor reading with filtering
-        // Scale 12-bit ADC (0-4095) to match NG-V6 behavior
-        float sensorSample = (float)kickoutAnalogRaw;
-        sensorSample *= 0.15f;  // Scale down to try matching old AIO
-        sensorSample = min(sensorSample, 255.0f);  // Limit to 1 byte (0-255)
-        pressureReading = pressureReading * 0.8f + sensorSample * 0.2f;  // 80/20 filter
     }
     
     lastProcessTime = millis();
@@ -412,4 +460,49 @@ void ADProcessor::setInvertWorkSwitch(bool inv)
     extern ConfigManager configManager;
     configManager.setInvertWorkSwitch(inv);
     configManager.saveAnalogWorkSwitchConfig();
+}
+
+// JD PWM mode implementation
+void ADProcessor::setJDPWMMode(bool enabled)
+{
+    if (jdPWMMode == enabled) return; // No change
+    
+    jdPWMMode = enabled;
+    extern ConfigManager configManager;
+    configManager.setJDPWMEnabled(enabled);
+    configManager.saveTurnSensorConfig();
+    
+    HardwareManager* hwMgr = HardwareManager::getInstance();
+    
+    if (enabled) {
+        // Switch to digital mode for JD PWM
+        pinMode(AD_KICKOUT_A_PIN, INPUT);
+        hwMgr->updatePinMode(AD_KICKOUT_A_PIN, INPUT);
+        attachInterrupt(digitalPinToInterrupt(AD_KICKOUT_A_PIN), jdPWMRisingISR, RISING);
+        LOG_INFO(EventSource::AUTOSTEER, "JD PWM mode ENABLED");
+    } else {
+        // Switch back to analog mode for pressure sensor
+        detachInterrupt(digitalPinToInterrupt(AD_KICKOUT_A_PIN));
+        pinMode(AD_KICKOUT_A_PIN, INPUT_DISABLE);
+        hwMgr->updatePinMode(AD_KICKOUT_A_PIN, INPUT_DISABLE);
+        LOG_INFO(EventSource::AUTOSTEER, "JD PWM mode DISABLED - analog pressure mode restored");
+    }
+}
+
+// JD PWM interrupt handlers
+void ADProcessor::jdPWMRisingISR()
+{
+    if (instance) {
+        instance->jdPWMRiseTime = micros();
+        attachInterrupt(digitalPinToInterrupt(AD_KICKOUT_A_PIN), jdPWMFallingISR, FALLING);
+    }
+}
+
+void ADProcessor::jdPWMFallingISR()
+{
+    if (instance) {
+        uint32_t fallTime = micros();
+        instance->jdPWMDutyTime = fallTime - instance->jdPWMRiseTime;
+        attachInterrupt(digitalPinToInterrupt(AD_KICKOUT_A_PIN), jdPWMRisingISR, RISING);
+    }
 }
