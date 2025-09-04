@@ -151,6 +151,20 @@ void KickoutMonitor::process() {
     if (!kickoutActive) {
         // Not currently in kickout - check if we should trigger one
         
+        // Debug JD PWM status periodically
+        static uint32_t lastJDDebug = 0;
+        if (configMgr->getJDPWMEnabled() && (millis() - lastJDDebug > 2000)) {
+            Serial.print("JD_PWM_KICKOUT: enabled=");
+            Serial.print(configMgr->getJDPWMEnabled());
+            Serial.print(", pressure=");
+            Serial.print(lastPressureReading);
+            Serial.print(", threshold=");
+            Serial.print(configMgr->getJDPWMThreshold());
+            Serial.print(", isKeyaMotor=");
+            Serial.println(isKeyaMotor);
+            lastJDDebug = millis();
+        }
+        
         // External sensor checks - NOT for Keya motors
         if (!isKeyaMotor && configMgr->getShaftEncoder()) {
             // Encoder is enabled for non-Keya motors
@@ -172,6 +186,7 @@ void KickoutMonitor::process() {
             kickoutReason = JD_PWM_MOTION;
             kickoutTime = millis();
             
+            Serial.println("JD_PWM_KICKOUT: *** KICKOUT ACTIVATED ***");
             LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s", getReasonString());
             
             // Notify motor driver using pressure sensor kickout type for compatibility
@@ -180,6 +195,7 @@ void KickoutMonitor::process() {
             }
         }
         else if (!isKeyaMotor && configMgr->getPressureSensor() && !configMgr->getJDPWMEnabled() && checkPressureKickout()) {
+            Serial.println("PRESSURE_KICKOUT: Regular pressure mode (JD PWM disabled)");
             kickoutActive = true;
             kickoutReason = PRESSURE_HIGH;
             kickoutTime = millis();
@@ -398,14 +414,30 @@ bool KickoutMonitor::checkJDPWMKickout() {
     // which contains the calculated motion value
     uint8_t threshold = configMgr->getJDPWMThreshold();
     
+    // Debug output
+    static uint32_t lastDebugTime = 0;
+    uint32_t now = millis();
+    if (now - lastDebugTime > 1000) { // Debug every second
+        Serial.print("JD_PWM_CHECK: pressure=");
+        Serial.print(lastPressureReading);
+        Serial.print(", threshold=");
+        Serial.print(threshold);
+        Serial.print(", wouldTrigger=");
+        Serial.println(lastPressureReading > threshold ? "YES" : "NO");
+        lastDebugTime = now;
+    }
+    
     if (lastPressureReading > threshold) {
         // Only log when first detecting kickout (not already active) or every 1 second
         static uint32_t lastLogTime = 0;
-        uint32_t now = millis();
         
         if (!kickoutActive || (now - lastLogTime >= 1000)) {
             LOG_DEBUG(EventSource::AUTOSTEER, "JD PWM motion detected: %u (threshold %u)", 
                           lastPressureReading, threshold);
+            Serial.print("JD_PWM_KICKOUT_TRIGGERED: motion=");
+            Serial.print(lastPressureReading);
+            Serial.print(" > threshold=");
+            Serial.println(threshold);
             lastLogTime = now;
         }
         return true;

@@ -71,6 +71,10 @@ bool ADProcessor::init()
     if (jdPWMMode) {
         LOG_INFO(EventSource::AUTOSTEER, "JD PWM encoder mode enabled, threshold=%d", 
                  configManager.getJDPWMThreshold());
+        Serial.print("JD_PWM_INIT: Mode ENABLED, threshold=");
+        Serial.println(configManager.getJDPWMThreshold());
+    } else {
+        Serial.println("JD_PWM_INIT: Mode DISABLED (using analog pressure mode)");
     }
     
     // Configure pins with ownership tracking
@@ -196,6 +200,10 @@ void ADProcessor::process()
         
         if (jdPWMMode) {
             // In JD PWM mode, calculate motion value from duty cycle
+            static uint32_t lastDebugTime = 0;
+            uint32_t now = millis();
+            bool doDebug = (now - lastDebugTime > 500); // Debug every 500ms
+            
             if (jdPWMDutyTime > 500 && jdPWMDutyTime < 4500) {
                 // Valid duty cycle range
                 if (abs((int32_t)jdPWMDutyTime - (int32_t)jdPWMDutyTimePrev) < 1000) {
@@ -203,14 +211,39 @@ void ADProcessor::process()
                     float sensorSample = abs((double)jdPWMDutyTime - 2600) / 5.0;
                     float motionDelta = abs((abs((double)jdPWMDutyTimePrev - 2600) / 5.0) - sensorSample);
                     jdPWMMotionValue = min(motionDelta, 255.0f);
+                    
+                    if (doDebug && jdPWMMotionValue > 0) {
+                        Serial.print("JD_PWM: duty=");
+                        Serial.print(jdPWMDutyTime);
+                        Serial.print("us, prev=");
+                        Serial.print(jdPWMDutyTimePrev);
+                        Serial.print("us, motion=");
+                        Serial.print(jdPWMMotionValue);
+                        Serial.print(", pressure=");
+                        Serial.println(pressureReading);
+                        lastDebugTime = now;
+                    }
                 } else {
                     // Large jump, reset
                     jdPWMMotionValue = 0;
+                    if (doDebug) {
+                        Serial.print("JD_PWM: Large jump detected! duty=");
+                        Serial.print(jdPWMDutyTime);
+                        Serial.print(", prev=");
+                        Serial.println(jdPWMDutyTimePrev);
+                        lastDebugTime = now;
+                    }
                 }
                 jdPWMDutyTimePrev = jdPWMDutyTime;
             } else {
                 // Invalid duty cycle
                 jdPWMMotionValue = 0;
+                if (doDebug && jdPWMDutyTime != 0) {
+                    Serial.print("JD_PWM: Invalid duty cycle: ");
+                    Serial.print(jdPWMDutyTime);
+                    Serial.println("us (valid range: 500-4500us)");
+                    lastDebugTime = now;
+                }
             }
             
             // Use JD PWM value as pressure reading for compatibility
@@ -504,5 +537,19 @@ void ADProcessor::jdPWMFallingISR()
         uint32_t fallTime = micros();
         instance->jdPWMDutyTime = fallTime - instance->jdPWMRiseTime;
         attachInterrupt(digitalPinToInterrupt(AD_KICKOUT_A_PIN), jdPWMRisingISR, RISING);
+        
+        // Debug: Show interrupt activity
+        static uint32_t intCount = 0;
+        static uint32_t lastIntDebug = 0;
+        intCount++;
+        if (millis() - lastIntDebug > 1000) {
+            Serial.print("JD_PWM_ISR: ");
+            Serial.print(intCount);
+            Serial.print(" interrupts/sec, last duty=");
+            Serial.print(instance->jdPWMDutyTime);
+            Serial.println("us");
+            intCount = 0;
+            lastIntDebug = millis();
+        }
     }
 }
