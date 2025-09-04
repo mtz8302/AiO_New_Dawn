@@ -41,11 +41,17 @@ The JD PWM encoder outputs a PWM signal with a duty cycle that changes based on 
 
 ### AgOpenGPS Configuration
 
+**IMPORTANT**: AgOpenGPS must be configured to use "Pressure Sensor" kickout mode for the JD PWM encoder to work. This is because the JD PWM feature sends its motion detection data through the pressure sensor channel for compatibility.
+
 In AgOpenGPS, configure the steer module settings:
-1. In the Steer Configuration window:
-   - Enable **Pressure Sensor** (the JD PWM uses the same data channel)
-   - Set the pressure threshold as you normally would
-   - The threshold in AgOpenGPS should typically match or be close to your web interface setting
+1. Open the **Steer Configuration** window
+2. In the **Turn Sensor** or **Kickout** section:
+   - **Enable "Pressure Sensor"** (REQUIRED - even though you're using a PWM encoder)
+   - Set the pressure threshold value
+   - The threshold in AgOpenGPS works together with the web interface threshold
+3. Disable other kickout methods (Encoder, Current) unless you have those sensors on different pins
+
+**Why Pressure Mode?** The JD PWM encoder reuses the pressure sensor data channel to maintain compatibility with AgOpenGPS without requiring software modifications. AgOpenGPS sees the motion values as "pressure" readings.
 
 ## Calibration
 
@@ -88,9 +94,14 @@ In AgOpenGPS, configure the steer module settings:
 - Verify encoder is properly mounted and not vibrating
 
 ### Conflict with Pressure Sensor
-- JD PWM mode and analog pressure sensors cannot be used simultaneously
+- JD PWM mode and analog pressure sensors cannot be used simultaneously on the same pin
 - If you need pressure sensor kickout, disable JD PWM mode
 - Only one kickout method can use the Kickout-A pin at a time
+
+### AgOpenGPS Shows Wrong Sensor Type
+- This is normal - AgOpenGPS will show "Pressure Sensor" even though you're using JD PWM
+- The firmware sends JD PWM data through the pressure channel for compatibility
+- This does not affect functionality
 
 ## Technical Details
 

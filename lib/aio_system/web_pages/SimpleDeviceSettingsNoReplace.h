@@ -155,7 +155,8 @@ const char SIMPLE_DEVICE_SETTINGS_NO_REPLACE[] PROGMEM = R"rawliteral(
                     <span class='checkbox-label' style='white-space: nowrap;'>John Deere PWM Encoder Mode</span>
                 </label>
                 <div class='help-text' style='margin-left: 25px; margin-top: 5px;'>
-                    Enable John Deere Autotrac PWM encoder support. This uses the pressure sensor input (Kickout-A pin) to measure PWM duty cycle changes for steering wheel motion detection.
+                    Enable John Deere Autotrac PWM encoder support. This uses the pressure sensor input (Kickout-A pin) to measure PWM duty cycle changes for steering wheel motion detection.<br>
+                    <strong>Note:</strong> In AgOpenGPS, you must enable "Pressure Sensor" kickout mode for this to work.
                 </div>
             </div>
             
