@@ -443,7 +443,66 @@ void loop()
   {
     uint8_t b = SerialGPS2.read();
     //gnssProcessor.processUBXByte(b);
-    SerialRS232.write(b);  // forward UM982 com2 to RS232 for GS3 2630 harvest documentation
+    //SerialRS232.write(b);  // forward UM982 com2 to RS232 for GS3 2630 harvest documentation
+
+    enum State { WAITING, IN_SENTENCE, COUNTING, CHECKSUM };
+    static State state = WAITING;
+    static uint8_t decimalCount = 0;
+    static uint8_t checkSum = 0;
+
+    switch (state) {
+      case WAITING:
+        if (b == '$') {
+          state = IN_SENTENCE;
+          checkSum = 0;
+        }
+        SerialRS232.write(b);  // forward byte from UM982 com2 (GPS2) to RS232 for GS3 2630 harvest documentation
+        Serial.write(b);      // also echo to main serial for logging
+        checkSum ^= b;
+        break;
+
+      case IN_SENTENCE:
+        if (b == '.') {
+          state = COUNTING;
+          decimalCount = 0;
+        } else if (b == '*') {
+          state = CHECKSUM;  // Start of checksum, ignore the next 1-2 bytes, upto '\n' or '\r'
+        }
+        SerialRS232.write(b);
+        Serial.write(b);      // also echo to main serial for logging
+        checkSum ^= b;
+        break;
+
+      case COUNTING:
+        if (b >= '0' && b <= '9') {
+          decimalCount++;
+          if (decimalCount <= 6) {
+            SerialRS232.write(b);
+            Serial.write(b);      // also echo to main serial for logging
+            checkSum ^= b;
+          }
+          else {
+            // do nothing, drop the digits
+          }
+        } else {  // byte is not a numerical digit so we go back to watching for the next '.'
+          state = IN_SENTENCE;
+          SerialRS232.write(b);
+          Serial.write(b);      // also echo to main serial for logging
+          checkSum ^= b;
+        }
+        break;
+
+      case CHECKSUM:
+        SerialRS232.write(checkSum);  // write the checksum character
+        Serial.write(checkSum);      // also echo to main serial for logging
+        state = WAITING;
+        break;
+
+      default:
+        state = WAITING;
+        Serial.printf("Unexpected state in GPS2 NMEA forwarding precision processing state machine!\r\n");
+        break;
+    }
   }
 
   // Loop timing - ultra lightweight, just increment counter
