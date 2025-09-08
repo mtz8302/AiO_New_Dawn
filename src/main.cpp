@@ -397,39 +397,9 @@ void loop()
   // Handle WebSocket clients and broadcast telemetry
   webManager.handleClient();
   webManager.broadcastTelemetry();
-    
-  // Update PWM speed pulse from GPS
-  static uint32_t lastSpeedUpdate = 0;
   
-  if (millis() - lastSpeedUpdate > 200)  // Update every 200ms like V6-NG
-  {
-    lastSpeedUpdate = millis();
-    
-    if (pwmProcessor.isSpeedPulseEnabled())
-    {
-      float speedKmh = 0.0f;
-      
-      // Use actual GPS speed
-      const auto &gpsData = gnssProcessor.getData();
-      if (gpsData.hasVelocity)
-      {
-        // Convert knots to km/h
-        speedKmh = gpsData.speedKnots * 1.852f;
-      }
-      else
-      {
-        // Fallback to PGN 254 speed if GPS velocity is not available
-        // This is useful for systems that are running in SIM mode
-        // - could also always use PGN254 speed as it returns GPS speed if available
-        speedKmh = AutosteerProcessor::getInstance()->getVehicleSpeed();
-      }
-
-      //Serial.printf("Vehicle speed: %.1f km/h", speedKmh);
-      
-      // Set the speed
-      pwmProcessor.setSpeedKmh(speedKmh);
-    }
-  }
+  // Process PWM speed pulse updates
+  pwmProcessor.process();
 
   // Process GPS1 data if available - ONE byte per loop
   if (SerialGPS1.available())
