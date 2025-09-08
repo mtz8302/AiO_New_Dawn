@@ -2,7 +2,7 @@
 #define VERSION_H
 
 // AiO New Dawn firmware version
-#define FIRMWARE_VERSION "1.0.19-beta"
+#define FIRMWARE_VERSION "1.0.26-beta" // Added buzzer volume control and JD PWM encoder support
 
 // Teensy board type for OTA identification
 #define TEENSY_BOARD_TYPE "Teensy41"
