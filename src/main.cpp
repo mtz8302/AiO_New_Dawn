@@ -145,9 +145,7 @@ void setup()
     LOG_INFO(EventSource::SYSTEM, "HardwareManager initialized");
     
     // Quick buzzer beep to indicate hardware is ready
-    hardwareManager.enableBuzzer();
-    delay(100);
-    hardwareManager.disableBuzzer();
+    hardwareManager.performBuzzerTest();
   }
   else
   {

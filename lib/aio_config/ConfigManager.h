@@ -90,6 +90,12 @@ private:
     // LED settings
     uint8_t ledBrightness;
     
+    // Buzzer settings
+    bool buzzerLoudMode;         // true = loud for field use, false = quiet for development
+    
+    // JD PWM settings
+    uint8_t jdPWMSensitivity;    // 1-10 where 10 is most sensitive
+    
     // Turn sensor configuration
     uint8_t turnSensorType;      // 0=None, 1=Encoder, 2=Pressure, 3=Current
     uint8_t encoderType;         // 1=Single, 2=Quadrature
@@ -181,6 +187,14 @@ public:
     void setLEDBrightness(uint8_t value) { 
         ledBrightness = constrain(value, 5, 100); 
     }
+    
+    // Buzzer configuration
+    bool getBuzzerLoudMode() const { return buzzerLoudMode; }
+    void setBuzzerLoudMode(bool value) { buzzerLoudMode = value; }
+    
+    // JD PWM configuration
+    uint8_t getJDPWMSensitivity() const { return jdPWMSensitivity; }
+    void setJDPWMSensitivity(uint8_t value) { jdPWMSensitivity = constrain(value, 1, 10); }
     
     // GPS configuration methods
     uint32_t getGPSBaudRate() const { return gpsBaudRate; }
@@ -305,6 +319,8 @@ public:
     void loadTurnSensorConfig();
     void saveAnalogWorkSwitchConfig();
     void loadAnalogWorkSwitchConfig();
+    void saveMiscConfig();
+    void loadMiscConfig();
     void saveNetworkConfig();
     void loadNetworkConfig();
     void loadAllConfigs();
