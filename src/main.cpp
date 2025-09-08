@@ -443,34 +443,40 @@ void loop()
   {
     uint8_t b = SerialGPS2.read();
     //gnssProcessor.processUBXByte(b);
-    //SerialRS232.write(b);  // forward UM982 com2 to RS232 for GS3 2630 harvest documentation
+    //SerialRS232.write(b);  // forward complete UM982 com2 to RS232 for GS3 2630 harvest documentation
 
-    enum State { WAITING, IN_SENTENCE, COUNTING, CHECKSUM };
+    // Refactored GPS2 NMEA forwarding to handle decimal precision and checksum processing
+    enum State { WAITING, IN_SENTENCE, COUNTING, CHECKSUM1, CHECKSUM2 };
     static State state = WAITING;
     static uint8_t decimalCount = 0;
     static uint8_t checkSum = 0;
+    //static uint8_t buffer[128];
+    //static uint8_t bufIndex = 0;
 
     switch (state) {
       case WAITING:
         if (b == '$') {
           state = IN_SENTENCE;
           checkSum = 0;
+          //Serial.write(buffer, bufIndex);
+          //bufIndex = 0;
         }
         SerialRS232.write(b);  // forward byte from UM982 com2 (GPS2) to RS232 for GS3 2630 harvest documentation
         Serial.write(b);      // also echo to main serial for logging
-        checkSum ^= b;
         break;
 
       case IN_SENTENCE:
         if (b == '.') {
           state = COUNTING;
           decimalCount = 0;
+          checkSum ^= b;
         } else if (b == '*') {
-          state = CHECKSUM;  // Start of checksum, ignore the next 1-2 bytes, upto '\n' or '\r'
+          state = CHECKSUM1;  // Start of checksum, ignore the next 1-2 bytes, upto '\n' or '\r'
+        } else {
+          checkSum ^= b;
         }
         SerialRS232.write(b);
         Serial.write(b);      // also echo to main serial for logging
-        checkSum ^= b;
         break;
 
       case COUNTING:
@@ -492,17 +498,23 @@ void loop()
         }
         break;
 
-      case CHECKSUM:
-        SerialRS232.write(checkSum);  // write the checksum character
-        Serial.write(checkSum);      // also echo to main serial for logging
+      case CHECKSUM1:
+        SerialRS232.print(checkSum, HEX);  // write the checksum character
+        Serial.print(checkSum, HEX);      // also echo to main serial for logging
+        state = CHECKSUM2;
+        break;
+
+      case CHECKSUM2: // just to skip 2nd incoming checksum character
         state = WAITING;
         break;
 
       default:
         state = WAITING;
         Serial.printf("Unexpected state in GPS2 NMEA forwarding precision processing state machine!\r\n");
-        break;
     }
+
+    //buffer[bufIndex++] = b;
+
   }
 
   // Loop timing - ultra lightweight, just increment counter
