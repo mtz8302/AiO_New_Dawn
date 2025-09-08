@@ -35,6 +35,15 @@ const char SIMPLE_DEVICE_SETTINGS_NO_REPLACE[] PROGMEM = R"rawliteral(
         .help-text { font-size: 0.9em; color: #666; }
     </style>
     <script>
+        function toggleJDPWMSensitivity() {
+            const enabled = document.getElementById('jdPWMEnabled').checked;
+            document.getElementById('jdPWMSensitivityGroup').style.display = enabled ? 'block' : 'none';
+        }
+        
+        function updateSensitivityValue(value) {
+            document.getElementById('sensitivityValue').textContent = value;
+        }
+        
         function saveSettings() {
             const settings = {
                 udpPassthrough: document.getElementById('udpPassthrough').checked,
@@ -42,7 +51,7 @@ const char SIMPLE_DEVICE_SETTINGS_NO_REPLACE[] PROGMEM = R"rawliteral(
                 pwmBrakeMode: document.getElementById('pwmBrakeMode').checked,
                 encoderType: parseInt(document.getElementById('encoderType').value),
                 jdPWMEnabled: document.getElementById('jdPWMEnabled').checked,
-                jdPWMThreshold: parseInt(document.getElementById('jdPWMThreshold').value)
+                jdPWMSensitivity: parseInt(document.getElementById('jdPWMSensitivity').value)
             };
             
             fetch('/api/device/settings', {
@@ -77,17 +86,13 @@ const char SIMPLE_DEVICE_SETTINGS_NO_REPLACE[] PROGMEM = R"rawliteral(
                     document.getElementById('pwmBrakeMode').checked = data.pwmBrakeMode || false;
                     document.getElementById('encoderType').value = data.encoderType || 1;
                     document.getElementById('jdPWMEnabled').checked = data.jdPWMEnabled || false;
-                    document.getElementById('jdPWMThreshold').value = data.jdPWMThreshold || 20;
-                    toggleJDPWMThreshold();
+                    document.getElementById('jdPWMSensitivity').value = data.jdPWMSensitivity || 5;
+                    updateSensitivityValue(data.jdPWMSensitivity || 5);
+                    toggleJDPWMSensitivity();
                 })
                 .catch((error) => {
                     console.error('Error loading settings:', error);
                 });
-        }
-        
-        function toggleJDPWMThreshold() {
-            const enabled = document.getElementById('jdPWMEnabled').checked;
-            document.getElementById('jdPWMThresholdGroup').style.display = enabled ? 'block' : 'none';
         }
         
         window.onload = function() {
@@ -151,21 +156,22 @@ const char SIMPLE_DEVICE_SETTINGS_NO_REPLACE[] PROGMEM = R"rawliteral(
             
             <div class='form-group'>
                 <label class='checkbox-container' style='display: inline-flex; align-items: center;'>
-                    <input type='checkbox' id='jdPWMEnabled' name='jdPWMEnabled' onchange='toggleJDPWMThreshold()' style='margin-right: 10px;'>
+                    <input type='checkbox' id='jdPWMEnabled' name='jdPWMEnabled' style='margin-right: 10px;' onchange='toggleJDPWMSensitivity()'>
                     <span class='checkbox-label' style='white-space: nowrap;'>John Deere PWM Encoder Mode</span>
                 </label>
                 <div class='help-text' style='margin-left: 25px; margin-top: 5px;'>
-                    Enable John Deere Autotrac PWM encoder support. This uses the pressure sensor input (Kickout-A pin) to measure PWM duty cycle changes for steering wheel motion detection.<br>
-                    <strong>Note:</strong> In AgOpenGPS, you must enable "Pressure Sensor" kickout mode for this to work.
+                    Enable John Deere Autotrac PWM encoder support. This uses the digital kickout input (Kickout-D pin 3) to measure PWM duty cycle changes for steering wheel motion detection.<br>
+                    <strong>Note:</strong> In AgOpenGPS, you must enable "Pressure Sensor" kickout mode and use the pressure set point in AgOpenGPS to set the kickout point.
                 </div>
             </div>
             
-            <div class='form-group' id='jdPWMThresholdGroup' style='display: none; margin-left: 25px;'>
-                <label for='jdPWMThreshold'>JD PWM Motion Threshold:</label>
-                <input type='number' id='jdPWMThreshold' name='jdPWMThreshold' min='5' max='100' value='20' style='width: 80px; padding: 5px;'>
-                <span style='margin-left: 10px;'>(5-100)</span>
-                <div class='help-text' style='margin-top: 5px;'>
-                    Motion detection threshold for JD PWM encoder. Lower values = more sensitive. Default is 20.
+            <div class='form-group' id='jdPWMSensitivityGroup' style='display: none; margin-left: 25px;'>
+                <label for='jdPWMSensitivity'>JD PWM Sensitivity: <span id='sensitivityValue'>5</span></label>
+                <input type='range' id='jdPWMSensitivity' name='jdPWMSensitivity' min='1' max='10' value='5' 
+                       style='width: 100%;' oninput='updateSensitivityValue(this.value)'>
+                <div class='help-text'>
+                    1 = Least sensitive (requires more wheel movement)<br>
+                    10 = Most sensitive (requires less wheel movement)
                 </div>
             </div>
             

@@ -7,23 +7,26 @@ The AiO New Dawn firmware (v1.0.19-beta and later) includes support for John Dee
 ## How It Works
 
 The JD PWM encoder outputs a PWM signal with a duty cycle that changes based on steering wheel rotation:
-- PWM period range: 500-4500 microseconds
-- Center position: ~2600 microseconds
+- PWM frequency: ~200 Hz (5ms period)
+- Duty cycle range: 4% to 94% (90% total range)
+- No center position - encoder rotates continuously
 - The firmware measures duty cycle changes to detect steering wheel motion
-- Motion above the configured threshold triggers autosteer disengagement
+- Motion is converted to a percentage (0-100%) and sent to AgOpenGPS as "pressure" data
+- Wheel position is scaled from 4-94% to 0-99% for AgOpenGPS display
+- AgOpenGPS's pressure set point determines when autosteer disengages
 
 ## Hardware Connection
 
 ### Pin Assignment
-- Connect the JD PWM encoder signal to the **Kickout-A pin** (normally used for pressure sensors)
-- This is pin A12 on the Teensy 4.1 (physical pin location depends on your PCB version)
+- Connect the JD PWM encoder signal to the **Kickout-D pin** (digital kickout input)
+- This is pin 3 on the Teensy 4.1 (physical pin location depends on your PCB version)
 
 ### Wiring
-1. **Signal Wire**: Connect the PWM output from the JD encoder to Kickout-A
+1. **Signal Wire**: Connect the PWM output from the JD encoder to Kickout-D (pin 3)
 2. **Power**: Provide appropriate power to the encoder per John Deere specifications
 3. **Ground**: Ensure common ground between encoder and AiO board
 
-**IMPORTANT**: When JD PWM mode is enabled, the Kickout-A pin switches from analog to digital mode, so it cannot be used for pressure sensors simultaneously.
+**IMPORTANT**: The JD PWM encoder requires the digital Kickout-D pin because it needs interrupt capability for accurate PWM measurement. The analog Kickout-A pin (A12) cannot generate interrupts on Teensy 4.1. If your encoder outputs 5V, you may need a diode (1N4148) in series to drop the voltage, or ensure your encoder outputs 3.3V compatible signals.
 
 ## Configuration
 
@@ -33,10 +36,10 @@ The JD PWM encoder outputs a PWM signal with a duty cycle that changes based on 
 2. Navigate to **Device Settings**
 3. Under **Turn Sensor Configuration**:
    - Check the box for **John Deere PWM Encoder Mode**
-   - Set the **JD PWM Motion Threshold** (default: 20)
-     - Lower values = more sensitive (easier to trigger kickout)
-     - Higher values = less sensitive (requires more wheel movement)
-     - Range: 5-100
+   - Adjust the **JD PWM Sensitivity** slider (1-10):
+     - 1 = Least sensitive (requires more wheel movement)
+     - 10 = Most sensitive (requires less wheel movement)
+     - Default = 5 (medium sensitivity)
 4. Click **Apply Changes**
 
 ### AgOpenGPS Configuration
@@ -47,8 +50,10 @@ In AgOpenGPS, configure the steer module settings:
 1. Open the **Steer Configuration** window
 2. In the **Turn Sensor** or **Kickout** section:
    - **Enable "Pressure Sensor"** (REQUIRED - even though you're using a PWM encoder)
-   - Set the pressure threshold value
-   - The threshold in AgOpenGPS works together with the web interface threshold
+   - Set the pressure set point value (this controls when kickout triggers)
+     - Lower set point = easier to trigger kickout
+     - Higher set point = harder to trigger kickout
+     - Typical range: 20-80
 3. Disable other kickout methods (Encoder, Current) unless you have those sensors on different pins
 
 **Why Pressure Mode?** The JD PWM encoder reuses the pressure sensor data channel to maintain compatibility with AgOpenGPS without requiring software modifications. AgOpenGPS sees the motion values as "pressure" readings.
@@ -57,11 +62,14 @@ In AgOpenGPS, configure the steer module settings:
 
 ### Finding the Right Threshold
 
-1. Enable JD PWM mode with the default threshold (20)
-2. Start autosteer and try turning the steering wheel manually
-3. Adjust the threshold based on your needs:
-   - If kickout is too sensitive (triggers too easily): Increase the threshold
-   - If kickout requires too much wheel movement: Decrease the threshold
+1. Enable JD PWM mode in the web interface
+2. In the web interface, adjust the JD PWM Sensitivity slider (start at 5)
+3. In AgOpenGPS, set the pressure set point to a starting value (e.g., 30)
+4. Start autosteer and try turning the steering wheel manually
+5. Adjust settings based on your needs:
+   - If kickout is too sensitive overall: Decrease the JD PWM Sensitivity slider in web interface
+   - If kickout requires too much wheel movement: Increase the JD PWM Sensitivity slider
+   - Fine-tune the exact kickout point using the pressure set point in AgOpenGPS
 
 ### Testing Procedure
 
@@ -85,18 +93,19 @@ In AgOpenGPS, configure the steer module settings:
 ### Kickout Not Working
 - Verify JD PWM mode is enabled in Device Settings
 - Check wiring connections
-- Ensure the PWM signal is reaching the Kickout-A pin
-- Try lowering the threshold value
+- Ensure the PWM signal is reaching the Kickout-D pin (pin 3)
+- In AgOpenGPS, lower the pressure set point value
 
 ### False Kickouts
-- Increase the threshold value
+- In AgOpenGPS, increase the pressure set point value
 - Check for loose connections or signal interference
 - Verify encoder is properly mounted and not vibrating
 
-### Conflict with Pressure Sensor
-- JD PWM mode and analog pressure sensors cannot be used simultaneously on the same pin
-- If you need pressure sensor kickout, disable JD PWM mode
-- Only one kickout method can use the Kickout-A pin at a time
+### Using with Pressure Sensor
+- JD PWM encoder uses the digital Kickout-D pin (pin 3)
+- Analog pressure sensors use the Kickout-A pin (A12)
+- Both can be configured, but only one kickout method will be active based on the JD PWM mode setting
+- The firmware automatically switches between them based on configuration
 
 ### AgOpenGPS Shows Wrong Sensor Type
 - This is normal - AgOpenGPS will show "Pressure Sensor" even though you're using JD PWM
@@ -106,27 +115,38 @@ In AgOpenGPS, configure the steer module settings:
 ## Technical Details
 
 ### Signal Processing
-- Rising edge interrupt captures start time
-- Falling edge interrupt calculates duty cycle
+- Rising edge interrupt captures start time and calculates period
+- Falling edge interrupt calculates duty time
+- Duty cycle percentage = (duty time / period) * 100
 - Motion is calculated as the change in duty cycle between samples
-- Filtering prevents large jumps from causing false triggers
+- Noise floor: 0-5us variations (0.1% duty cycle) are filtered out
+- Actual motion: 6-56us changes (0.12-1.12% duty cycle) are detected
+- Motion scaled so 2% duty cycle change = full scale (255)
+- Position display shows 4-94% duty cycle scaled to 0-99% for AgOpenGPS
 
 ### Performance
 - PWM measurement resolution: 1 microsecond
+- Input frequency: ~200 Hz
+- Duty cycle range: 4% (full CCW) to 94% (full CW)
 - Update rate: Synchronized with main control loop (100Hz)
 - Minimal CPU overhead using hardware interrupts
+
+### Important Notes
+- Pin 3 requires INPUT_PULLUP mode due to circuit design
+- The observed 4-94% range may vary between encoder models
+- If your encoder has a different range, the firmware will auto-adapt
 
 ## Compatibility
 
 - Firmware version: 1.0.19-beta or later
 - Requires Teensy 4.1
 - Compatible with all motor driver types (PWM, Danfoss, Keya)
-- Cannot be used simultaneously with analog pressure sensors
+- Uses separate digital pin from analog pressure sensors
 
 ## Future Enhancements
 
 Potential future improvements:
-- Automatic threshold calibration
+- Automatic set point calibration
 - Dual-mode support (switching between pressure and JD PWM)
 - Enhanced filtering algorithms
-- Data logging for threshold optimization
+- Data logging for set point optimization

@@ -154,14 +154,8 @@ void KickoutMonitor::process() {
         // Debug JD PWM status periodically
         static uint32_t lastJDDebug = 0;
         if (configMgr->getJDPWMEnabled() && (millis() - lastJDDebug > 2000)) {
-            Serial.print("JD_PWM_KICKOUT: enabled=");
-            Serial.print(configMgr->getJDPWMEnabled());
-            Serial.print(", pressure=");
-            Serial.print(lastPressureReading);
-            Serial.print(", threshold=");
-            Serial.print(configMgr->getJDPWMThreshold());
-            Serial.print(", isKeyaMotor=");
-            Serial.println(isKeyaMotor);
+            LOG_DEBUG(EventSource::AUTOSTEER, "JD_PWM_KICKOUT: enabled=%d, motion_as_pressure=%u (AOG handles threshold), isKeyaMotor=%d",
+                      configMgr->getJDPWMEnabled(), lastPressureReading, isKeyaMotor);
             lastJDDebug = millis();
         }
         
@@ -186,7 +180,7 @@ void KickoutMonitor::process() {
             kickoutReason = JD_PWM_MOTION;
             kickoutTime = millis();
             
-            Serial.println("JD_PWM_KICKOUT: *** KICKOUT ACTIVATED ***");
+            LOG_WARNING(EventSource::AUTOSTEER, "JD_PWM_KICKOUT: *** KICKOUT ACTIVATED ***");
             LOG_WARNING(EventSource::AUTOSTEER, "KICKOUT: %s", getReasonString());
             
             // Notify motor driver using pressure sensor kickout type for compatibility
@@ -195,7 +189,7 @@ void KickoutMonitor::process() {
             }
         }
         else if (!isKeyaMotor && configMgr->getPressureSensor() && !configMgr->getJDPWMEnabled() && checkPressureKickout()) {
-            Serial.println("PRESSURE_KICKOUT: Regular pressure mode (JD PWM disabled)");
+            LOG_DEBUG(EventSource::AUTOSTEER, "PRESSURE_KICKOUT: Regular pressure mode (JD PWM disabled)");
             kickoutActive = true;
             kickoutReason = PRESSURE_HIGH;
             kickoutTime = millis();
@@ -410,39 +404,22 @@ bool KickoutMonitor::checkMotorSlipKickout() {
 }
 
 bool KickoutMonitor::checkJDPWMKickout() {
-    // JD PWM mode uses the pressure reading from ADProcessor
-    // which contains the calculated motion value
-    uint8_t threshold = configMgr->getJDPWMThreshold();
+    // In JD PWM mode, the motion value is already sent as pressure data
+    // AgOpenGPS will handle the kickout through its pressure threshold
+    // This function now only exists for logging purposes
     
-    // Debug output
-    static uint32_t lastDebugTime = 0;
-    uint32_t now = millis();
-    if (now - lastDebugTime > 1000) { // Debug every second
-        Serial.print("JD_PWM_CHECK: pressure=");
-        Serial.print(lastPressureReading);
-        Serial.print(", threshold=");
-        Serial.print(threshold);
-        Serial.print(", wouldTrigger=");
-        Serial.println(lastPressureReading > threshold ? "YES" : "NO");
-        lastDebugTime = now;
-    }
-    
-    if (lastPressureReading > threshold) {
-        // Only log when first detecting kickout (not already active) or every 1 second
-        static uint32_t lastLogTime = 0;
-        
-        if (!kickoutActive || (now - lastLogTime >= 1000)) {
-            LOG_DEBUG(EventSource::AUTOSTEER, "JD PWM motion detected: %u (threshold %u)", 
-                          lastPressureReading, threshold);
-            Serial.print("JD_PWM_KICKOUT_TRIGGERED: motion=");
-            Serial.print(lastPressureReading);
-            Serial.print(" > threshold=");
-            Serial.println(threshold);
-            lastLogTime = now;
+    if (configMgr->getJDPWMEnabled()) {
+        // Debug output
+        static uint32_t lastDebugTime = 0;
+        uint32_t now = millis();
+        if (now - lastDebugTime > 1000) { // Debug every second
+            LOG_DEBUG(EventSource::AUTOSTEER, "JD_PWM_CHECK: motion_as_pressure=%u (AOG handles threshold)",
+                      lastPressureReading);
+            lastDebugTime = now;
         }
-        return true;
     }
     
+    // Always return false - let pressure kickout handle it
     return false;
 }
 

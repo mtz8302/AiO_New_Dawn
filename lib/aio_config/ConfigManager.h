@@ -100,7 +100,7 @@ private:
     
     // John Deere PWM encoder configuration
     bool jdPWMEnabled;           // Enable JD PWM mode for pressure input
-    uint8_t jdPWMThreshold;      // Threshold for JD PWM motion detection (0-255)
+    uint8_t jdPWMSensitivity;    // JD PWM sensitivity 1-10 (1=least sensitive, 10=most sensitive)
     
     // Analog work switch configuration
     bool analogWorkSwitchEnabled;
@@ -271,8 +271,8 @@ public:
     // John Deere PWM encoder methods
     bool getJDPWMEnabled() const { return jdPWMEnabled; }
     void setJDPWMEnabled(bool value) { jdPWMEnabled = value; }
-    uint8_t getJDPWMThreshold() const { return jdPWMThreshold; }
-    void setJDPWMThreshold(uint8_t value) { jdPWMThreshold = value; }
+    uint8_t getJDPWMSensitivity() const { return jdPWMSensitivity; }
+    void setJDPWMSensitivity(uint8_t value) { jdPWMSensitivity = constrain(value, 1, 10); }
 
     // Analog work switch methods
     bool getAnalogWorkSwitchEnabled() const { return analogWorkSwitchEnabled; }

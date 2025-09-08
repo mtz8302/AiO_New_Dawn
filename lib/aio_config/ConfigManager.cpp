@@ -480,7 +480,7 @@ void ConfigManager::resetToDefaults()
     
     // JD PWM defaults
     jdPWMEnabled = false;
-    jdPWMThreshold = 20;     // Reasonable default for motion detection
+    jdPWMSensitivity = 5;       // Middle sensitivity (1-10 scale)
     
     // Analog work switch defaults
     analogWorkSwitchEnabled = false;
@@ -546,7 +546,9 @@ void ConfigManager::saveTurnSensorConfig()
     addr += sizeof(currentZeroOffset);
     EEPROM.put(addr, jdPWMEnabled);
     addr += sizeof(jdPWMEnabled);
-    EEPROM.put(addr, jdPWMThreshold);
+    // Use the previously skipped byte for jdPWMSensitivity
+    EEPROM.put(addr, jdPWMSensitivity);
+    addr += sizeof(jdPWMSensitivity);
 }
 
 void ConfigManager::loadTurnSensorConfig()
@@ -566,7 +568,9 @@ void ConfigManager::loadTurnSensorConfig()
     addr += sizeof(currentZeroOffset);
     EEPROM.get(addr, jdPWMEnabled);
     addr += sizeof(jdPWMEnabled);
-    EEPROM.get(addr, jdPWMThreshold);
+    // Use the previously skipped byte for jdPWMSensitivity
+    EEPROM.get(addr, jdPWMSensitivity);
+    addr += sizeof(jdPWMSensitivity);
     
     LOG_DEBUG(EventSource::CONFIG, "Loaded turn sensor config: Type=%d, EncoderType=%d, JDPWM=%d", 
               turnSensorType, encoderType, jdPWMEnabled);
