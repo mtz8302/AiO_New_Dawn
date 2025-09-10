@@ -140,7 +140,7 @@ void CommandHandler::handleCommand(char cmd) {
                 configManager.setBuzzerLoudMode(!currentMode);
                 configManager.saveMiscConfig();  // Save to EEPROM
                 Serial.printf("\r\nBuzzer volume set to: %s\r\n", 
-                             (!currentMode) ? "LOUD (field use)" : "QUIET (development)");
+                             configManager.getBuzzerLoudMode() ? "LOUD (field use)" : "QUIET (development)");
             }
             break;
             

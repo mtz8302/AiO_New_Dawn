@@ -641,8 +641,20 @@ void ConfigManager::loadMiscConfig()
     int addr = MISC_CONFIG_ADDR;
     EEPROM.get(addr, ledBrightness);
     addr += sizeof(ledBrightness);
-    EEPROM.get(addr, buzzerLoudMode);
+    
+    // Read buzzer mode as uint8_t first to check for invalid values
+    uint8_t buzzerModeRaw;
+    EEPROM.get(addr, buzzerModeRaw);
     addr += sizeof(buzzerLoudMode);
+    
+    // Check if the raw value is invalid (uninitialized EEPROM is typically 0xFF)
+    if (buzzerModeRaw > 1) {
+        LOG_WARNING(EventSource::CONFIG, "Invalid buzzer mode in EEPROM (%d), defaulting to quiet mode", buzzerModeRaw);
+        buzzerLoudMode = false;  // Default to quiet mode for development
+    } else {
+        buzzerLoudMode = (buzzerModeRaw == 1);
+    }
+    
     EEPROM.get(addr, jdPWMSensitivity);
     
     // Validate loaded values

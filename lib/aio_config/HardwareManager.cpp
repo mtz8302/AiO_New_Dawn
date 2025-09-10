@@ -180,10 +180,10 @@ void HardwareManager::performBuzzerTest()
         tone(getBuzzerPin(), 1000, 300);  // 1kHz for 300ms
         delay(350);
     } else {
-        // Quiet mode for development - single short beep
+        // Quiet mode for development - cricket-like click
         LOG_INFO(EventSource::SYSTEM, "Playing quiet buzzer test");
-        tone(getBuzzerPin(), 1000, 100);  // 1kHz for 100ms
-        delay(150);
+        tone(getBuzzerPin(), 4000, 5);  // 4kHz for 5ms - very quick click
+        delay(10);
     }
     
     // Make sure buzzer is off
