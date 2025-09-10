@@ -268,10 +268,12 @@ void ADProcessor::process()
                 extern ConfigManager configManager;
                 uint8_t sensitivity = configManager.getJDPWMSensitivity();
                 
-                // Map sensitivity 1-10 to motion scale 5.0-0.5
-                // Sensitivity 1 = 5% motion for full scale (least sensitive)
-                // Sensitivity 10 = 0.5% motion for full scale (most sensitive)
-                float motionScale = 5.5f - (sensitivity * 0.5f);
+                // Map sensitivity 1-10 to motion scale
+                // The encoder typically sees 0.12-1.12% duty cycle change
+                // We need to scale this to use the full 0-100% range
+                // Sensitivity 1 = 2% motion for full scale (least sensitive, requires more motion)
+                // Sensitivity 10 = 0.2% motion for full scale (most sensitive, requires less motion)
+                float motionScale = 2.2f - (sensitivity * 0.2f);
                 
                 float sensorReading = (motionPercent / motionScale) * 255.0f;
                 sensorReading = min(sensorReading, 255.0f);
