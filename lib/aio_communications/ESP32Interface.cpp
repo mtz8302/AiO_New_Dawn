@@ -1,6 +1,7 @@
 #include "ESP32Interface.h"
 #include "SerialManager.h"
 #include "QNEthernetUDPHandler.h"
+#include "EventLogger.h"
 
 // Global instance
 ESP32Interface esp32Interface;
@@ -9,7 +10,7 @@ ESP32Interface esp32Interface;
 void ESP32Interface::init() {
     // SerialESP32 is already initialized by SerialManager at 460800 baud
     LOG_INFO(EventSource::SYSTEM, "ESP32 interface initialized on Serial2 (460800 baud)");
-    Serial.println("ESP32Interface: Initialized on Serial2 (460800 baud)");
+    // Already logged with LOG_INFO above
     
     // Clear receive buffer
     rxBufferIndex = 0;
@@ -21,7 +22,7 @@ void ESP32Interface::process() {
     // Debug: Show we're running
     static uint32_t lastDebugTime = 0;
     if (millis() - lastDebugTime > 10000) {  // Every 10 seconds
-        Serial.printf("ESP32Interface: Running, detected=%s, Serial2 available=%d\n", 
+        LOG_DEBUG(EventSource::SYSTEM, "ESP32Interface: Running, detected=%s, Serial2 available=%d", 
                       esp32Detected ? "YES" : "NO", SerialESP32.available());
         lastDebugTime = millis();
     }
@@ -33,7 +34,7 @@ void ESP32Interface::process() {
     if (esp32Detected && (millis() - lastHelloTime > HELLO_TIMEOUT_MS)) {
         esp32Detected = false;
         LOG_WARNING(EventSource::SYSTEM, "ESP32 connection lost (hello timeout)");
-        Serial.printf("ESP32Interface: Connection lost (hello timeout) - last hello was %lu ms ago\n", 
+        LOG_DEBUG(EventSource::SYSTEM, "ESP32 hello timeout - last hello was %lu ms ago", 
                       millis() - lastHelloTime);
     }
 }
@@ -47,25 +48,17 @@ void ESP32Interface::sendToESP32(const uint8_t* data, size_t length) {
     // Log first few PGNs for debugging
     static int pgnCount = 0;
     if (pgnCount < 20 && length >= 5) {
-        Serial.printf("ESP32 TX: PGN=%d (0x%02X), len=%d, raw: ", 
-                      data[3], data[3], length);
-        // Show all bytes
-        for (size_t i = 0; i < length && i < 20; i++) {
-            Serial.printf("%02X ", data[i]);
-        }
-        if (length > 20) Serial.print("...");
-        
-        // Calculate and show CRC (AgOpenGPS uses sum starting from byte 2, not XOR)
+        // Calculate CRC for debug logging
+        uint8_t calcCrc = 0;
         if (length >= 6) {
             uint16_t crcSum = 0;
             for (size_t i = 2; i < length - 1; i++) {
                 crcSum += data[i];
             }
-            uint8_t calcCrc = (uint8_t)(crcSum & 0xFF);
-            Serial.printf(" (CRC: calc=%02X, pkt=%02X)", calcCrc, data[length-1]);
+            calcCrc = (uint8_t)(crcSum & 0xFF);
         }
-        
-        Serial.println();
+        LOG_DEBUG(EventSource::SYSTEM, "ESP32 TX: PGN=%d, len=%zu, CRC: calc=%02X pkt=%02X", 
+                  data[3], length, calcCrc, data[length-1]);
         pgnCount++;
     }
     
@@ -81,7 +74,7 @@ void ESP32Interface::processIncomingData() {
         
         // Debug: Log first few bytes received
         if (firstByte) {
-            Serial.println("\nESP32Interface: Receiving data from ESP32!");
+            LOG_DEBUG(EventSource::SYSTEM, "ESP32Interface: Receiving data from ESP32!");
             firstByte = false;
         }
         
@@ -124,7 +117,7 @@ void ESP32Interface::processIncomingData() {
                         // Debug log received PGN
                         uint8_t source = rxBuffer[pgnStart + 2];
                         uint8_t pgn = rxBuffer[pgnStart + 3];
-                        Serial.printf("ESP32 RX: PGN=%d, source=%d, len=%d -> UDP9999\n", 
+                        LOG_DEBUG(EventSource::SYSTEM, "ESP32 RX: PGN=%d, source=%d, len=%zu -> UDP9999", 
                                       pgn, source, totalLength);
                         
                         QNEthernetUDPHandler::sendUDP9999Packet(pgnData, totalLength);
@@ -153,14 +146,8 @@ void ESP32Interface::processIncomingData() {
                         if (millis() - incompleteStartTime > 50) {
                             static uint32_t lastIncompleteLog = 0;
                             if (millis() - lastIncompleteLog > 1000) {
-                                Serial.printf("ESP32 RX: Incomplete PGN at %d, need %d bytes, have %d - ", 
-                                              pgnStart, totalLength, rxBufferIndex - pgnStart);
-                                // Show what we have so far
-                                Serial.print("got: ");
-                                for (size_t j = pgnStart; j < rxBufferIndex && j < pgnStart + 20; j++) {
-                                    Serial.printf("%02X ", rxBuffer[j]);
-                                }
-                                Serial.println();
+                                LOG_DEBUG(EventSource::SYSTEM, "ESP32 RX: Incomplete PGN at %zu, need %zu bytes, have %zu", 
+                                          pgnStart, totalLength, rxBufferIndex - pgnStart);
                                 lastIncompleteLog = millis();
                             }
                         }
@@ -170,7 +157,7 @@ void ESP32Interface::processIncomingData() {
             
             // If no PGN found and buffer is getting full, clear old data
             if (!foundPGN && rxBufferIndex > RX_BUFFER_SIZE - 100) {
-                Serial.printf("ESP32 RX: Buffer full, clearing old data (had %d bytes)\n", rxBufferIndex);
+                LOG_WARNING(EventSource::SYSTEM, "ESP32 RX: Buffer full, clearing old data (had %zu bytes)", rxBufferIndex);
                 // Keep last 100 bytes
                 memmove(rxBuffer, &rxBuffer[rxBufferIndex - 100], 100);
                 rxBufferIndex = 100;
@@ -191,7 +178,7 @@ void ESP32Interface::processIncomingData() {
                 
                 // Wait 100ms for rest of message before clearing
                 if (millis() - partialMessageTime > 100) {
-                    Serial.printf("ESP32 RX: Clearing partial message after timeout (%d bytes)\n", rxBufferIndex);
+                    LOG_DEBUG(EventSource::SYSTEM, "ESP32 RX: Clearing partial message after timeout (%zu bytes)", rxBufferIndex);
                     rxBufferIndex = 0;
                     partialMessageTime = 0;
                 }
@@ -235,13 +222,12 @@ void ESP32Interface::checkForHello() {
                     esp32Detected = true;
                     LOG_INFO(EventSource::SYSTEM, "ESP32 detected and connected");
                     LOG_INFO(EventSource::SYSTEM, "ESP32 will now receive PGNs from UDP port 8888");
-                    Serial.println("\n*** ESP32 DETECTED AND CONNECTED ***");
-                    Serial.println("ESP32 will now receive PGNs from UDP port 8888");
+                    // Already logged with LOG_INFO above
                 } else {
                     // Already detected, just update the time
                     static uint32_t lastHelloLog = 0;
                     if (millis() - lastHelloLog > 30000) {  // Log every 30 seconds
-                        Serial.println("ESP32: Hello received, connection maintained");
+                        LOG_DEBUG(EventSource::SYSTEM, "ESP32: Hello received, connection maintained");
                         lastHelloLog = millis();
                     }
                 }
@@ -262,12 +248,11 @@ void ESP32Interface::checkForHello() {
 
 // Print status information
 void ESP32Interface::printStatus() {
-    Serial.println("\n=== ESP32 Interface Status ===");
-    Serial.printf("Detected: %s\n", esp32Detected ? "Yes" : "No");
+    LOG_INFO(EventSource::SYSTEM, "ESP32 Interface Status: Detected=%s", esp32Detected ? "Yes" : "No");
     
     if (esp32Detected) {
-        Serial.printf("Last hello: %lu ms ago\n", millis() - lastHelloTime);
+        LOG_INFO(EventSource::SYSTEM, "  Last hello: %lu ms ago", millis() - lastHelloTime);
     }
     
-    Serial.printf("RX buffer: %d bytes\n", rxBufferIndex);
+    LOG_INFO(EventSource::SYSTEM, "  RX buffer: %zu bytes", rxBufferIndex);
 }

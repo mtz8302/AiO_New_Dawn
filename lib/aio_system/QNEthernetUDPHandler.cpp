@@ -86,14 +86,7 @@ void QNEthernetUDPHandler::poll() {
     if (packetSize > 0 && packetSize <= sizeof(packetBuffer)) {
         int bytesRead = udpPGN.read(packetBuffer, packetSize);
         if (bytesRead > 0) {
-            // Debug log ALL packets on port 8888
-            static int udpDebugCount = 0;
-            if (udpDebugCount < 20) {
-                Serial.printf("UDP8888 RX: %d bytes from %d.%d.%d.%d:%d\n",
-                              bytesRead, udpPGN.remoteIP()[0], udpPGN.remoteIP()[1], 
-                              udpPGN.remoteIP()[2], udpPGN.remoteIP()[3], udpPGN.remotePort());
-                udpDebugCount++;
-            }
+            // Process the packet
             handlePGNPacket(packetBuffer, bytesRead, udpPGN.remoteIP(), udpPGN.remotePort());
         }
     }
@@ -156,17 +149,7 @@ void QNEthernetUDPHandler::poll() {
 
 void QNEthernetUDPHandler::handlePGNPacket(const uint8_t* data, size_t len, 
                                            const IPAddress& remoteIP, uint16_t remotePort) {
-    // Debug logging for first few packets
-    static int debugCount = 0;
-    if (debugCount < 10) {
-        Serial.printf("handlePGNPacket: %d bytes, ESP32 detected: %s", 
-                      len, esp32Interface.isDetected() ? "YES" : "NO");
-        if (len >= 5) {
-            Serial.printf(", PGN=%d", data[3]);
-        }
-        Serial.println();
-        debugCount++;
-    }
+    // Process PGN packet
     
     // Forward to ESP32 if detected
     if (esp32Interface.isDetected()) {
