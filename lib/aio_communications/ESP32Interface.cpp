@@ -55,12 +55,13 @@ void ESP32Interface::sendToESP32(const uint8_t* data, size_t length) {
         }
         if (length > 20) Serial.print("...");
         
-        // Calculate and show CRC
+        // Calculate and show CRC (AgOpenGPS uses sum starting from byte 2, not XOR)
         if (length >= 6) {
-            uint8_t calcCrc = 0;
-            for (size_t i = 0; i < length - 1; i++) {
-                calcCrc ^= data[i];
+            uint16_t crcSum = 0;
+            for (size_t i = 2; i < length - 1; i++) {
+                crcSum += data[i];
             }
+            uint8_t calcCrc = (uint8_t)(crcSum & 0xFF);
             Serial.printf(" (CRC: calc=%02X, pkt=%02X)", calcCrc, data[length-1]);
         }
         
@@ -136,15 +137,67 @@ void ESP32Interface::processIncomingData() {
                         rxBufferIndex = remaining;
                         
                         break;  // Process one PGN at a time
+                    } else {
+                        // Debug: Not enough data yet - but this is normal for serial data arriving in chunks
+                        // Only log if the incomplete message persists (not just transient buffering)
+                        static uint32_t incompleteStartTime = 0;
+                        static size_t lastIncompleteSize = 0;
+                        
+                        if (rxBufferIndex != lastIncompleteSize) {
+                            // Size changed, reset timer
+                            incompleteStartTime = millis();
+                            lastIncompleteSize = rxBufferIndex;
+                        }
+                        
+                        // Only log if incomplete for more than 50ms (serial chunks should arrive faster)
+                        if (millis() - incompleteStartTime > 50) {
+                            static uint32_t lastIncompleteLog = 0;
+                            if (millis() - lastIncompleteLog > 1000) {
+                                Serial.printf("ESP32 RX: Incomplete PGN at %d, need %d bytes, have %d - ", 
+                                              pgnStart, totalLength, rxBufferIndex - pgnStart);
+                                // Show what we have so far
+                                Serial.print("got: ");
+                                for (size_t j = pgnStart; j < rxBufferIndex && j < pgnStart + 20; j++) {
+                                    Serial.printf("%02X ", rxBuffer[j]);
+                                }
+                                Serial.println();
+                                lastIncompleteLog = millis();
+                            }
+                        }
                     }
                 }
             }
             
             // If no PGN found and buffer is getting full, clear old data
             if (!foundPGN && rxBufferIndex > RX_BUFFER_SIZE - 100) {
+                Serial.printf("ESP32 RX: Buffer full, clearing old data (had %d bytes)\n", rxBufferIndex);
                 // Keep last 100 bytes
                 memmove(rxBuffer, &rxBuffer[rxBufferIndex - 100], 100);
                 rxBufferIndex = 100;
+            }
+            
+            // Reset partial message timer if we found a complete message
+            static uint32_t partialMessageTime = 0;
+            if (foundPGN) {
+                partialMessageTime = 0;  // Reset timer after successful message
+            }
+            
+            // Don't clear partial messages too quickly - serial data might arrive in chunks
+            // Only clear if we've been stuck for a while
+            if (!foundPGN && rxBufferIndex > 0 && rxBuffer[0] == 0x80) {
+                if (partialMessageTime == 0) {
+                    partialMessageTime = millis();
+                }
+                
+                // Wait 100ms for rest of message before clearing
+                if (millis() - partialMessageTime > 100) {
+                    Serial.printf("ESP32 RX: Clearing partial message after timeout (%d bytes)\n", rxBufferIndex);
+                    rxBufferIndex = 0;
+                    partialMessageTime = 0;
+                }
+            } else if (rxBufferIndex == 0 || rxBuffer[0] != 0x80) {
+                // No partial message, reset timer
+                partialMessageTime = 0;
             }
         }
     }
@@ -155,7 +208,8 @@ void ESP32Interface::checkForHello() {
     const char* helloMsg = "ESP32-hello";
     size_t helloLen = strlen(helloMsg);
     
-    // Debug: Show buffer contents periodically
+    // Debug: Show buffer contents periodically (disabled - too noisy with constant PGN traffic)
+    /*
     static uint32_t lastBufferDebug = 0;
     if (rxBufferIndex > 0 && millis() - lastBufferDebug > 2000) {
         Serial.printf("ESP32 RX Buffer (%d bytes): ", rxBufferIndex);
@@ -170,6 +224,7 @@ void ESP32Interface::checkForHello() {
         Serial.println();
         lastBufferDebug = millis();
     }
+    */
     
     // Look for hello message in buffer
     if (rxBufferIndex >= helloLen) {
