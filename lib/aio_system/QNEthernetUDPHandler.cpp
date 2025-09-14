@@ -86,6 +86,14 @@ void QNEthernetUDPHandler::poll() {
     if (packetSize > 0 && packetSize <= sizeof(packetBuffer)) {
         int bytesRead = udpPGN.read(packetBuffer, packetSize);
         if (bytesRead > 0) {
+            // Debug log ALL packets on port 8888
+            static int udpDebugCount = 0;
+            if (udpDebugCount < 10) {
+                LOG_DEBUG(EventSource::NETWORK, "UDP8888: %d bytes from %d.%d.%d.%d:%d",
+                          bytesRead, udpPGN.remoteIP()[0], udpPGN.remoteIP()[1], 
+                          udpPGN.remoteIP()[2], udpPGN.remoteIP()[3], udpPGN.remotePort());
+                udpDebugCount++;
+            }
             handlePGNPacket(packetBuffer, bytesRead, udpPGN.remoteIP(), udpPGN.remotePort());
         }
     }
@@ -148,6 +156,15 @@ void QNEthernetUDPHandler::poll() {
 
 void QNEthernetUDPHandler::handlePGNPacket(const uint8_t* data, size_t len, 
                                            const IPAddress& remoteIP, uint16_t remotePort) {
+    // Debug logging for first few packets
+    static int debugCount = 0;
+    if (debugCount < 3) {
+        LOG_DEBUG(EventSource::NETWORK, "UDP8888 RX: %d bytes from %d.%d.%d.%d, ESP32 detected: %s",
+                  len, remoteIP[0], remoteIP[1], remoteIP[2], remoteIP[3],
+                  esp32Interface.isDetected() ? "YES" : "NO");
+        debugCount++;
+    }
+    
     // Forward to ESP32 if detected
     if (esp32Interface.isDetected()) {
         esp32Interface.sendToESP32(data, len);

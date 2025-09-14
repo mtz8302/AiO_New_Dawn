@@ -33,6 +33,14 @@ void ESP32Interface::sendToESP32(const uint8_t* data, size_t length) {
         return;  // Don't send if ESP32 not detected
     }
     
+    // Log first few PGNs for debugging
+    static int pgnCount = 0;
+    if (pgnCount < 5 && length >= 5) {
+        LOG_DEBUG(EventSource::SYSTEM, "ESP32 TX: PGN %d, len=%d, data: %02X %02X %02X %02X %02X...", 
+                  data[3], length, data[0], data[1], data[2], data[3], data[4]);
+        pgnCount++;
+    }
+    
     // Send raw bytes to ESP32
     SerialESP32.write(data, length);
 }
@@ -114,6 +122,7 @@ void ESP32Interface::checkForHello() {
                 if (!esp32Detected) {
                     esp32Detected = true;
                     LOG_INFO(EventSource::SYSTEM, "ESP32 detected and connected");
+                    LOG_INFO(EventSource::SYSTEM, "ESP32 will now receive PGNs from UDP port 8888");
                 }
                 lastHelloTime = millis();
                 
