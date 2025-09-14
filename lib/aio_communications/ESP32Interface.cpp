@@ -33,7 +33,8 @@ void ESP32Interface::process() {
     if (esp32Detected && (millis() - lastHelloTime > HELLO_TIMEOUT_MS)) {
         esp32Detected = false;
         LOG_WARNING(EventSource::SYSTEM, "ESP32 connection lost (hello timeout)");
-        Serial.println("ESP32Interface: Connection lost (hello timeout)");
+        Serial.printf("ESP32Interface: Connection lost (hello timeout) - last hello was %lu ms ago\n", 
+                      millis() - lastHelloTime);
     }
 }
 
@@ -181,6 +182,13 @@ void ESP32Interface::checkForHello() {
                     LOG_INFO(EventSource::SYSTEM, "ESP32 will now receive PGNs from UDP port 8888");
                     Serial.println("\n*** ESP32 DETECTED AND CONNECTED ***");
                     Serial.println("ESP32 will now receive PGNs from UDP port 8888");
+                } else {
+                    // Already detected, just update the time
+                    static uint32_t lastHelloLog = 0;
+                    if (millis() - lastHelloLog > 30000) {  // Log every 30 seconds
+                        Serial.println("ESP32: Hello received, connection maintained");
+                        lastHelloLog = millis();
+                    }
                 }
                 lastHelloTime = millis();
                 
