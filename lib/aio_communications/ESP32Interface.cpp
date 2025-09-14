@@ -9,6 +9,7 @@ ESP32Interface esp32Interface;
 void ESP32Interface::init() {
     // SerialESP32 is already initialized by SerialManager at 460800 baud
     LOG_INFO(EventSource::SYSTEM, "ESP32 interface initialized on Serial2 (460800 baud)");
+    Serial.println("ESP32Interface: Initialized on Serial2 (460800 baud)");
     
     // Clear receive buffer
     rxBufferIndex = 0;
@@ -24,6 +25,7 @@ void ESP32Interface::process() {
     if (esp32Detected && (millis() - lastHelloTime > HELLO_TIMEOUT_MS)) {
         esp32Detected = false;
         LOG_WARNING(EventSource::SYSTEM, "ESP32 connection lost (hello timeout)");
+        Serial.println("ESP32Interface: Connection lost (hello timeout)");
     }
 }
 
@@ -35,9 +37,13 @@ void ESP32Interface::sendToESP32(const uint8_t* data, size_t length) {
     
     // Log first few PGNs for debugging
     static int pgnCount = 0;
-    if (pgnCount < 5 && length >= 5) {
-        LOG_DEBUG(EventSource::SYSTEM, "ESP32 TX: PGN %d, len=%d, data: %02X %02X %02X %02X %02X...", 
-                  data[3], length, data[0], data[1], data[2], data[3], data[4]);
+    if (pgnCount < 10 && length >= 5) {
+        Serial.printf("ESP32 TX: PGN=%d, len=%d, data: %02X %02X %02X %02X %02X", 
+                      data[3], length, data[0], data[1], data[2], data[3], data[4]);
+        if (length > 5) {
+            Serial.printf(" %02X %02X %02X...", data[5], data[6], data[7]);
+        }
+        Serial.println();
         pgnCount++;
     }
     
@@ -85,6 +91,13 @@ void ESP32Interface::processIncomingData() {
                         
                         // Send complete PGN to UDP9999 broadcast
                         uint8_t* pgnData = &rxBuffer[pgnStart];
+                        
+                        // Debug log received PGN
+                        uint8_t source = rxBuffer[pgnStart + 2];
+                        uint8_t pgn = rxBuffer[pgnStart + 3];
+                        Serial.printf("ESP32 RX: PGN=%d, source=%d, len=%d -> UDP9999\n", 
+                                      pgn, source, totalLength);
+                        
                         QNEthernetUDPHandler::sendUDP9999Packet(pgnData, totalLength);
                         
                         // Remove processed data from buffer
@@ -123,6 +136,8 @@ void ESP32Interface::checkForHello() {
                     esp32Detected = true;
                     LOG_INFO(EventSource::SYSTEM, "ESP32 detected and connected");
                     LOG_INFO(EventSource::SYSTEM, "ESP32 will now receive PGNs from UDP port 8888");
+                    Serial.println("\n*** ESP32 DETECTED AND CONNECTED ***");
+                    Serial.println("ESP32 will now receive PGNs from UDP port 8888");
                 }
                 lastHelloTime = millis();
                 
