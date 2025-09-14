@@ -18,6 +18,14 @@ void ESP32Interface::init() {
 
 // Main processing loop - called from main.cpp
 void ESP32Interface::process() {
+    // Debug: Show we're running
+    static uint32_t lastDebugTime = 0;
+    if (millis() - lastDebugTime > 10000) {  // Every 10 seconds
+        Serial.printf("ESP32Interface: Running, detected=%s, Serial2 available=%d\n", 
+                      esp32Detected ? "YES" : "NO", SerialESP32.available());
+        lastDebugTime = millis();
+    }
+    
     // Process any incoming serial data
     processIncomingData();
     
@@ -37,12 +45,24 @@ void ESP32Interface::sendToESP32(const uint8_t* data, size_t length) {
     
     // Log first few PGNs for debugging
     static int pgnCount = 0;
-    if (pgnCount < 10 && length >= 5) {
-        Serial.printf("ESP32 TX: PGN=%d, len=%d, data: %02X %02X %02X %02X %02X", 
-                      data[3], length, data[0], data[1], data[2], data[3], data[4]);
-        if (length > 5) {
-            Serial.printf(" %02X %02X %02X...", data[5], data[6], data[7]);
+    if (pgnCount < 20 && length >= 5) {
+        Serial.printf("ESP32 TX: PGN=%d (0x%02X), len=%d, raw: ", 
+                      data[3], data[3], length);
+        // Show all bytes
+        for (size_t i = 0; i < length && i < 20; i++) {
+            Serial.printf("%02X ", data[i]);
         }
+        if (length > 20) Serial.print("...");
+        
+        // Calculate and show CRC
+        if (length >= 6) {
+            uint8_t calcCrc = 0;
+            for (size_t i = 0; i < length - 1; i++) {
+                calcCrc ^= data[i];
+            }
+            Serial.printf(" (CRC: calc=%02X, pkt=%02X)", calcCrc, data[length-1]);
+        }
+        
         Serial.println();
         pgnCount++;
     }
@@ -53,8 +73,15 @@ void ESP32Interface::sendToESP32(const uint8_t* data, size_t length) {
 
 // Process incoming data from ESP32
 void ESP32Interface::processIncomingData() {
+    static bool firstByte = true;
     while (SerialESP32.available()) {
         uint8_t byte = SerialESP32.read();
+        
+        // Debug: Log first few bytes received
+        if (firstByte) {
+            Serial.println("\nESP32Interface: Receiving data from ESP32!");
+            firstByte = false;
+        }
         
         // Add to buffer
         if (rxBufferIndex < RX_BUFFER_SIZE) {
@@ -126,6 +153,22 @@ void ESP32Interface::processIncomingData() {
 void ESP32Interface::checkForHello() {
     const char* helloMsg = "ESP32-hello";
     size_t helloLen = strlen(helloMsg);
+    
+    // Debug: Show buffer contents periodically
+    static uint32_t lastBufferDebug = 0;
+    if (rxBufferIndex > 0 && millis() - lastBufferDebug > 2000) {
+        Serial.printf("ESP32 RX Buffer (%d bytes): ", rxBufferIndex);
+        for (size_t i = 0; i < rxBufferIndex && i < 20; i++) {
+            if (rxBuffer[i] >= 32 && rxBuffer[i] <= 126) {
+                Serial.printf("%c", rxBuffer[i]);
+            } else {
+                Serial.printf("[%02X]", rxBuffer[i]);
+            }
+        }
+        if (rxBufferIndex > 20) Serial.print("...");
+        Serial.println();
+        lastBufferDebug = millis();
+    }
     
     // Look for hello message in buffer
     if (rxBufferIndex >= helloLen) {
