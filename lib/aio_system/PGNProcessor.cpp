@@ -52,35 +52,19 @@ void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& 
         // CRC is sum of bytes from index 2 to len-2 (skip header[0,1] and CRC byte)
         if (len >= 6) // Need at least header(3) + pgn(1) + length(1) + crc(1)
         {
-            // Special handling for PGN 200 - its length includes the CRC byte
             uint8_t pgn = data[3];
-            size_t crcEndIndex = len - 1;
             
-            // For PGN 200, the length byte (data[4]) includes the CRC
-            // So we need to calculate CRC on dataLength-1 bytes (excluding the CRC itself)
-            if (pgn == 200 && len > 5) {
-                uint8_t dataLength = data[4];
-                // CRC is at position: header(3) + pgn(1) + length(1) + (dataLength - 1)
-                size_t crcPosition = 5 + dataLength - 1;
-                if (crcPosition < len) {
-                    // Calculate CRC up to (but not including) the CRC byte
-                    uint16_t crcSum = 0;
-                    for (size_t i = 2; i < crcPosition; i++)
-                    {
-                        crcSum += data[i];
-                    }
-                    uint8_t calculatedCRC = (uint8_t)(crcSum & 0xFF);
-                    uint8_t receivedCRC = data[crcPosition];
-                    
-                    if (calculatedCRC != receivedCRC)
-                    {
-                        LOG_WARNING(EventSource::NETWORK, "PGN %d CRC mismatch: calc=%02X, recv=%02X", 
-                                   pgn, calculatedCRC, receivedCRC);
-                        return; // Drop packet with bad CRC
-                    }
+            // Special handling for AgIO PGNs (200, 201, 202) which use fixed CRC 0x47
+            if (pgn == 200 || pgn == 201 || pgn == 202) {
+                uint8_t receivedCRC = data[len - 1];
+                if (receivedCRC != 0x47) {
+                    LOG_WARNING(EventSource::NETWORK, "AgIO PGN %d invalid fixed CRC: expected 0x47, got %02X", 
+                               pgn, receivedCRC);
+                    return; // Drop packet with bad CRC
                 }
+                // AgIO packets validated - continue processing
             } else {
-                // For all other PGNs, CRC is the last byte
+                // Normal CRC calculation for AgOpenGPS PGNs
                 uint16_t crcSum = 0;
                 for (size_t i = 2; i < len - 1; i++)
                 {
@@ -120,17 +104,7 @@ void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& 
         {
             
             const uint8_t* pgnData = &data[5];
-            size_t dataLen;
-            
-            // Special handling for PGN 200 - its length includes the CRC
-            if (pgn == 200 && len > 5) {
-                uint8_t lengthByte = data[4];
-                // For PGN 200, length includes CRC, so actual data is length - 1
-                dataLen = lengthByte - 1;
-            } else {
-                // Normal PGNs: length doesn't include CRC
-                dataLen = len - 6; // Subtract header(3) + pgn(1) + len(1) + crc(1)
-            }
+            size_t dataLen = len - 6; // Subtract header(3) + pgn(1) + len(1) + crc(1)
             
             for (size_t i = 0; i < broadcastCount; i++)
             {
