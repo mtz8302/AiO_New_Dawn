@@ -29,7 +29,7 @@
 #include "RTCMProcessor.h"
 #include "SimpleWebManager.h"
 #include "Version.h"
-#include "LittleDawnInterface.h"
+#include "ESP32Interface.h"
 
 // Flash ID for OTA verification - must match FLASH_ID in FlashTxx.h
 const char* flash_id = "fw_teensy41";
@@ -287,8 +287,8 @@ void setup()
   }
 
   // Initialize Little Dawn Interface
-  littleDawnInterface.init();
-  LOG_INFO(EventSource::SYSTEM, "LittleDawnInterface initialized");
+  esp32Interface.init();
+  LOG_INFO(EventSource::SYSTEM, "ESP32Interface initialized");
 
   // PGN 201 handling is now done by QNetworkBase
 
@@ -359,7 +359,7 @@ void loop()
   adProcessor.process();
   
   // Process Little Dawn interface
-  littleDawnInterface.process();
+  esp32Interface.process();
 
   // Process NAV messages
   NAVProcessor::getInstance()->process();

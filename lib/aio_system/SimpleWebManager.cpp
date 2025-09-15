@@ -24,7 +24,7 @@
 #include "web_pages/SimpleUM98xConfigPage.h"  // UM98x GPS configuration page
 #include <ArduinoJson.h>
 #include <QNEthernet.h>
-#include "LittleDawnInterface.h"
+#include "ESP32Interface.h"
 #include "UM98xManager.h"
 
 using namespace qindesign::network;
@@ -322,9 +322,9 @@ void SimpleWebManager::handleApiStatus(EthernetClient& client) {
     doc["deviceType"] = "Steer";  // Fixed for steer module
     doc["moduleId"] = 126;  // Fixed steer module ID
     
-    // Little Dawn status
-    doc["littleDawnDetected"] = littleDawnInterface.isDetected();
-    doc["littleDawnActive"] = littleDawnInterface.isActive();
+    // ESP32 status
+    doc["esp32Detected"] = esp32Interface.isDetected();
+    doc["esp32Active"] = esp32Interface.isDetected();  // Active if detected
     
     // System status
     doc["systemHealthy"] = true;
