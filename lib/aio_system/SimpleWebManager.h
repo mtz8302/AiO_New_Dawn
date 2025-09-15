@@ -51,6 +51,7 @@ private:
     
     // Page handlers  
     void sendHomePage(EthernetClient& client);
+    void sendTouchHomePage(EthernetClient& client);
     void sendEventLoggerPage(EthernetClient& client);
     void sendNetworkPage(EthernetClient& client);
     void sendOTAPage(EthernetClient& client);

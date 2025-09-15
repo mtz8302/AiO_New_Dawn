@@ -527,7 +527,7 @@ bool UM98xManager::parseLogListResponse(const String& response, String& messages
             // This is a log command
             if (content.length() > 0) {
                 if (messagesOut.length() > 0) {
-                    messagesOut += "\n";
+                    messagesOut += ", ";
                 }
                 messagesOut += content;
             }
