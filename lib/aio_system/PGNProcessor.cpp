@@ -52,18 +52,33 @@ void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& 
         // CRC is sum of bytes from index 2 to len-2 (skip header[0,1] and CRC byte)
         if (len >= 6) // Need at least header(3) + pgn(1) + length(1) + crc(1)
         {
+            // Special handling for PGN 200 - its length includes the CRC byte
+            uint8_t pgn = data[3];
+            size_t crcEndIndex = len - 1;
+            
+            // For PGN 200, the length byte (data[4]) includes the CRC
+            // So we need to calculate CRC up to the position indicated by the length
+            if (pgn == 200 && len > 5) {
+                uint8_t dataLength = data[4];
+                // CRC position is at header(3) + pgn(1) + length(1) + dataLength - 1
+                size_t expectedCrcPos = 5 + dataLength - 1;
+                if (expectedCrcPos < len) {
+                    crcEndIndex = expectedCrcPos;
+                }
+            }
+            
             uint16_t crcSum = 0;
-            for (size_t i = 2; i < len - 1; i++)
+            for (size_t i = 2; i < crcEndIndex; i++)
             {
                 crcSum += data[i];
             }
             uint8_t calculatedCRC = (uint8_t)(crcSum & 0xFF);
-            uint8_t receivedCRC = data[len - 1];
+            uint8_t receivedCRC = data[crcEndIndex];
             
             if (calculatedCRC != receivedCRC)
             {
                 LOG_WARNING(EventSource::NETWORK, "PGN %d CRC mismatch: calc=%02X, recv=%02X", 
-                           data[3], calculatedCRC, receivedCRC);
+                           pgn, calculatedCRC, receivedCRC);
                 return; // Drop packet with bad CRC
             }
         }
@@ -90,7 +105,17 @@ void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& 
         {
             
             const uint8_t* pgnData = &data[5];
-            size_t dataLen = len - 6; // Subtract header(3) + pgn(1) + len(1) + crc(1)
+            size_t dataLen;
+            
+            // Special handling for PGN 200 - its length includes the CRC
+            if (pgn == 200 && len > 5) {
+                uint8_t lengthByte = data[4];
+                // For PGN 200, length includes CRC, so actual data is length - 1
+                dataLen = lengthByte - 1;
+            } else {
+                // Normal PGNs: length doesn't include CRC
+                dataLen = len - 6; // Subtract header(3) + pgn(1) + len(1) + crc(1)
+            }
             
             for (size_t i = 0; i < broadcastCount; i++)
             {
