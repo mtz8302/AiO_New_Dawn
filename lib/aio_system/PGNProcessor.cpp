@@ -57,29 +57,44 @@ void PGNProcessor::processPGN(const uint8_t* data, size_t len, const IPAddress& 
             size_t crcEndIndex = len - 1;
             
             // For PGN 200, the length byte (data[4]) includes the CRC
-            // So we need to calculate CRC up to the position indicated by the length
+            // So we need to calculate CRC on dataLength-1 bytes (excluding the CRC itself)
             if (pgn == 200 && len > 5) {
                 uint8_t dataLength = data[4];
-                // CRC position is at header(3) + pgn(1) + length(1) + dataLength - 1
-                size_t expectedCrcPos = 5 + dataLength - 1;
-                if (expectedCrcPos < len) {
-                    crcEndIndex = expectedCrcPos;
+                // CRC is at position: header(3) + pgn(1) + length(1) + (dataLength - 1)
+                size_t crcPosition = 5 + dataLength - 1;
+                if (crcPosition < len) {
+                    // Calculate CRC up to (but not including) the CRC byte
+                    uint16_t crcSum = 0;
+                    for (size_t i = 2; i < crcPosition; i++)
+                    {
+                        crcSum += data[i];
+                    }
+                    uint8_t calculatedCRC = (uint8_t)(crcSum & 0xFF);
+                    uint8_t receivedCRC = data[crcPosition];
+                    
+                    if (calculatedCRC != receivedCRC)
+                    {
+                        LOG_WARNING(EventSource::NETWORK, "PGN %d CRC mismatch: calc=%02X, recv=%02X", 
+                                   pgn, calculatedCRC, receivedCRC);
+                        return; // Drop packet with bad CRC
+                    }
                 }
-            }
-            
-            uint16_t crcSum = 0;
-            for (size_t i = 2; i < crcEndIndex; i++)
-            {
-                crcSum += data[i];
-            }
-            uint8_t calculatedCRC = (uint8_t)(crcSum & 0xFF);
-            uint8_t receivedCRC = data[crcEndIndex];
-            
-            if (calculatedCRC != receivedCRC)
-            {
-                LOG_WARNING(EventSource::NETWORK, "PGN %d CRC mismatch: calc=%02X, recv=%02X", 
-                           pgn, calculatedCRC, receivedCRC);
-                return; // Drop packet with bad CRC
+            } else {
+                // For all other PGNs, CRC is the last byte
+                uint16_t crcSum = 0;
+                for (size_t i = 2; i < len - 1; i++)
+                {
+                    crcSum += data[i];
+                }
+                uint8_t calculatedCRC = (uint8_t)(crcSum & 0xFF);
+                uint8_t receivedCRC = data[len - 1];
+                
+                if (calculatedCRC != receivedCRC)
+                {
+                    LOG_WARNING(EventSource::NETWORK, "PGN %d CRC mismatch: calc=%02X, recv=%02X", 
+                               pgn, calculatedCRC, receivedCRC);
+                    return; // Drop packet with bad CRC
+                }
             }
         }
 
