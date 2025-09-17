@@ -75,7 +75,7 @@ const char TOUCH_FRIENDLY_EVENT_LOGGER_PAGE[] PROGMEM = R"rawliteral(
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 15px;
-            margin-top: 20px;
+            margin-bottom: 20px;
         }
         
         @media (max-width: 600px) {
@@ -140,6 +140,16 @@ const char TOUCH_FRIENDLY_EVENT_LOGGER_PAGE[] PROGMEM = R"rawliteral(
 <body>
     <div class="container">
         <h1>Event Logger Configuration</h1>
+        
+        <div class="nav-buttons">
+            <button type="button" class="touch-button" style="background: #7f8c8d;" 
+                    onclick="window.location.href='/'">
+                Back to Home
+            </button>
+            <button type="button" class="touch-button" onclick="saveConfig()">
+                Apply Changes
+            </button>
+        </div>
         
         <div class="card">
             <div class="config-section">
@@ -207,16 +217,6 @@ const char TOUCH_FRIENDLY_EVENT_LOGGER_PAGE[] PROGMEM = R"rawliteral(
         </div>
         
         <div id="status"></div>
-        
-        <div class="nav-buttons">
-            <button type="button" class="touch-button" style="background: #7f8c8d;" 
-                    onclick="window.location.href='/'">
-                Back to Home
-            </button>
-            <button type="button" class="touch-button" onclick="saveConfig()">
-                Apply Changes
-            </button>
-        </div>
     </div>
 </body>
 </html>

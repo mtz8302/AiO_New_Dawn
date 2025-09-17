@@ -93,7 +93,7 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
             gap: 15px;
-            margin-top: 20px;
+            margin-bottom: 20px;
         }
         
         @media (max-width: 600px) {
@@ -221,6 +221,19 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
     <div class="container">
         <h1>Network Settings</h1>
         
+        <div class="nav-buttons">
+            <button type="button" class="touch-button" style="background: #7f8c8d;" 
+                    onclick="window.location.href='/'">
+                Back to Home
+            </button>
+            <button type="button" class="touch-button" onclick="saveIPSettings()">
+                Apply Changes
+            </button>
+            <button type="button" class="touch-button reboot-btn" onclick="rebootSystem()">
+                Reboot
+            </button>
+        </div>
+        
         <div class="card">
             <div class="status-row">
                 <span>IP: <span id="currentIP">Loading...</span></span>
@@ -253,19 +266,6 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
         <div class="help-box">
             <p><strong>Note:</strong> After saving, you must reboot for the new IP to take effect.</p>
             <p>The network will be briefly unavailable during reboot.</p>
-        </div>
-        
-        <div class="nav-buttons">
-            <button type="button" class="touch-button" style="background: #7f8c8d;" 
-                    onclick="window.location.href='/'">
-                Back to Home
-            </button>
-            <button type="button" class="touch-button" onclick="saveIPSettings()">
-                Apply Changes
-            </button>
-            <button type="button" class="touch-button reboot-btn" onclick="rebootSystem()">
-                Reboot
-            </button>
         </div>
     </div>
 </body>

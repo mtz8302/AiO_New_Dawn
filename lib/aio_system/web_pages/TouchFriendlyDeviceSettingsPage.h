@@ -120,7 +120,7 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 15px;
-            margin-top: 20px;
+            margin-bottom: 20px;
         }
     </style>
     <script>
@@ -197,7 +197,17 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
     <div class="container">
         <h1>Device Settings</h1>
         
-        <form onsubmit="saveSettings(); return false;">
+        <div class="nav-buttons">
+            <button type="button" class="touch-button" style="background: #7f8c8d;" 
+                    onclick="window.location.href='/'">
+                Back to Home
+            </button>
+            <button type="submit" class="touch-button" form="settingsForm">
+                Apply Changes
+            </button>
+        </div>
+        
+        <form id="settingsForm" onsubmit="saveSettings(); return false;">
             <div class="card">
                 <div class="checkbox-container">
                     <input type="checkbox" id="udpPassthrough" name="udpPassthrough">
@@ -270,16 +280,6 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
             </div>
             
             <div id="status"></div>
-            
-            <div class="nav-buttons">
-                <button type="button" class="touch-button" style="background: #7f8c8d;" 
-                        onclick="window.location.href='/'">
-                    Back to Home
-                </button>
-                <button type="submit" class="touch-button">
-                    Apply Changes
-                </button>
-            </div>
         </form>
     </div>
 </body>

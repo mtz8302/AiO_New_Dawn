@@ -2,7 +2,7 @@
 #define VERSION_H
 
 // AiO New Dawn firmware version
-#define FIRMWARE_VERSION "1.0.47-beta" // JD PWM encoder rolling average for motion detection
+#define FIRMWARE_VERSION "1.0.48-beta" // Move web UI navigation buttons to top of pages
 
 // Teensy board type for OTA identification
 #define TEENSY_BOARD_TYPE "Teensy41"

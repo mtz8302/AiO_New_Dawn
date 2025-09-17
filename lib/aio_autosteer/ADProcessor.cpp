@@ -262,26 +262,11 @@ void ADProcessor::process()
                 // Calculate delta from rolling average
                 jdPWMDelta = jdPWMDutyTime - jdPWMRollingAverage;
                 
-                // Motion is the absolute delta from average
-                // Convert from microseconds to percentage
+                // Motion is the absolute delta from average in microseconds
                 float motionMicros = abs(jdPWMDelta);
-                float motionPercent = (motionMicros / (float)jdPWMPeriod) * 100.0f;
                 
-                // Scale motion to 0-255 range
-                // Full encoder range: 4% to 94% (90% total range)
-                // Get sensitivity from config (1-10, where 10 is most sensitive)
-                extern ConfigManager configManager;
-                uint8_t sensitivity = configManager.getJDPWMSensitivity();
-                
-                // Map sensitivity 1-10 to amplification factor
-                // Linear scale for more predictable behavior
-                // Sensitivity 1 = motion * 0.5 (least sensitive)
-                // Sensitivity 10 = motion * 5.0 (most sensitive)
-                float amplification = sensitivity * 0.5f;
-                
-                // Scale motion to 0-255 range
-                // Base scaling: 255/90 = 2.83, but reduce for better control
-                float sensorReading = motionPercent * amplification;
+                // Simple scaling: multiply delta by 5
+                float sensorReading = motionMicros * 5.0f;
                 sensorReading = min(sensorReading, 255.0f);
                 
                 // Store for display/debugging
@@ -290,8 +275,8 @@ void ADProcessor::process()
                 // Debug logging
                 static uint32_t lastDebugTime = 0;
                 if (millis() - lastDebugTime > 500) {
-                    LOG_DEBUG(EventSource::AUTOSTEER, "JD_PWM: duty=%dus, avg=%.0fus, delta=%.0fus, motion=%.2f%%, sens=%d, reading=%.0f", 
-                              jdPWMDutyTime, jdPWMRollingAverage, jdPWMDelta, motionPercent, sensitivity, sensorReading);
+                    LOG_DEBUG(EventSource::AUTOSTEER, "JD_PWM: duty=%dus, avg=%.0fus, delta=%.0fus (x5=%.0f)", 
+                              jdPWMDutyTime, jdPWMRollingAverage, jdPWMDelta, sensorReading);
                     lastDebugTime = millis();
                 }
                 

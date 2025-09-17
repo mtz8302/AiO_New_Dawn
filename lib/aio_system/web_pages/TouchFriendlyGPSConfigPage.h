@@ -61,9 +61,9 @@ const char TOUCH_FRIENDLY_GPS_CONFIG_PAGE[] PROGMEM = R"rawliteral(
         
         .nav-buttons {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 15px;
-            margin-top: 20px;
+            margin-bottom: 20px;
         }
         
         .btn-danger {
@@ -221,6 +221,13 @@ CONFIG COM3 460800`;
     <div class="container">
         <h1>GPS Configuration</h1>
         
+        <div class="nav-buttons">
+            <button type="button" class="touch-button" style="background: #7f8c8d;" 
+                    onclick="window.location.href='/'">
+                Back to Home
+            </button>
+        </div>
+        
         <div class="card">
             <div class="config-group">
                 <label for="config">Configuration Commands</label>
@@ -246,13 +253,6 @@ CONFIG COM3 460800`;
         </div>
         
         <div id="status" style="display: none;"></div>
-        
-        <div class="nav-buttons">
-            <button type="button" class="touch-button" style="background: #7f8c8d;" 
-                    onclick="window.location.href='/'">
-                Back to Home
-            </button>
-        </div>
     </div>
 </body>
 </html>

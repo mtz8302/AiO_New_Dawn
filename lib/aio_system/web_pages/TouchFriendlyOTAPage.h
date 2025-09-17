@@ -116,9 +116,9 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
         
         .nav-buttons {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 15px;
-            margin-top: 20px;
+            margin-bottom: 20px;
         }
         
         @media (max-width: 600px) {
@@ -237,6 +237,13 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
     <div class="container">
         <h1>System Update</h1>
         
+        <div class="nav-buttons">
+            <button type="button" class="touch-button" style="background: #7f8c8d;" 
+                    onclick="window.location.href='/'">
+                Back to Home
+            </button>
+        </div>
+        
         <div class="board-info">
             <div>Board Type: Teensy 4.1</div>
             <div>Current Version: <span id="currentVersion">Loading...</span></div>
@@ -266,12 +273,6 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
             </button>
         </div>
         
-        <div class="nav-buttons">
-            <button type="button" class="touch-button" style="background: #7f8c8d;" 
-                    onclick="window.location.href='/'">
-                Back to Home
-            </button>
-        </div>
     </div>
 </body>
 </html>

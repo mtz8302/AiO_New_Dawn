@@ -155,9 +155,9 @@ const char TOUCH_FRIENDLY_ANALOG_WORK_SWITCH_PAGE[] PROGMEM = R"rawliteral(
         
         .nav-buttons {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 15px;
-            margin-top: 20px;
+            margin-bottom: 20px;
         }
         
         .ws-status {
@@ -344,6 +344,13 @@ const char TOUCH_FRIENDLY_ANALOG_WORK_SWITCH_PAGE[] PROGMEM = R"rawliteral(
     <div class="container">
         <h1>Analog Work Switch</h1>
         
+        <div class="nav-buttons">
+            <button type="button" class="touch-button" style="background: #7f8c8d;" 
+                    onclick="window.location.href='/'">
+                Back to Home
+            </button>
+        </div>
+        
         <div class="card">
             <div class="reading-display">
                 <span id="percentValue">--</span>%
@@ -405,13 +412,6 @@ const char TOUCH_FRIENDLY_ANALOG_WORK_SWITCH_PAGE[] PROGMEM = R"rawliteral(
         </div>
         
         <div id="status"></div>
-        
-        <div class="nav-buttons">
-            <button type="button" class="touch-button" style="background: #7f8c8d;" 
-                    onclick="window.location.href='/'">
-                Back to Home
-            </button>
-        </div>
         
         <div class="ws-status" id="wsStatus">WebSocket Disconnected</div>
     </div>
