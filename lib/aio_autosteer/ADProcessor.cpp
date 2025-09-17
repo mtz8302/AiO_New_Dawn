@@ -41,6 +41,8 @@ ADProcessor::ADProcessor() :
     jdPWMRiseTime = 0;
     jdPWMPrevRiseTime = 0;
     jdPWMPeriod = 0;
+    jdPWMRollingAverage = 0;
+    jdPWMDelta = 0;
     jdPWMDutyPercent = 0.0f;
     jdPWMDutyPercentPrev = 0.0f;
     jdPWMMotionValue = 0.0f;
@@ -216,8 +218,8 @@ void ADProcessor::process()
             
             // Log basic status every 5 seconds if signal present
             if (now - lastStatusLog > 5000 && jdPWMPeriod > 0) {
-                LOG_INFO(EventSource::AUTOSTEER, "JD_ENC Status: duty=%.1f%%, period=%dus, motion=%.1f%%, pressure=%.0f", 
-                         jdPWMDutyPercent, jdPWMPeriod, jdPWMMotionValue, pressureReading);
+                LOG_INFO(EventSource::AUTOSTEER, "JD_ENC Status: duty=%dus, avg=%.0fus, delta=%.0fus, motion=%.1f%%, pressure=%.0f", 
+                         jdPWMDutyTime, jdPWMRollingAverage, jdPWMDelta, jdPWMMotionValue, pressureReading);
                 lastStatusLog = now;
             }
             
@@ -235,8 +237,8 @@ void ADProcessor::process()
             
             // Log high motion values
             if (isMoving && now - lastMotionLog > 1000) {
-                LOG_DEBUG(EventSource::AUTOSTEER, "JD_ENC Moving: duty=%.1f%%->%.1f%%, motion=%.1f%%, pressure=%.0f", 
-                          jdPWMDutyPercentPrev, jdPWMDutyPercent, jdPWMMotionValue, pressureReading);
+                LOG_DEBUG(EventSource::AUTOSTEER, "JD_ENC Moving: duty=%dus, avg=%.0fus, delta=%.0fus, motion=%.1f%%, pressure=%.0f", 
+                          jdPWMDutyTime, jdPWMRollingAverage, jdPWMDelta, jdPWMMotionValue, pressureReading);
                 lastMotionLog = now;
             }
             
@@ -248,19 +250,22 @@ void ADProcessor::process()
                     jdPWMDutyPercentPrev = jdPWMDutyPercent;
                 }
                 
-                // Calculate motion based on duty cycle change
-                // JD encoder continuously rotates - no center position
-                // Motion is simply the change in duty cycle
-                float motionPercent = abs(jdPWMDutyPercent - jdPWMDutyPercentPrev);
-                
-                // Apply noise floor filter
-                // Tester observed: 0-5us variation when stationary (0-0.1% duty cycle)
-                // Full range motion: 4-94% duty cycle (90% total range)
-                const float noiseFloor = 0.1f;  // 0.1% duty cycle = 5us at 200Hz
-                
-                if (motionPercent < noiseFloor) {
-                    motionPercent = 0.0f;  // Filter out noise
+                // Update rolling average (80% old + 20% new)
+                // This smooths out noise and provides a stable baseline
+                if (jdPWMRollingAverage == 0) {
+                    // Initialize on first reading
+                    jdPWMRollingAverage = jdPWMDutyTime;
+                } else {
+                    jdPWMRollingAverage = jdPWMRollingAverage * 0.8f + jdPWMDutyTime * 0.2f;
                 }
+                
+                // Calculate delta from rolling average
+                jdPWMDelta = jdPWMDutyTime - jdPWMRollingAverage;
+                
+                // Motion is the absolute delta from average
+                // Convert from microseconds to percentage
+                float motionMicros = abs(jdPWMDelta);
+                float motionPercent = (motionMicros / (float)jdPWMPeriod) * 100.0f;
                 
                 // Scale motion to 0-255 range
                 // Full encoder range: 4% to 94% (90% total range)
@@ -268,24 +273,30 @@ void ADProcessor::process()
                 extern ConfigManager configManager;
                 uint8_t sensitivity = configManager.getJDPWMSensitivity();
                 
-                // Map sensitivity 1-10 to motion scale
-                // The encoder can vary across full 4-94% range (90% total)
-                // We need to scale duty cycle changes to kickout thresholds
-                // Sensitivity 1 = 20% duty change for full scale (least sensitive, requires more motion)
-                // Sensitivity 10 = 2% duty change for full scale (most sensitive, requires less motion)
-                float motionScale = 22.0f - (sensitivity * 2.0f);
+                // Map sensitivity 1-10 to amplification factor
+                // Linear scale for more predictable behavior
+                // Sensitivity 1 = motion * 0.5 (least sensitive)
+                // Sensitivity 10 = motion * 5.0 (most sensitive)
+                float amplification = sensitivity * 0.5f;
                 
-                float sensorReading = (motionPercent / motionScale) * 255.0f;
+                // Scale motion to 0-255 range
+                // Base scaling: 255/90 = 2.83, but reduce for better control
+                float sensorReading = motionPercent * amplification;
                 sensorReading = min(sensorReading, 255.0f);
                 
-                // Convert to percentage for our system
+                // Store for display/debugging
                 jdPWMMotionValue = (sensorReading / 255.0f) * 100.0f;
                 
-                // Store current as previous for next cycle
-                jdPWMDutyPercentPrev = jdPWMDutyPercent;
+                // Debug logging
+                static uint32_t lastDebugTime = 0;
+                if (millis() - lastDebugTime > 500) {
+                    LOG_DEBUG(EventSource::AUTOSTEER, "JD_PWM: duty=%dus, avg=%.0fus, delta=%.0fus, motion=%.2f%%, sens=%d, reading=%.0f", 
+                              jdPWMDutyTime, jdPWMRollingAverage, jdPWMDelta, motionPercent, sensitivity, sensorReading);
+                    lastDebugTime = millis();
+                }
                 
-                // Update pressure reading immediately
-                pressureReading = (jdPWMMotionValue * 255.0f) / 100.0f;
+                // Update pressure reading directly (0-255 range for PGN)
+                pressureReading = sensorReading;
             } else {
                 // Invalid duty cycle
                 if (jdPWMDutyPercent > 0 && (jdPWMDutyPercent < 2.0f || jdPWMDutyPercent > 96.0f)) {

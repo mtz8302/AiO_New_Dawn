@@ -133,6 +133,8 @@ private:
     volatile float jdPWMDutyPercent;     // Duty cycle percentage (0-100)
     volatile float jdPWMDutyPercentPrev; // Previous duty cycle percentage
     float jdPWMMotionValue;              // Calculated motion value (0-255)
+    float jdPWMRollingAverage;           // Rolling average of duty time (microseconds)
+    float jdPWMDelta;                    // Difference from rolling average
     
     // Analog work switch mode
     bool analogWorkSwitchEnabled;
