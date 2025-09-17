@@ -54,7 +54,7 @@ const char TOUCH_FRIENDLY_GPS_CONFIG_PAGE[] PROGMEM = R"rawliteral(
         
         .button-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
             gap: 15px;
             margin-bottom: 20px;
         }
@@ -89,7 +89,7 @@ const char TOUCH_FRIENDLY_GPS_CONFIG_PAGE[] PROGMEM = R"rawliteral(
         
         @media (max-width: 600px) {
             .button-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: 1fr 1fr;
             }
             
             textarea {
@@ -228,6 +228,13 @@ CONFIG COM3 460800`;
             </button>
         </div>
         
+        <div class="button-grid">
+            <button class="touch-button" onclick="readConfig()">Read</button>
+            <button class="touch-button" onclick="writeConfig()">Save</button>
+            <button class="touch-button btn-secondary" onclick="loadUM981Defaults()">UM981 Defaults</button>
+            <button class="touch-button btn-danger" onclick="clearAll()">Clear</button>
+        </div>
+        
         <div class="card">
             <div class="config-group">
                 <label for="config">Configuration Commands</label>
@@ -242,13 +249,6 @@ CONFIG COM3 460800`;
             <div class="config-group">
                 <label for="messages">Message Output</label>
                 <textarea id="messages" rows="4" placeholder="Click 'Read from GPS' to load current message outputs..."></textarea>
-            </div>
-            
-            <div class="button-grid">
-                <button class="touch-button" onclick="readConfig()">Read from GPS</button>
-                <button class="touch-button" onclick="writeConfig()">Save to GPS</button>
-                <button class="touch-button btn-secondary" onclick="loadUM981Defaults()">Load UM981 Defaults</button>
-                <button class="touch-button btn-danger" onclick="clearAll()">Clear All</button>
             </div>
         </div>
         

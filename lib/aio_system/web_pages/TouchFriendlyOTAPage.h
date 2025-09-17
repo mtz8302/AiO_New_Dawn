@@ -48,35 +48,6 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
             margin-bottom: 5px;
         }
         
-        .file-input-wrapper {
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
-            width: 100%;
-        }
-        
-        .file-input-button {
-            display: block;
-            width: 100%;
-            padding: 20px;
-            background: #2196f3;
-            color: white;
-            text-align: center;
-            border-radius: 8px;
-            font-size: 18px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        
-        .file-input-button:active {
-            background: #1976d2;
-        }
-        
-        input[type="file"] {
-            position: absolute;
-            left: -9999px;
-        }
         
         .file-info {
             margin-top: 15px;
@@ -102,7 +73,10 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
         
         .upload-button {
             background: #4caf50;
-            margin-top: 20px;
+        }
+        
+        .button-grid .upload-button {
+            margin-top: 0;
         }
         
         .upload-button:active {
@@ -119,6 +93,27 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
             grid-template-columns: 1fr;
             gap: 15px;
             margin-bottom: 20px;
+        }
+        
+        .button-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .button-grid .touch-button,
+        .button-grid label.touch-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            height: 60px;
+            min-height: 60px;
+            box-sizing: border-box;
+            padding: 20px 25px;
+            margin: 0;
+            line-height: 1;
         }
         
         @media (max-width: 600px) {
@@ -244,6 +239,23 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
             </button>
         </div>
         
+        <div class="card">
+            <div class="button-grid">
+                <label for="file" class="touch-button">
+                    Choose Firmware
+                </label>
+                <button type="button" id="uploadBtn" class="touch-button upload-button" onclick="uploadFile()">
+                    Upload Firmware
+                </button>
+            </div>
+            
+            <input type="file" id="file" name="firmware" accept=".hex" onchange="displayFileName()" style="display: none;">
+            
+            <div id="fileInfo" class="file-info"></div>
+            
+            <div id="feedback"></div>
+        </div>
+        
         <div class="board-info">
             <div>Board Type: Teensy 4.1</div>
             <div>Current Version: <span id="currentVersion">Loading...</span></div>
@@ -252,25 +264,6 @@ const char TOUCH_FRIENDLY_OTA_PAGE[] PROGMEM = R"rawliteral(
         <div class="warning-box">
             <strong>⚠️ Warning</strong>
             Incorrect firmware can brick your device. Only upload firmware built for Teensy 4.1.
-        </div>
-        
-        <div class="card">
-            <h2>Select Firmware</h2>
-            
-            <div class="file-input-wrapper">
-                <label for="file" class="file-input-button" id="fileLabel">
-                    Choose Firmware File (.hex)
-                </label>
-                <input type="file" id="file" name="firmware" accept=".hex" onchange="displayFileName()">
-            </div>
-            
-            <div id="fileInfo" class="file-info"></div>
-            
-            <div id="feedback"></div>
-            
-            <button type="button" id="uploadBtn" class="touch-button upload-button" onclick="uploadFile()">
-                Upload Firmware
-            </button>
         </div>
         
     </div>
