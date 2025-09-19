@@ -45,7 +45,6 @@ ADProcessor::ADProcessor() :
     jdPWMDelta = 0;
     jdPWMDutyPercent = 0.0f;
     jdPWMDutyPercentPrev = 0.0f;
-    jdPWMMotionValue = 0.0f;
     
     instance = this;
 }
@@ -218,27 +217,27 @@ void ADProcessor::process()
             
             // Log basic status every 5 seconds if signal present
             if (now - lastStatusLog > 5000 && jdPWMPeriod > 0) {
-                LOG_INFO(EventSource::AUTOSTEER, "JD_ENC Status: duty=%dus, avg=%.0fus, delta=%.0fus, motion=%.1f%%, pressure=%.0f", 
-                         jdPWMDutyTime, jdPWMRollingAverage, jdPWMDelta, jdPWMMotionValue, pressureReading);
+                LOG_INFO(EventSource::AUTOSTEER, "JD_ENC Status: duty=%dus, avg=%.0fus, delta=%.0fus, pressure=%.0f", 
+                         jdPWMDutyTime, jdPWMRollingAverage, abs(jdPWMDelta), pressureReading);
                 lastStatusLog = now;
             }
             
             // Log motion events immediately
-            bool isMoving = (jdPWMMotionValue > 5.0f);
+            bool isMoving = (pressureReading > 25.0f);  // ~10% of 255 threshold
             if (isMoving != wasMoving) {
                 if (isMoving) {
-                    LOG_INFO(EventSource::AUTOSTEER, "JD_ENC Motion START: duty=%.1f%%, motion=%.1f%%", 
-                             jdPWMDutyPercent, jdPWMMotionValue);
+                    LOG_INFO(EventSource::AUTOSTEER, "JD_ENC Motion START: duty=%dus, delta=%.0fus, pressure=%.0f", 
+                             jdPWMDutyTime, abs(jdPWMDelta), pressureReading);
                 } else {
-                    LOG_INFO(EventSource::AUTOSTEER, "JD_ENC Motion STOP: duty=%.1f%%", jdPWMDutyPercent);
+                    LOG_INFO(EventSource::AUTOSTEER, "JD_ENC Motion STOP: duty=%dus", jdPWMDutyTime);
                 }
                 wasMoving = isMoving;
             }
             
             // Log high motion values
             if (isMoving && now - lastMotionLog > 1000) {
-                LOG_DEBUG(EventSource::AUTOSTEER, "JD_ENC Moving: duty=%dus, avg=%.0fus, delta=%.0fus, motion=%.1f%%, pressure=%.0f", 
-                          jdPWMDutyTime, jdPWMRollingAverage, jdPWMDelta, jdPWMMotionValue, pressureReading);
+                LOG_DEBUG(EventSource::AUTOSTEER, "JD_ENC Moving: duty=%dus, avg=%.0fus, delta=%.0fus, pressure=%.0f", 
+                          jdPWMDutyTime, jdPWMRollingAverage, abs(jdPWMDelta), pressureReading);
                 lastMotionLog = now;
             }
             
@@ -269,8 +268,6 @@ void ADProcessor::process()
                 float sensorReading = motionMicros * 5.0f;
                 sensorReading = min(sensorReading, 255.0f);
                 
-                // Store for display/debugging
-                jdPWMMotionValue = (sensorReading / 255.0f) * 100.0f;
                 
                 // Debug logging
                 static uint32_t lastDebugTime = 0;
@@ -292,7 +289,6 @@ void ADProcessor::process()
                         lastInvalidLog = now;
                     }
                 }
-                jdPWMMotionValue = 0;
                 pressureReading = 0;
             }
         } else {
