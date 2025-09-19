@@ -322,11 +322,17 @@ const char TOUCH_FRIENDLY_ANALOG_WORK_SWITCH_PAGE[] PROGMEM = R"rawliteral(
             .then(result => {
                 document.getElementById('status').innerHTML = 
                     '<div class="status success">Settings saved!</div>';
+                setTimeout(() => {
+                    document.getElementById('status').innerHTML = '';
+                }, 5000);
                 setTimeout(loadConfig, 100);
             })
             .catch(error => {
                 document.getElementById('status').innerHTML = 
                     '<div class="status error">Error saving settings</div>';
+                setTimeout(() => {
+                    document.getElementById('status').innerHTML = '';
+                }, 5000);
             });
         }
         
@@ -350,6 +356,8 @@ const char TOUCH_FRIENDLY_ANALOG_WORK_SWITCH_PAGE[] PROGMEM = R"rawliteral(
                 Back to Home
             </button>
         </div>
+        
+        <div id="status"></div>
         
         <div class="card">
             <div class="reading-display">
@@ -410,8 +418,6 @@ const char TOUCH_FRIENDLY_ANALOG_WORK_SWITCH_PAGE[] PROGMEM = R"rawliteral(
                 </select>
             </div>
         </div>
-        
-        <div id="status"></div>
         
         <div class="ws-status" id="wsStatus">WebSocket Disconnected</div>
     </div>

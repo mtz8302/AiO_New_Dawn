@@ -99,6 +99,9 @@ const char TOUCH_FRIENDLY_EVENT_LOGGER_PAGE[] PROGMEM = R"rawliteral(
                 console.error('Error loading config:', error);
                 document.getElementById('status').innerHTML = 
                     '<div class="status error">Error loading configuration</div>';
+                setTimeout(() => {
+                    document.getElementById('status').innerHTML = '';
+                }, 5000);
             });
         }
         
@@ -123,14 +126,23 @@ const char TOUCH_FRIENDLY_EVENT_LOGGER_PAGE[] PROGMEM = R"rawliteral(
                 if (response.ok) {
                     document.getElementById('status').innerHTML = 
                         '<div class="status success">Configuration saved!</div>';
+                    setTimeout(() => {
+                        document.getElementById('status').innerHTML = '';
+                    }, 5000);
                 } else {
                     document.getElementById('status').innerHTML = 
                         '<div class="status error">Error saving configuration</div>';
+                    setTimeout(() => {
+                        document.getElementById('status').innerHTML = '';
+                    }, 5000);
                 }
             })
             .catch(error => {
                 document.getElementById('status').innerHTML = 
                     '<div class="status error">Error: ' + error + '</div>';
+                setTimeout(() => {
+                    document.getElementById('status').innerHTML = '';
+                }, 5000);
             });
         }
         
@@ -150,6 +162,8 @@ const char TOUCH_FRIENDLY_EVENT_LOGGER_PAGE[] PROGMEM = R"rawliteral(
                 Apply Changes
             </button>
         </div>
+        
+        <div id="status"></div>
         
         <div class="card">
             <div class="config-section">
@@ -215,8 +229,6 @@ const char TOUCH_FRIENDLY_EVENT_LOGGER_PAGE[] PROGMEM = R"rawliteral(
                 Syslog messages are sent to the server IP configured by your network admin on port 514
             </div>
         </div>
-        
-        <div id="status"></div>
     </div>
 </body>
 </html>

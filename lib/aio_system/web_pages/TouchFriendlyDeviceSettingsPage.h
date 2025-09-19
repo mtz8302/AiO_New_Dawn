@@ -159,14 +159,23 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                 if (data.status === 'saved') {
                     document.getElementById('status').innerHTML = 
                         '<div class="status success">Settings saved successfully!</div>';
+                    setTimeout(() => {
+                        document.getElementById('status').innerHTML = '';
+                    }, 5000);
                 } else {
                     document.getElementById('status').innerHTML = 
                         '<div class="status error">Error saving settings</div>';
+                    setTimeout(() => {
+                        document.getElementById('status').innerHTML = '';
+                    }, 5000);
                 }
             })
             .catch((error) => {
                 document.getElementById('status').innerHTML = 
                     '<div class="status error">Error: ' + error + '</div>';
+                setTimeout(() => {
+                    document.getElementById('status').innerHTML = '';
+                }, 5000);
             });
         }
         
@@ -206,6 +215,8 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                 Apply Changes
             </button>
         </div>
+        
+        <div id="status"></div>
         
         <form id="settingsForm" onsubmit="saveSettings(); return false;">
             <div class="card">
@@ -278,8 +289,6 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                     </div>
                 </div>
             </div>
-            
-            <div id="status"></div>
         </form>
     </div>
 </body>

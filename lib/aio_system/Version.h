@@ -2,7 +2,7 @@
 #define VERSION_H
 
 // AiO New Dawn firmware version
-#define FIRMWARE_VERSION "1.0.50-beta" // Fix JD PWM logging to show microseconds and 0-255 values
+#define FIRMWARE_VERSION "1.0.51-beta" // UI notification improvements
 
 // Teensy board type for OTA identification
 #define TEENSY_BOARD_TYPE "Teensy41"

@@ -141,14 +141,23 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
                 if (data.status === 'ok') {
                     document.getElementById('status').innerHTML = 
                         '<div class="status success">Settings saved! Click Reboot to apply.</div>';
+                    setTimeout(() => {
+                        document.getElementById('status').innerHTML = '';
+                    }, 5000);
                 } else {
                     document.getElementById('status').innerHTML = 
                         '<div class="status error">Error saving settings: ' + data.error + '</div>';
+                    setTimeout(() => {
+                        document.getElementById('status').innerHTML = '';
+                    }, 5000);
                 }
             })
             .catch((error) => {
                 document.getElementById('status').innerHTML = 
                     '<div class="status error">Error: ' + error + '</div>';
+                setTimeout(() => {
+                    document.getElementById('status').innerHTML = '';
+                }, 5000);
             });
             
             return false;
@@ -179,6 +188,9 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
                 .catch((error) => {
                     document.getElementById('status').innerHTML = 
                         '<div class="status error">Error: ' + error + '</div>';
+                    setTimeout(() => {
+                        document.getElementById('status').innerHTML = '';
+                    }, 5000);
                 });
             }
         }
@@ -234,6 +246,8 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
             </button>
         </div>
         
+        <div id="status"></div>
+        
         <div class="card">
             <div class="status-row">
                 <span>IP: <span id="currentIP">Loading...</span></span>
@@ -260,8 +274,6 @@ const char TOUCH_FRIENDLY_NETWORK_PAGE[] PROGMEM = R"rawliteral(
                 </div>
             </form>
         </div>
-        
-        <div id="status"></div>
         
         <div class="help-box">
             <p><strong>Note:</strong> After saving, you must reboot for the new IP to take effect.</p>
