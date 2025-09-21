@@ -54,6 +54,38 @@ volatile bool loopTimingEnabled = false;
 uint32_t loopCount = 0;
 elapsedMillis timingPeriod;  // Teensy's auto-incrementing millisecond timer
 
+// Process timing diagnostics
+volatile bool processTimingEnabled = false;
+struct ProcessTiming {
+  const char* name;
+  uint32_t totalTime;  // microseconds
+  uint32_t count;
+  uint32_t maxTime;
+};
+
+ProcessTiming processTiming[] = {
+  {"Ethernet.loop", 0, 0, 0},
+  {"QNetworkBase.poll", 0, 0, 0},
+  {"UDPHandler.poll", 0, 0, 0},
+  {"EventLogger.check", 0, 0, 0},
+  {"CommandHandler", 0, 0, 0},
+  {"IMUProcessor", 0, 0, 0},
+  {"ADProcessor", 0, 0, 0},
+  {"ESP32Interface", 0, 0, 0},
+  {"NAVProcessor", 0, 0, 0},
+  {"RTCMProcessor", 0, 0, 0},
+  {"AutosteerProcessor", 0, 0, 0},
+  {"MotorDriver", 0, 0, 0},
+  {"EncoderProcessor", 0, 0, 0},
+  {"MachineProcessor", 0, 0, 0},
+  {"LED Update", 0, 0, 0},
+  {"WebManager.handle", 0, 0, 0},
+  {"WebManager.broadcast", 0, 0, 0},
+  {"PWMProcessor", 0, 0, 0},
+  {"GPS1 Serial", 0, 0, 0},
+  {"GPS2 Serial", 0, 0, 0}
+};
+
 // Function to toggle loop timing
 void toggleLoopTiming() {
   loopTimingEnabled = !loopTimingEnabled;
@@ -64,6 +96,53 @@ void toggleLoopTiming() {
     LOG_INFO(EventSource::SYSTEM, "Loop timing diagnostics ENABLED - first report in 30 seconds");
   } else {
     LOG_INFO(EventSource::SYSTEM, "Loop timing diagnostics DISABLED");
+  }
+}
+
+// Function to toggle process timing
+void toggleProcessTiming() {
+  processTimingEnabled = !processTimingEnabled;
+  if (processTimingEnabled) {
+    // Reset all timing data
+    for (size_t i = 0; i < sizeof(processTiming)/sizeof(processTiming[0]); i++) {
+      processTiming[i].totalTime = 0;
+      processTiming[i].count = 0;
+      processTiming[i].maxTime = 0;
+    }
+    LOG_INFO(EventSource::SYSTEM, "Process timing diagnostics ENABLED");
+  } else {
+    // Print final report directly to Serial to bypass EventLogger buffering
+    Serial.println("\r\n=== Process Timing Report ===");
+
+    float totalAvgTime = 0;
+    uint32_t mainLoopCount = 0;
+
+    // Find the loop count from a process that runs every iteration
+    if (processTiming[0].count > 0) {
+      mainLoopCount = processTiming[0].count;
+    }
+
+    for (size_t i = 0; i < sizeof(processTiming)/sizeof(processTiming[0]); i++) {
+      if (processTiming[i].count > 0) {
+        float avgTime = (float)processTiming[i].totalTime / (float)processTiming[i].count;
+
+        // For accurate total, scale by actual execution frequency
+        if (mainLoopCount > 0) {
+          float scaledAvg = avgTime * ((float)processTiming[i].count / (float)mainLoopCount);
+          totalAvgTime += scaledAvg;
+        }
+
+        Serial.printf("%2d. %-20s: avg=%6.1fus max=%6luus (n=%lu)\r\n",
+                      i, processTiming[i].name, avgTime, processTiming[i].maxTime, processTiming[i].count);
+      }
+    }
+
+    Serial.printf("============================\r\n");
+    Serial.printf("Total avg time per loop: %.1f us\r\n", totalAvgTime);
+    Serial.printf("Theoretical max frequency: %.1f kHz\r\n", 1000.0f / totalAvgTime);
+    Serial.println("============================");
+
+    LOG_INFO(EventSource::SYSTEM, "Process timing diagnostics DISABLED");
   }
 }
 
@@ -223,7 +302,6 @@ void setup()
   if (adProcessor.init())
   {
     LOG_INFO(EventSource::SYSTEM, "ADProcessor initialized");
-    adProcessor.process();
   }
   else
   {
@@ -326,17 +404,32 @@ void setup()
   LOG_INFO(EventSource::SYSTEM, "=== System Ready ===");
 }
 
+// Macro for timing a process
+#define TIME_PROCESS(index, code) \
+  if (processTimingEnabled) { \
+    uint32_t start = micros(); \
+    code; \
+    uint32_t elapsed = micros() - start; \
+    processTiming[index].totalTime += elapsed; \
+    processTiming[index].count++; \
+    if (elapsed > processTiming[index].maxTime) { \
+      processTiming[index].maxTime = elapsed; \
+    } \
+  } else { \
+    code; \
+  }
+
 void loop()
 {
   // OTA updates are handled via web interface
-  
+
   // Process Ethernet events - REQUIRED for QNEthernet!
-  Ethernet.loop();
+  TIME_PROCESS(0, Ethernet.loop());
   
-  QNetworkBase::poll();
+  TIME_PROCESS(1, QNetworkBase::poll());
   
   // Poll AsyncUDP for network diagnostics
-  QNEthernetUDPHandler::poll();
+  TIME_PROCESS(2, QNEthernetUDPHandler::poll());
   
   // AsyncUDP handles all UDP packet reception via callbacks
   // The poll() call above is just for diagnostics and status monitoring
@@ -346,72 +439,78 @@ void loop()
   static uint32_t lastNetworkCheck = 0;
   if (millis() - lastNetworkCheck > 100) {  // Check every 100ms for responsiveness
     lastNetworkCheck = millis();
-    EventLogger::getInstance()->checkNetworkReady();
+    TIME_PROCESS(3, EventLogger::getInstance()->checkNetworkReady());
   }
 
   // Process serial commands through CommandHandler
-  CommandHandler::getInstance()->process();
+  TIME_PROCESS(4, CommandHandler::getInstance()->process());
   
   // Process IMU data
-  imuProcessor.process();
+  TIME_PROCESS(5, imuProcessor.process());
   
   // Process A/D inputs
-  adProcessor.process();
+  TIME_PROCESS(6, adProcessor.process());
   
   // Process Little Dawn interface
-  esp32Interface.process();
+  TIME_PROCESS(7, esp32Interface.process());
 
   // Process NAV messages
-  NAVProcessor::getInstance()->process();
+  TIME_PROCESS(8, NAVProcessor::getInstance()->process());
   
   // Process RTCM data from all sources (network and radio)
-  RTCMProcessor::getInstance()->process();
+  TIME_PROCESS(9, RTCMProcessor::getInstance()->process());
 
   // CAN handling is done by motor drivers directly
   
   // Process autosteer FIRST - calculate new motor commands
-  AutosteerProcessor::getInstance()->process();
+  TIME_PROCESS(10, AutosteerProcessor::getInstance()->process());
   
   // Process motor driver AFTER autosteer has set new PWM values
   if (motorPTR)
   {
-    motorPTR->process();
+    TIME_PROCESS(11, motorPTR->process());
   }
   
   // Process encoder
-  EncoderProcessor::getInstance()->process();
+  TIME_PROCESS(12, EncoderProcessor::getInstance()->process());
   
   // Process machine
-  MachineProcessor::getInstance()->process();
+  TIME_PROCESS(13, MachineProcessor::getInstance()->process());
   
   // Update LEDs
-  static uint32_t lastLEDUpdate = 0;
-  if (millis() - lastLEDUpdate > 100)  // Update every 100ms
-  {
-    lastLEDUpdate = millis();
-    ledManagerFSM.updateAll();
-  }
+  TIME_PROCESS(14,
+    static uint32_t lastLEDUpdate = 0;
+    if (millis() - lastLEDUpdate > 100)  // Update every 100ms
+    {
+      lastLEDUpdate = millis();
+      ledManagerFSM.updateAll();
+    }
+  );
   
   // Handle WebSocket clients and broadcast telemetry
-  webManager.handleClient();
-  webManager.broadcastTelemetry();
+  TIME_PROCESS(15, webManager.handleClient());
+  TIME_PROCESS(16, webManager.broadcastTelemetry());
   
   // Process PWM speed pulse updates
-  pwmProcessor.process();
+  TIME_PROCESS(17, pwmProcessor.process());
 
   // Process GPS1 data if available - ONE byte per loop
-  if (SerialGPS1.available())
-  {
-    char c = SerialGPS1.read();
-    gnssProcessor.processNMEAChar(c);
-  }
-  
+  TIME_PROCESS(18,
+    if (SerialGPS1.available())
+    {
+      char c = SerialGPS1.read();
+      gnssProcessor.processNMEAChar(c);
+    }
+  );
+
   // Process GPS2 data if available (for F9P dual RELPOSNED) - ONE byte per loop
-  if (SerialGPS2.available())
-  {
-    uint8_t b = SerialGPS2.read();
-    gnssProcessor.processUBXByte(b);
-  }
+  TIME_PROCESS(19,
+    if (SerialGPS2.available())
+    {
+      uint8_t b = SerialGPS2.read();
+      gnssProcessor.processUBXByte(b);
+    }
+  );
 
   // Loop timing - ultra lightweight, just increment counter
   if (loopTimingEnabled) {

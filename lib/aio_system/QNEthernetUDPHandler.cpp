@@ -80,6 +80,11 @@ void QNEthernetUDPHandler::init() {
 void QNEthernetUDPHandler::poll() {
     static uint32_t lastStatusCheck = 0;
     static bool lastLinkStatus = false;
+    static uint8_t pollCounter = 0;
+
+    // Skip every other poll to reduce overhead
+    pollCounter++;
+    if (pollCounter & 1) return;
     
     // Check for incoming PGN packets
     int packetSize = udpPGN.parsePacket();

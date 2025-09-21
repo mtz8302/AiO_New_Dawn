@@ -45,6 +45,7 @@ private:
     WebLanguage currentLanguage;
     bool systemReady;
     uint32_t lastTelemetryUpdate;
+    uint32_t lastHandleClientTime;
     
     // Route setup
     void setupRoutes();

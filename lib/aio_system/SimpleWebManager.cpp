@@ -39,11 +39,12 @@ using namespace qindesign::network;
 extern EncoderProcessor* encoderProcessor;
 extern GNSSProcessor gnssProcessor;
 
-SimpleWebManager::SimpleWebManager() : 
+SimpleWebManager::SimpleWebManager() :
     isRunning(false),
     currentLanguage(WebLanguage::ENGLISH),
     systemReady(false),
-    lastTelemetryUpdate(0) {
+    lastTelemetryUpdate(0),
+    lastHandleClientTime(0) {
 }
 
 SimpleWebManager::~SimpleWebManager() {
@@ -90,6 +91,14 @@ void SimpleWebManager::stop() {
 }
 
 void SimpleWebManager::handleClient() {
+    // Rate limit client handling to reduce overhead
+    // Check for new connections only every 10ms (100 Hz)
+    uint32_t now = millis();
+    if (now - lastHandleClientTime < 10) {
+        return;
+    }
+    lastHandleClientTime = now;
+
     httpServer.handleClient();
     telemetryWS.handleClients();
 }
@@ -817,31 +826,42 @@ String SimpleWebManager::buildLevelOptions(uint8_t selectedLevel) {
 // Telemetry broadcast
 
 void SimpleWebManager::broadcastTelemetry() {
-    // Rate limit to configured rate
-    uint32_t now = millis();
-    
-    // Start with faster rate to prime the connection, then slow down
+    // Track connection state
     static uint32_t connectionStart = 0;
     static bool connectionPrimed = false;
-    
-    if (telemetryWS.getClientCount() > 0 && connectionStart == 0) {
+    static size_t lastClientCount = 0;
+
+    size_t currentClientCount = telemetryWS.getClientCount();
+
+    // Early exit if no clients connected
+    if (currentClientCount == 0) {
+        connectionStart = 0;
+        connectionPrimed = false;
+        lastClientCount = 0;
+        return;
+    }
+
+    // Rate limit to configured rate
+    uint32_t now = millis();
+
+    // Check for new connection
+    if (currentClientCount > 0 && lastClientCount == 0) {
         connectionStart = now;
         connectionPrimed = false;
         LOG_DEBUG(EventSource::NETWORK, "WebSocket client connected, priming connection");
-    } else if (telemetryWS.getClientCount() == 0) {
-        connectionStart = 0;
-        connectionPrimed = false;
     }
-    
+    lastClientCount = currentClientCount;
+
     // Determine target interval based on connection state
     uint32_t targetInterval;
-    if (!connectionPrimed && connectionStart > 0 && now - connectionStart < 5000) {
+    if (!connectionPrimed && now - connectionStart < 5000) {
         targetInterval = 5;  // 5ms = 200Hz for first 5 seconds
     } else {
         connectionPrimed = true;
         targetInterval = 10;  // 10ms = 100Hz normal rate
     }
-    
+
+    // Early exit if not time to send
     if (now - lastTelemetryUpdate < targetInterval) {
         return;
     }
