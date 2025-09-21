@@ -17,27 +17,26 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
     <link rel="stylesheet" href="/touch.css">
     <style>
         /* Additional styles specific to device settings */
-        .checkbox-container {
+        .toggle-container {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             padding: 12px 0;
             border-bottom: 1px solid #ecf0f1;
         }
-        
-        .checkbox-container:last-child {
+
+        .toggle-container:last-child {
             border-bottom: none;
         }
-        
-        input[type="checkbox"] {
-            width: 44px;
-            height: 44px;
-            margin-right: 15px;
-            cursor: pointer;
-        }
-        
-        .checkbox-label {
+
+        .toggle-label {
             font-size: 18px;
             font-weight: 500;
+            flex: 1;
+            margin-right: 15px;
+        }
+
+        .toggle-info {
             flex: 1;
         }
         
@@ -296,34 +295,43 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
         
         <form id="settingsForm" onsubmit="saveSettings(); return false;">
             <div class="card">
-                <div class="checkbox-container">
-                    <input type="checkbox" id="udpPassthrough" name="udpPassthrough">
-                    <div>
-                        <label for="udpPassthrough" class="checkbox-label">GPS-UDP Passthrough</label>
+                <div class="toggle-container">
+                    <div class="toggle-info">
+                        <label for="udpPassthrough" class="toggle-label">GPS-UDP Passthrough</label>
                         <div class="help-text">
                             Enable direct UDP passthrough of NMEA sentences from GPS1 to AgIO.
                         </div>
                     </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="udpPassthrough" name="udpPassthrough">
+                        <span class="toggle-slider"></span>
+                    </label>
                 </div>
                 
-                <div class="checkbox-container">
-                    <input type="checkbox" id="sensorFusion" name="sensorFusion">
-                    <div>
-                        <label for="sensorFusion" class="checkbox-label">Enable Virtual WAS (VWAS)</label>
+                <div class="toggle-container">
+                    <div class="toggle-info">
+                        <label for="sensorFusion" class="toggle-label">Enable Virtual WAS (VWAS)</label>
                         <div class="help-text">
                             Use Keya motor encoder and GPS/IMU to create a virtual wheel angle sensor. Requires Keya CAN motor and vehicle movement.
                         </div>
                     </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="sensorFusion" name="sensorFusion">
+                        <span class="toggle-slider"></span>
+                    </label>
                 </div>
                 
-                <div class="checkbox-container" style="border-bottom: none;">
-                    <input type="checkbox" id="pwmBrakeMode" name="pwmBrakeMode">
-                    <div>
-                        <label for="pwmBrakeMode" class="checkbox-label">PWM Motor Brake Mode</label>
+                <div class="toggle-container" style="border-bottom: none;">
+                    <div class="toggle-info">
+                        <label for="pwmBrakeMode" class="toggle-label">PWM Motor Brake Mode</label>
                         <div class="help-text">
                             When enabled, PWM motors use brake mode (active braking). When disabled, motors use coast mode (free-wheeling). Only affects PWM-based motor drivers.
                         </div>
                     </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="pwmBrakeMode" name="pwmBrakeMode">
+                        <span class="toggle-slider"></span>
+                    </label>
                 </div>
                 
                 <div class="form-group" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ecf0f1;">
@@ -337,15 +345,18 @@ const char TOUCH_FRIENDLY_DEVICE_SETTINGS_PAGE[] PROGMEM = R"rawliteral(
                     </div>
                 </div>
                 
-                <div class="checkbox-container" style="margin-top: 15px;">
-                    <input type="checkbox" id="jdPWMEnabled" name="jdPWMEnabled" onchange="toggleJDPWMSensitivity()">
-                    <div>
-                        <label for="jdPWMEnabled" class="checkbox-label">John Deere PWM Encoder Mode</label>
+                <div class="toggle-container" style="margin-top: 15px;">
+                    <div class="toggle-info">
+                        <label for="jdPWMEnabled" class="toggle-label">John Deere PWM Encoder Mode</label>
                         <div class="help-text">
                             Enable John Deere Autotrac PWM encoder support. This uses the digital kickout input (Kickout-D pin 3) to measure PWM duty cycle changes for steering wheel motion detection.<br>
                             <strong>Note:</strong> In AgOpenGPS, you must enable "Pressure Sensor" kickout mode and use the pressure set point in AgOpenGPS to set the kickout point.
                         </div>
                     </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="jdPWMEnabled" name="jdPWMEnabled" onchange="toggleJDPWMSensitivity()">
+                        <span class="toggle-slider"></span>
+                    </label>
                 </div>
                 
                 <div id="jdPWMSensitivityGroup" style="display: none;">
