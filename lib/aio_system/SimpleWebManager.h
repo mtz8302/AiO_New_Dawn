@@ -44,8 +44,7 @@ private:
     bool isRunning;
     WebLanguage currentLanguage;
     bool systemReady;
-    uint32_t lastTelemetryUpdate;
-    uint32_t lastHandleClientTime;
+    // Timing now handled by SimpleScheduler
     
     // Route setup
     void setupRoutes();
