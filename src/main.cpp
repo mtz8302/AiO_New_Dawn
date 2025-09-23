@@ -479,9 +479,6 @@ void setup()
 
   // Add these as EVERY_LOOP for now (they have no timing currently)
   scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
-    CommandHandler::getInstance()->process();
-  }, "CommandHandler");
-  scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
     imuProcessor.process();
   }, "IMU");
   scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
@@ -519,9 +516,12 @@ void setup()
   scheduler.addTask(SimpleScheduler::HZ_10, taskNetworkCheck, "Network Check");
   scheduler.addTask(SimpleScheduler::HZ_10, taskNAVProcess, "NAV Process");
   scheduler.addTask(SimpleScheduler::HZ_10, taskKickoutSendPGN250, "PGN250 Send");
+  scheduler.addTask(SimpleScheduler::HZ_10, []{
+    CommandHandler::getInstance()->process();
+  }, "CommandHandler");
 
   LOG_INFO(EventSource::SYSTEM, "SimpleScheduler initialized with %d tasks",
-           5 + 9 + 3 + 1 + 4); // EVERY_LOOP + 100Hz + 50Hz + 10Hz
+           5 + 8 + 3 + 1 + 5); // EVERY_LOOP + 100Hz + 50Hz + 10Hz
 
   // Display access information
   localIP = Ethernet.localIP();  // Reuse existing variable
