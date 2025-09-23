@@ -20,6 +20,7 @@
 #include "AutosteerProcessor.h"
 #include "EncoderProcessor.h"
 #include "KeyaCANDriver.h"
+#include "KickoutMonitor.h"
 #include "LEDManagerFSM.h"
 #include "MachineProcessor.h"
 // SubnetManager functionality moved to QNetworkBase
@@ -30,6 +31,7 @@
 #include "SimpleWebManager.h"
 #include "Version.h"
 #include "ESP32Interface.h"
+#include "SimpleScheduler/SimpleScheduler.h"
 
 // Flash ID for OTA verification - must match FLASH_ID in FlashTxx.h
 const char* flash_id = "fw_teensy41";
@@ -145,6 +147,80 @@ void toggleProcessTiming() {
     LOG_INFO(EventSource::SYSTEM, "Process timing diagnostics DISABLED");
   }
 }
+
+// ============================================
+// SimpleScheduler Task Wrapper Functions
+// ============================================
+
+// Every Loop Tasks (no timing check)
+void taskEthernetLoop() {
+  Ethernet.loop();  // REQUIRED for QNEthernet!
+}
+
+void taskQNetworkPoll() {
+  QNetworkBase::poll();
+}
+
+void taskUDPPoll() {
+  QNEthernetUDPHandler::poll();
+}
+
+void taskGPS1Serial() {
+  if (SerialGPS1.available()) {
+    char c = SerialGPS1.read();
+    gnssProcessor.processNMEAChar(c);
+  }
+}
+
+void taskGPS2Serial() {
+  if (SerialGPS2.available()) {
+    uint8_t b = SerialGPS2.read();
+    gnssProcessor.processUBXByte(b);
+  }
+}
+
+// 100Hz Tasks (10ms)
+void taskAutosteer() {
+  AutosteerProcessor::getInstance()->process();
+}
+
+void taskWebHandleClient() {
+  webManager.handleClient();
+}
+
+void taskWebBroadcastTelemetry() {
+  webManager.broadcastTelemetry();
+}
+
+// 50Hz Tasks (20ms)
+void taskMotorDriver() {
+  if (motorPTR) {
+    motorPTR->process();
+  }
+}
+
+// 10Hz Tasks (100ms)
+void taskLEDUpdate() {
+  ledManagerFSM.updateAll();
+}
+
+void taskNetworkCheck() {
+  EventLogger::getInstance()->checkNetworkReady();
+}
+
+void taskNAVProcess() {
+  NAVProcessor::getInstance()->process();
+}
+
+void taskKickoutSendPGN250() {
+  KickoutMonitor::getInstance()->sendPGN250();
+}
+
+// 1Hz Tasks (1000ms)
+// Reserved for future slow updates
+
+// 0.2Hz Tasks (5000ms)
+// Reserved for very slow status checks
 
 void setup()
 {
@@ -385,10 +461,68 @@ void setup()
 
   // Exit startup mode - start enforcing configured log levels
   EventLogger::getInstance()->setStartupMode(false);
-  
+
   // Mark web manager as ready for SSE updates
   webManager.setSystemReady(true);
-  
+
+  // ============================================
+  // Initialize SimpleScheduler
+  // ============================================
+  LOG_INFO(EventSource::SYSTEM, "Initializing SimpleScheduler...");
+
+  // Add EVERY_LOOP tasks (no timing)
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, taskEthernetLoop, "Ethernet Loop");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, taskQNetworkPoll, "QNetwork Poll");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, taskUDPPoll, "UDP Poll");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, taskGPS1Serial, "GPS1 Serial");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, taskGPS2Serial, "GPS2 Serial");
+
+  // Add these as EVERY_LOOP for now (they have no timing currently)
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
+    imuProcessor.process();
+  }, "IMU");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
+    adProcessor.process();
+  }, "ADProcessor");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
+    esp32Interface.process();
+  }, "ESP32");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
+    RTCMProcessor::getInstance()->process();
+  }, "RTCM");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
+    EncoderProcessor::getInstance()->process();
+  }, "Encoder");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
+    MachineProcessor::getInstance()->process();
+  }, "Machine");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
+    pwmProcessor.process();
+  }, "PWM");
+  scheduler.addTask(SimpleScheduler::EVERY_LOOP, []{
+    KickoutMonitor::getInstance()->process();
+  }, "Kickout Monitor");
+
+  // Add 100Hz tasks (critical timing)
+  scheduler.addTask(SimpleScheduler::HZ_100, taskAutosteer, "Autosteer");
+  scheduler.addTask(SimpleScheduler::HZ_100, taskWebHandleClient, "Web Client");
+  scheduler.addTask(SimpleScheduler::HZ_100, taskWebBroadcastTelemetry, "Web Telemetry");
+
+  // Add 50Hz tasks (motor control)
+  scheduler.addTask(SimpleScheduler::HZ_50, taskMotorDriver, "Motor Driver");
+
+  // Add 10Hz tasks (UI and status)
+  scheduler.addTask(SimpleScheduler::HZ_10, taskLEDUpdate, "LED Update");
+  scheduler.addTask(SimpleScheduler::HZ_10, taskNetworkCheck, "Network Check");
+  scheduler.addTask(SimpleScheduler::HZ_10, taskNAVProcess, "NAV Process");
+  scheduler.addTask(SimpleScheduler::HZ_10, taskKickoutSendPGN250, "PGN250 Send");
+  scheduler.addTask(SimpleScheduler::HZ_10, []{
+    CommandHandler::getInstance()->process();
+  }, "CommandHandler");
+
+  LOG_INFO(EventSource::SYSTEM, "SimpleScheduler initialized with %d tasks",
+           5 + 8 + 3 + 1 + 5); // EVERY_LOOP + 100Hz + 50Hz + 10Hz
+
   // Display access information
   localIP = Ethernet.localIP();  // Reuse existing variable
   Serial.println("\r\n");
@@ -423,94 +557,11 @@ void loop()
 {
   // OTA updates are handled via web interface
 
-  // Process Ethernet events - REQUIRED for QNEthernet!
-  TIME_PROCESS(0, Ethernet.loop());
-  
-  TIME_PROCESS(1, QNetworkBase::poll());
-  
-  // Poll AsyncUDP for network diagnostics
-  TIME_PROCESS(2, QNEthernetUDPHandler::poll());
-  
-  // AsyncUDP handles all UDP packet reception via callbacks
-  // The poll() call above is just for diagnostics and status monitoring
-  
-  
-  // Check network status and display system ready message when appropriate
-  static uint32_t lastNetworkCheck = 0;
-  if (millis() - lastNetworkCheck > 100) {  // Check every 100ms for responsiveness
-    lastNetworkCheck = millis();
-    TIME_PROCESS(3, EventLogger::getInstance()->checkNetworkReady());
-  }
+  // ============================================
+  // Run SimpleScheduler
+  // ============================================
+  scheduler.run();
 
-  // Process serial commands through CommandHandler
-  TIME_PROCESS(4, CommandHandler::getInstance()->process());
-  
-  // Process IMU data
-  TIME_PROCESS(5, imuProcessor.process());
-  
-  // Process A/D inputs
-  TIME_PROCESS(6, adProcessor.process());
-  
-  // Process Little Dawn interface
-  TIME_PROCESS(7, esp32Interface.process());
-
-  // Process NAV messages
-  TIME_PROCESS(8, NAVProcessor::getInstance()->process());
-  
-  // Process RTCM data from all sources (network and radio)
-  TIME_PROCESS(9, RTCMProcessor::getInstance()->process());
-
-  // CAN handling is done by motor drivers directly
-  
-  // Process autosteer FIRST - calculate new motor commands
-  TIME_PROCESS(10, AutosteerProcessor::getInstance()->process());
-  
-  // Process motor driver AFTER autosteer has set new PWM values
-  if (motorPTR)
-  {
-    TIME_PROCESS(11, motorPTR->process());
-  }
-  
-  // Process encoder
-  TIME_PROCESS(12, EncoderProcessor::getInstance()->process());
-  
-  // Process machine
-  TIME_PROCESS(13, MachineProcessor::getInstance()->process());
-  
-  // Update LEDs
-  TIME_PROCESS(14,
-    static uint32_t lastLEDUpdate = 0;
-    if (millis() - lastLEDUpdate > 100)  // Update every 100ms
-    {
-      lastLEDUpdate = millis();
-      ledManagerFSM.updateAll();
-    }
-  );
-  
-  // Handle WebSocket clients and broadcast telemetry
-  TIME_PROCESS(15, webManager.handleClient());
-  TIME_PROCESS(16, webManager.broadcastTelemetry());
-  
-  // Process PWM speed pulse updates
-  TIME_PROCESS(17, pwmProcessor.process());
-
-  // Process GPS1 data if available - ONE byte per loop
-  TIME_PROCESS(18,
-    if (SerialGPS1.available())
-    {
-      char c = SerialGPS1.read();
-      gnssProcessor.processNMEAChar(c);
-    }
-  );
-
-  // Process GPS2 data if available (for F9P dual RELPOSNED) - ONE byte per loop
-  TIME_PROCESS(19,
-    if (SerialGPS2.available())
-    {
-      uint8_t b = SerialGPS2.read();
-      gnssProcessor.processUBXByte(b);
-    }
-  );
 
   // Loop timing - ultra lightweight, just increment counter
   if (loopTimingEnabled) {

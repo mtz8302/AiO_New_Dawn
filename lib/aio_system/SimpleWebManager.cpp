@@ -42,9 +42,7 @@ extern GNSSProcessor gnssProcessor;
 SimpleWebManager::SimpleWebManager() :
     isRunning(false),
     currentLanguage(WebLanguage::ENGLISH),
-    systemReady(false),
-    lastTelemetryUpdate(0),
-    lastHandleClientTime(0) {
+    systemReady(false) {
 }
 
 SimpleWebManager::~SimpleWebManager() {
@@ -91,14 +89,7 @@ void SimpleWebManager::stop() {
 }
 
 void SimpleWebManager::handleClient() {
-    // Rate limit client handling to reduce overhead
-    // Check for new connections only every 10ms (100 Hz)
-    uint32_t now = millis();
-    if (now - lastHandleClientTime < 10) {
-        return;
-    }
-    lastHandleClientTime = now;
-
+    // Now called by SimpleScheduler at 100Hz
     httpServer.handleClient();
     telemetryWS.handleClients();
 }
@@ -841,7 +832,7 @@ void SimpleWebManager::broadcastTelemetry() {
         return;
     }
 
-    // Rate limit to configured rate
+    // Now called by SimpleScheduler at 100Hz
     uint32_t now = millis();
 
     // Check for new connection
@@ -852,18 +843,13 @@ void SimpleWebManager::broadcastTelemetry() {
     }
     lastClientCount = currentClientCount;
 
-    // Determine target interval based on connection state
-    uint32_t targetInterval;
+    // During connection priming (first 5 seconds), send extra updates
+    // SimpleScheduler calls us at 100Hz, but we can send more frequently during priming
     if (!connectionPrimed && now - connectionStart < 5000) {
-        targetInterval = 5;  // 5ms = 200Hz for first 5 seconds
-    } else {
+        // Send immediately during priming period (up to 100Hz from scheduler)
+        connectionPrimed = (now - connectionStart >= 5000);
+    } else if (!connectionPrimed) {
         connectionPrimed = true;
-        targetInterval = 10;  // 10ms = 100Hz normal rate
-    }
-
-    // Early exit if not time to send
-    if (now - lastTelemetryUpdate < targetInterval) {
-        return;
     }
     
     // Build telemetry packet
@@ -920,8 +906,6 @@ void SimpleWebManager::broadcastTelemetry() {
     
     // Broadcast to all connected clients
     telemetryWS.broadcastBinary((const uint8_t*)&packet, sizeof(packet));
-    
-    lastTelemetryUpdate = now;
 }
 
 // UM98x GPS Configuration handlers
