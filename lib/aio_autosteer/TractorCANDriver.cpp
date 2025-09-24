@@ -14,17 +14,34 @@ bool TractorCANDriver::init() {
 }
 
 void TractorCANDriver::assignCANBuses() {
-    // Assign steering bus
-    steerBusNum = config.steerBus;
-    steerCAN = getBusPointer(config.steerBus);
+    // For now, simple mapping: find which bus has Keya function
+    // TODO: Implement full flexible mapping for all functions
 
-    // Assign button bus
-    buttonBusNum = config.buttonBus;
-    buttonCAN = getBusPointer(config.buttonBus);
+    // Check CAN1
+    if (config.can1Function == static_cast<uint8_t>(CANFunction::KEYA)) {
+        steerBusNum = 1;
+        steerCAN = getBusPointer(1);
+    }
+    // Check CAN2
+    else if (config.can2Function == static_cast<uint8_t>(CANFunction::KEYA)) {
+        steerBusNum = 2;
+        steerCAN = getBusPointer(2);
+    }
+    // Check CAN3
+    else if (config.can3Function == static_cast<uint8_t>(CANFunction::KEYA)) {
+        steerBusNum = 3;
+        steerCAN = getBusPointer(3);
+    }
+    else {
+        steerBusNum = 0;
+        steerCAN = nullptr;
+    }
 
-    // Assign hitch bus
-    hitchBusNum = config.hitchBus;
-    hitchCAN = getBusPointer(config.hitchBus);
+    // For now, no button or hitch bus assignment
+    buttonBusNum = 0;
+    buttonCAN = nullptr;
+    hitchBusNum = 0;
+    hitchCAN = nullptr;
 }
 
 void* TractorCANDriver::getBusPointer(uint8_t busNum) {
@@ -69,7 +86,7 @@ void TractorCANDriver::setPWM(int16_t pwm) {
     targetPWM = pwm;
 
     // For Keya, convert PWM to RPM
-    if (config.brand == static_cast<uint8_t>(TractorBrand::KEYA)) {
+    if (hasKeyaFunction()) {
         commandedRPM = (float)pwm * 100.0f / 255.0f;  // 255 PWM = 100 RPM
     }
 }
@@ -93,7 +110,7 @@ void TractorCANDriver::process() {
     if (config.brand != static_cast<uint8_t>(TractorBrand::DISABLED)) {
         if (steerReady && (millis() - lastSteerReadyTime > 200)) {
             steerReady = false;
-            if (config.brand == static_cast<uint8_t>(TractorBrand::KEYA)) {
+            if (hasKeyaFunction()) {
                 heartbeatValid = false;
                 LOG_ERROR(EventSource::AUTOSTEER, "TractorCAN connection lost - no heartbeat");
             }
@@ -107,18 +124,21 @@ void TractorCANDriver::processIncomingMessages() {
     // Process messages from each configured bus
     if (steerCAN && steerBusNum > 0) {
         while (readCANMessage(steerBusNum, msg)) {
-            switch (static_cast<TractorBrand>(config.brand)) {
-                case TractorBrand::KEYA:
-                    processKeyaMessage(msg);
-                    break;
-                case TractorBrand::FENDT:
-                case TractorBrand::FENDT_ONE:
-                    processFendtMessage(msg);
-                    break;
-                case TractorBrand::VALTRA_MASSEY:
-                    processValtraMessage(msg);
-                    break;
-                // Add other brands as needed
+            // If this bus has Keya function, process Keya messages
+            if (hasKeyaFunction()) {
+                processKeyaMessage(msg);
+            } else {
+                // Otherwise process based on brand
+                switch (static_cast<TractorBrand>(config.brand)) {
+                    case TractorBrand::FENDT:
+                    case TractorBrand::FENDT_ONE:
+                        processFendtMessage(msg);
+                        break;
+                    case TractorBrand::VALTRA_MASSEY:
+                        processValtraMessage(msg);
+                        break;
+                    // Add other brands as needed
+                }
             }
         }
     }
@@ -139,18 +159,21 @@ void TractorCANDriver::processIncomingMessages() {
 }
 
 void TractorCANDriver::sendSteerCommands() {
-    switch (static_cast<TractorBrand>(config.brand)) {
-        case TractorBrand::KEYA:
-            sendKeyaCommands();
-            break;
-        case TractorBrand::FENDT:
-        case TractorBrand::FENDT_ONE:
-            sendFendtCommands();
-            break;
-        case TractorBrand::VALTRA_MASSEY:
-            sendValtraCommands();
-            break;
-        // Add other brands as needed
+    // If any bus has Keya function, send Keya commands
+    if (hasKeyaFunction()) {
+        sendKeyaCommands();
+    } else {
+        // Otherwise send based on brand
+        switch (static_cast<TractorBrand>(config.brand)) {
+            case TractorBrand::FENDT:
+            case TractorBrand::FENDT_ONE:
+                sendFendtCommands();
+                break;
+            case TractorBrand::VALTRA_MASSEY:
+                sendValtraCommands();
+                break;
+            // Add other brands as needed
+        }
     }
 }
 
@@ -293,7 +316,7 @@ MotorStatus TractorCANDriver::getStatus() const {
     status.targetPWM = targetPWM;
 
     // For Keya, we have actual feedback
-    if (config.brand == static_cast<uint8_t>(TractorBrand::KEYA) && heartbeatValid) {
+    if (hasKeyaFunction() && heartbeatValid) {
         status.actualPWM = (int16_t)(actualRPM * 255.0f / 100.0f);
     } else {
         status.actualPWM = targetPWM;
@@ -313,8 +336,12 @@ MotorStatus TractorCANDriver::getStatus() const {
 }
 
 const char* TractorCANDriver::getTypeName() const {
+    // Check if Keya function is active
+    if (hasKeyaFunction()) {
+        return "Keya CAN";
+    }
+
     switch (static_cast<TractorBrand>(config.brand)) {
-        case TractorBrand::KEYA:          return "Keya CAN";
         case TractorBrand::FENDT:         return "Fendt SCR/S4/Gen6";
         case TractorBrand::FENDT_ONE:     return "Fendt One";
         case TractorBrand::VALTRA_MASSEY: return "Valtra/Massey";
@@ -323,6 +350,7 @@ const char* TractorCANDriver::getTypeName() const {
         case TractorBrand::JCB:           return "JCB";
         case TractorBrand::LINDNER:       return "Lindner";
         case TractorBrand::CAT_MT:        return "CAT MT";
+        case TractorBrand::GENERIC:       return "Generic CAN";
         default:                          return "Tractor CAN";
     }
 }
@@ -342,5 +370,11 @@ void TractorCANDriver::setConfig(const CANSteerConfig& newConfig) {
     heartbeatValid = false;
 
     LOG_INFO(EventSource::AUTOSTEER, "TractorCAN config updated - Brand: %d, SteerBus: %d",
-             config.brand, config.steerBus);
+             config.brand, steerBusNum);
+}
+
+bool TractorCANDriver::hasKeyaFunction() const {
+    return (config.can1Function == static_cast<uint8_t>(CANFunction::KEYA) ||
+            config.can2Function == static_cast<uint8_t>(CANFunction::KEYA) ||
+            config.can3Function == static_cast<uint8_t>(CANFunction::KEYA));
 }

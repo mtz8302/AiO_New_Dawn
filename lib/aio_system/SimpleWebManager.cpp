@@ -1043,9 +1043,12 @@ void SimpleWebManager::handleCANConfig(EthernetClient& client, const String& met
 
         StaticJsonDocument<256> doc;
         doc["brand"] = config.brand;
-        doc["steerBus"] = config.steerBus;
-        doc["buttonBus"] = config.buttonBus;
-        doc["hitchBus"] = config.hitchBus;
+        doc["can1Speed"] = config.can1Speed;
+        doc["can1Function"] = config.can1Function;
+        doc["can2Speed"] = config.can2Speed;
+        doc["can2Function"] = config.can2Function;
+        doc["can3Speed"] = config.can3Speed;
+        doc["can3Function"] = config.can3Function;
         doc["moduleID"] = config.moduleID;
 
         String json;
@@ -1075,14 +1078,23 @@ void SimpleWebManager::handleCANConfig(EthernetClient& client, const String& met
         if (doc.containsKey("brand")) {
             config.brand = doc["brand"];
         }
-        if (doc.containsKey("steerBus")) {
-            config.steerBus = doc["steerBus"];
+        if (doc.containsKey("can1Speed")) {
+            config.can1Speed = doc["can1Speed"];
         }
-        if (doc.containsKey("buttonBus")) {
-            config.buttonBus = doc["buttonBus"];
+        if (doc.containsKey("can1Function")) {
+            config.can1Function = doc["can1Function"];
         }
-        if (doc.containsKey("hitchBus")) {
-            config.hitchBus = doc["hitchBus"];
+        if (doc.containsKey("can2Speed")) {
+            config.can2Speed = doc["can2Speed"];
+        }
+        if (doc.containsKey("can2Function")) {
+            config.can2Function = doc["can2Function"];
+        }
+        if (doc.containsKey("can3Speed")) {
+            config.can3Speed = doc["can3Speed"];
+        }
+        if (doc.containsKey("can3Function")) {
+            config.can3Function = doc["can3Function"];
         }
         if (doc.containsKey("moduleID")) {
             config.moduleID = doc["moduleID"];
@@ -1092,8 +1104,10 @@ void SimpleWebManager::handleCANConfig(EthernetClient& client, const String& met
         configManager.setCANSteerConfig(config);
         configManager.saveCANSteerConfig();
 
-        LOG_INFO(EventSource::NETWORK, "CAN config saved - Brand: %d, SteerBus: %d, ButtonBus: %d, HitchBus: %d",
-                 config.brand, config.steerBus, config.buttonBus, config.hitchBus);
+        LOG_INFO(EventSource::NETWORK, "CAN config saved - Brand: %d, CAN1: %d/%d, CAN2: %d/%d, CAN3: %d/%d",
+                 config.brand, config.can1Speed, config.can1Function,
+                 config.can2Speed, config.can2Function,
+                 config.can3Speed, config.can3Function);
 
         SimpleHTTPServer::sendJSON(client, "{\"status\":\"ok\",\"message\":\"Configuration saved. Restart required.\"}");
     } else {

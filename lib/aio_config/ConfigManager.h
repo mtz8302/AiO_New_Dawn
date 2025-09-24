@@ -5,19 +5,34 @@
 #include <EEPROM.h>
 #include "EEPROMLayout.h"
 
+// CAN bus functions
+enum class CANFunction : uint8_t {
+    NONE = 0,
+    KEYA = 1,
+    V_BUS = 2,
+    ISO_BUS = 3,
+    K_BUS = 4
+};
+
 // CAN Steer configuration structure
 struct CANSteerConfig {
     // Brand selection
-    uint8_t brand = 0;          // 0=Disabled, 1=Keya, 2=Fendt, 3=Valtra, etc.
+    uint8_t brand = 0;          // 0=Disabled, 1=Keya, 2=Fendt, 3=Valtra, etc, 10=Generic
 
-    // Bus assignments (0=None, 1=CAN1/K_Bus, 2=CAN2/ISO_Bus, 3=CAN3/V_Bus)
-    uint8_t steerBus = 0;       // Which bus for steering commands
-    uint8_t buttonBus = 0;      // Which bus for work switch/buttons
-    uint8_t hitchBus = 0;       // Which bus for hitch control
+    // CAN1 configuration
+    uint8_t can1Speed = 0;      // 0=250k, 1=500k
+    uint8_t can1Function = 0;   // CANFunction enum
 
-    // Brand-specific settings
-    uint8_t moduleID = 0x1C;    // Some brands need module ID
-    uint8_t reserved[3];        // Future expansion
+    // CAN2 configuration
+    uint8_t can2Speed = 0;      // 0=250k, 1=500k
+    uint8_t can2Function = 0;   // CANFunction enum
+
+    // CAN3 configuration
+    uint8_t can3Speed = 0;      // 0=250k, 1=500k
+    uint8_t can3Function = 0;   // CANFunction enum
+
+    uint8_t moduleID = 0x1C;    // Module ID for protocols that need it
+    uint8_t reserved[1];        // Future expansion
 };
 
 // ConfigManager Pattern for PGN Settings Access

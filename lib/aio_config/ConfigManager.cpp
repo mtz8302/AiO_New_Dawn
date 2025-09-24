@@ -509,13 +509,14 @@ void ConfigManager::resetToDefaults()
 
     // CAN steering defaults
     canSteerConfig.brand = 0;       // Disabled
-    canSteerConfig.steerBus = 0;    // None
-    canSteerConfig.buttonBus = 0;   // None
-    canSteerConfig.hitchBus = 0;    // None
+    canSteerConfig.can1Speed = 0;   // 250k
+    canSteerConfig.can1Function = 0; // None
+    canSteerConfig.can2Speed = 0;   // 250k
+    canSteerConfig.can2Function = 0; // None
+    canSteerConfig.can3Speed = 0;   // 250k
+    canSteerConfig.can3Function = 0; // None
     canSteerConfig.moduleID = 0x1C; // Default Keya module ID
     canSteerConfig.reserved[0] = 0;
-    canSteerConfig.reserved[1] = 0;
-    canSteerConfig.reserved[2] = 0;
 
     eeVersion = CURRENT_EE_VERSION;
 }
@@ -780,8 +781,8 @@ void ConfigManager::saveCANSteerConfig() {
     // Save the entire struct
     EEPROM.put(addr, canSteerConfig);
 
-    LOG_INFO(EventSource::CONFIG, "Saved CAN Steer config - Brand: %d, SteerBus: %d",
-             canSteerConfig.brand, canSteerConfig.steerBus);
+    LOG_INFO(EventSource::CONFIG, "Saved CAN Steer config - Brand: %d",
+             canSteerConfig.brand);
 }
 
 void ConfigManager::loadCANSteerConfig() {
@@ -801,6 +802,6 @@ void ConfigManager::loadCANSteerConfig() {
     // Load the entire struct
     EEPROM.get(addr, canSteerConfig);
 
-    LOG_INFO(EventSource::CONFIG, "Loaded CAN Steer config - Brand: %d, SteerBus: %d",
-             canSteerConfig.brand, canSteerConfig.steerBus);
+    LOG_INFO(EventSource::CONFIG, "Loaded CAN Steer config - Brand: %d",
+             canSteerConfig.brand);
 }

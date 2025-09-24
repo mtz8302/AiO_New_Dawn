@@ -11,15 +11,15 @@
 // Tractor brands enumeration
 enum class TractorBrand : uint8_t {
     DISABLED = 0,
-    KEYA = 1,
-    FENDT = 2,
-    VALTRA_MASSEY = 3,
-    CASEIH_NH = 4,
-    FENDT_ONE = 5,
-    CLAAS = 6,
-    JCB = 7,
-    LINDNER = 8,
-    CAT_MT = 9
+    FENDT = 1,
+    VALTRA_MASSEY = 2,
+    CASEIH_NH = 3,
+    FENDT_ONE = 4,
+    CLAAS = 5,
+    JCB = 6,
+    LINDNER = 7,
+    CAT_MT = 8,
+    GENERIC = 9
 };
 
 class TractorCANDriver : public MotorDriverInterface {
@@ -68,6 +68,7 @@ private:
     void writeCANMessage(uint8_t busNum, const CAN_message_t& msg);
     void processIncomingMessages();
     void sendSteerCommands();
+    bool hasKeyaFunction() const;
 
     // Brand-specific message handlers
     void processKeyaMessage(const CAN_message_t& msg);
@@ -98,7 +99,7 @@ public:
     const char* getTypeName() const override;
     bool hasCurrentSensing() const override { return false; }
     bool hasPositionFeedback() const override {
-        return config.brand == static_cast<uint8_t>(TractorBrand::KEYA);
+        return hasKeyaFunction();
     }
 
     // Detection and safety
@@ -111,7 +112,7 @@ public:
     float getCommandedRPM() const { return commandedRPM; }
     uint16_t getMotorPosition() const { return motorPosition; }
     bool hasRPMFeedback() const {
-        return config.brand == static_cast<uint8_t>(TractorBrand::KEYA) && heartbeatValid;
+        return hasKeyaFunction() && heartbeatValid;
     }
 };
 

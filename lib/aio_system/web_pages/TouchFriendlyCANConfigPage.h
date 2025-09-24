@@ -13,7 +13,7 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>CAN Steering Configuration</title>
+    <title>CAN Configuration</title>
     <link rel="stylesheet" href="/touch.css">
     <style>
         .status-box {
@@ -36,16 +36,15 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
 
         select {
             width: 100%;
-            padding: 15px;
-            margin: 10px 0;
-            font-size: 18px;
+            padding: 12px;
+            margin: 5px 0;
+            font-size: 16px;
             border: 2px solid #666;
             border-radius: 10px;
             background-color: #333;
             color: white;
             box-sizing: border-box;
         }
-
 
         .nav-buttons {
             display: grid;
@@ -54,27 +53,62 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
             margin-bottom: 20px;
         }
 
-        .form-row {
-            display: flex;
-            align-items: center;
-            margin: 15px 0;
-            gap: 15px;
+        .brand-row {
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: #2c2c2c;
+            border-radius: 10px;
         }
 
-        .form-row label {
-            flex: 0 0 180px;
+        .brand-row label {
+            display: block;
             font-weight: bold;
             font-size: 18px;
+            margin-bottom: 10px;
+            color: white;
         }
 
-        .form-row select {
-            flex: 1;
+        .can-config-grid {
+            display: grid;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .can-row {
+            display: grid;
+            grid-template-columns: 80px 1fr 1fr;
+            gap: 10px;
+            align-items: center;
+            padding: 15px;
+            background-color: #2c2c2c;
+            border-radius: 10px;
+        }
+
+        .can-label {
+            font-weight: bold;
+            font-size: 18px;
+            color: white;
+        }
+
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #2c2c2c;
+            border-radius: 10px;
+        }
+
+        .info h3 {
+            margin-top: 0;
+        }
+
+        .info p {
+            margin: 5px 0;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>CAN Steering Configuration</h1>
+        <h1>CAN Configuration</h1>
 
         <div class="nav-buttons">
             <button type="button" class="touch-button" style="background: #7f8c8d;"
@@ -93,59 +127,77 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
         <div id="statusMessage" class="status-box" style="display:none;"></div>
 
         <form id="canConfigForm">
-            <div class="form-row">
+            <div class="brand-row">
                 <label for="brand">Tractor Brand</label>
                 <select id="brand" name="brand">
                     <option value="0">Disabled</option>
-                    <option value="1">Keya</option>
-                    <option value="2">Fendt SCR/S4/Gen6</option>
-                    <option value="3">Valtra/Massey Ferguson</option>
-                    <option value="4">Case IH/New Holland</option>
-                    <option value="5">Fendt One</option>
-                    <option value="6">Claas</option>
-                    <option value="7">JCB</option>
-                    <option value="8">Lindner</option>
-                    <option value="9">CAT MT Series</option>
+                    <option value="1">Fendt SCR/S4/Gen6</option>
+                    <option value="2">Valtra/Massey Ferguson</option>
+                    <option value="3">Case IH/New Holland</option>
+                    <option value="4">Fendt One</option>
+                    <option value="5">Claas</option>
+                    <option value="6">JCB</option>
+                    <option value="7">Lindner</option>
+                    <option value="8">CAT MT Series</option>
+                    <option value="9">Generic</option>
                 </select>
             </div>
 
-            <div class="form-row">
-                <label for="steerBus">Steering Bus</label>
-                <select id="steerBus" name="steerBus">
-                    <option value="0">None</option>
-                    <option value="1">K_Bus (CAN1)</option>
-                    <option value="2">ISO_Bus (CAN2)</option>
-                    <option value="3">V_Bus (CAN3)</option>
-                </select>
-            </div>
+            <div class="can-config-grid">
+                <div class="can-row">
+                    <div class="can-label">CAN1</div>
+                    <select id="can1Speed" name="can1Speed">
+                        <option value="0">250 kbps</option>
+                        <option value="1">500 kbps</option>
+                    </select>
+                    <select id="can1Function" name="can1Function">
+                        <option value="0">None</option>
+                        <option value="1">Keya</option>
+                        <option value="2">V_Bus</option>
+                        <option value="3">ISO_Bus</option>
+                        <option value="4">K_Bus</option>
+                    </select>
+                </div>
 
-            <div class="form-row">
-                <label for="buttonBus">Work Switch</label>
-                <select id="buttonBus" name="buttonBus">
-                    <option value="0">None</option>
-                    <option value="1">K_Bus (CAN1)</option>
-                    <option value="2">ISO_Bus (CAN2)</option>
-                    <option value="3">V_Bus (CAN3)</option>
-                </select>
-            </div>
+                <div class="can-row">
+                    <div class="can-label">CAN2</div>
+                    <select id="can2Speed" name="can2Speed">
+                        <option value="0">250 kbps</option>
+                        <option value="1">500 kbps</option>
+                    </select>
+                    <select id="can2Function" name="can2Function">
+                        <option value="0">None</option>
+                        <option value="1">Keya</option>
+                        <option value="2">V_Bus</option>
+                        <option value="3">ISO_Bus</option>
+                        <option value="4">K_Bus</option>
+                    </select>
+                </div>
 
-            <div class="form-row">
-                <label for="hitchBus">Hitch Control</label>
-                <select id="hitchBus" name="hitchBus">
-                    <option value="0">None</option>
-                    <option value="1">K_Bus (CAN1)</option>
-                    <option value="2">ISO_Bus (CAN2)</option>
-                    <option value="3">V_Bus (CAN3)</option>
-                </select>
+                <div class="can-row">
+                    <div class="can-label">CAN3</div>
+                    <select id="can3Speed" name="can3Speed">
+                        <option value="0">250 kbps</option>
+                        <option value="1">500 kbps</option>
+                    </select>
+                    <select id="can3Function" name="can3Function">
+                        <option value="0">None</option>
+                        <option value="1">Keya</option>
+                        <option value="2">V_Bus</option>
+                        <option value="3">ISO_Bus</option>
+                        <option value="4">K_Bus</option>
+                    </select>
+                </div>
             </div>
-
         </form>
 
         <div class="info">
-            <h3>Bus Descriptions</h3>
-            <p><strong>K_Bus (CAN1):</strong> Tractor control bus (250 kbps)</p>
-            <p><strong>ISO_Bus (CAN2):</strong> ISOBUS for implements (250 kbps)</p>
-            <p><strong>V_Bus (CAN3):</strong> Valve/steering bus (250 kbps)</p>
+            <h3>Function Descriptions</h3>
+            <p><strong>Keya:</strong> Keya motor control protocol</p>
+            <p><strong>V_Bus:</strong> Valve/steering commands</p>
+            <p><strong>ISO_Bus:</strong> ISOBUS implement control</p>
+            <p><strong>K_Bus:</strong> Tractor control bus</p>
+            <p><strong>Generic:</strong> Use when mixing functions from different brands</p>
         </div>
     </div>
 
@@ -157,9 +209,12 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                 if (response.ok) {
                     const config = await response.json();
                     document.getElementById('brand').value = config.brand || 0;
-                    document.getElementById('steerBus').value = config.steerBus || 0;
-                    document.getElementById('buttonBus').value = config.buttonBus || 0;
-                    document.getElementById('hitchBus').value = config.hitchBus || 0;
+                    document.getElementById('can1Speed').value = config.can1Speed || 0;
+                    document.getElementById('can1Function').value = config.can1Function || 0;
+                    document.getElementById('can2Speed').value = config.can2Speed || 0;
+                    document.getElementById('can2Function').value = config.can2Function || 0;
+                    document.getElementById('can3Speed').value = config.can3Speed || 0;
+                    document.getElementById('can3Function').value = config.can3Function || 0;
                 }
             } catch (error) {
                 console.error('Error loading config:', error);
@@ -174,9 +229,12 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
             const formData = new FormData(e.target);
             const config = {
                 brand: parseInt(formData.get('brand')),
-                steerBus: parseInt(formData.get('steerBus')),
-                buttonBus: parseInt(formData.get('buttonBus')),
-                hitchBus: parseInt(formData.get('hitchBus'))
+                can1Speed: parseInt(formData.get('can1Speed')),
+                can1Function: parseInt(formData.get('can1Function')),
+                can2Speed: parseInt(formData.get('can2Speed')),
+                can2Function: parseInt(formData.get('can2Function')),
+                can3Speed: parseInt(formData.get('can3Speed')),
+                can3Function: parseInt(formData.get('can3Function'))
             };
 
             try {
