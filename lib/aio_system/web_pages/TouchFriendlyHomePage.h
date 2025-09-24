@@ -40,6 +40,12 @@ const char TOUCH_FRIENDLY_HOME_PAGE[] PROGMEM = R"rawliteral(
                 </svg>
                 Work Switch
             </a></li>
+            <li><a href="/can">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-right: 10px;">
+                    <path d="M17,12V6C17,5.45 16.55,5 16,5H13V7H16V11H12V13H16V17H13V19H16A1,1 0 0,0 17,18V12M3,5H11A1,1 0 0,1 12,6V18A1,1 0 0,1 11,19H3A1,1 0 0,1 2,18V6A1,1 0 0,1 3,5M4,7V11H10V7H4M4,13V17H10V13H4Z"/>
+                </svg>
+                CAN Steering
+            </a></li>
             <li><a href="/eventlogger">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-right: 10px;">
                     <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2m-5 14H7v-2h7v2m3-4H7v-2h10v2m0-4H7V7h10v2Z"/>

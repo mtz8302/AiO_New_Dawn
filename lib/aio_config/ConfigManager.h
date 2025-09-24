@@ -5,6 +5,21 @@
 #include <EEPROM.h>
 #include "EEPROMLayout.h"
 
+// CAN Steer configuration structure
+struct CANSteerConfig {
+    // Brand selection
+    uint8_t brand = 0;          // 0=Disabled, 1=Keya, 2=Fendt, 3=Valtra, etc.
+
+    // Bus assignments (0=None, 1=CAN1/K_Bus, 2=CAN2/ISO_Bus, 3=CAN3/V_Bus)
+    uint8_t steerBus = 0;       // Which bus for steering commands
+    uint8_t buttonBus = 0;      // Which bus for work switch/buttons
+    uint8_t hitchBus = 0;       // Which bus for hitch control
+
+    // Brand-specific settings
+    uint8_t moduleID = 0x1C;    // Some brands need module ID
+    uint8_t reserved[3];        // Future expansion
+};
+
 // ConfigManager Pattern for PGN Settings Access
 // ============================================
 // All runtime access to PGN settings should go through ConfigManager methods.
@@ -121,7 +136,10 @@ private:
     
     // Version control
     uint16_t eeVersion;
-    
+
+    // CAN Steer configuration
+    CANSteerConfig canSteerConfig;
+
     // Initialization tracking
     bool initialized;
 
@@ -331,6 +349,12 @@ public:
     void resetToDefaults();
     bool checkVersion();
     void updateVersion();
+
+    // CAN Steer configuration methods
+    CANSteerConfig getCANSteerConfig() const;
+    void setCANSteerConfig(const CANSteerConfig& config);
+    void saveCANSteerConfig();
+    void loadCANSteerConfig();
 };
 
 #endif // CONFIGMANAGER_H_
