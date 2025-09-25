@@ -132,6 +132,8 @@ void TractorCANDriver::process() {
             if (hasKeyaFunction()) {
                 heartbeatValid = false;
                 LOG_ERROR(EventSource::AUTOSTEER, "TractorCAN connection lost - no heartbeat");
+            } else {
+                LOG_WARNING(EventSource::AUTOSTEER, "%s connection timeout - no valve ready for >200ms", getTypeName());
             }
         }
     }
@@ -318,7 +320,7 @@ void TractorCANDriver::sendFendtCommands() {
 // ===== Valtra Implementation =====
 void TractorCANDriver::processValtraMessage(const CAN_message_t& msg) {
     // Check for curve data and valve state message
-    if (msg.id == 0x0CAC1C13) {
+    if (msg.id == 0x0CAC1C13 && msg.flags.extended) {
         // Extract steering curve (little-endian)
         int16_t estCurve = (msg.buf[1] << 8) | msg.buf[0];
 
@@ -339,7 +341,7 @@ void TractorCANDriver::processValtraMessage(const CAN_message_t& msg) {
     }
 
     // Check for engage messages
-    if (msg.id == 0x18EF1C32 || msg.id == 0x18EF1CFC || msg.id == 0x18EF1C00) {
+    if (msg.flags.extended && (msg.id == 0x18EF1C32 || msg.id == 0x18EF1CFC || msg.id == 0x18EF1C00)) {
         // These are engage/disengage messages from different Valtra/MF variants
         // Could be used to auto-enable/disable steering if needed
     }
@@ -351,7 +353,7 @@ void TractorCANDriver::sendValtraCommands() {
 
     CAN_message_t msg;
     msg.id = 0x0CAD131C;  // Valtra steering command ID
-    msg.flags.extended = 1;
+    msg.flags.extended = 1;  // Extended ID (29-bit)
     msg.len = 8;
 
     // Convert PWM to Valtra curve value
@@ -391,9 +393,11 @@ MotorStatus TractorCANDriver::getStatus() const {
     }
 
     status.currentDraw = 0.0f;  // No current sensing via CAN
-    status.hasError = !steerReady;
 
-    if (!steerReady) {
+    // Only report error if we're enabled and trying to steer but no connection
+    status.hasError = enabled && !steerReady;
+
+    if (status.hasError) {
         snprintf(status.errorMessage, sizeof(status.errorMessage),
                  "No CAN connection");
     } else {

@@ -2,7 +2,7 @@
 #define VERSION_H
 
 // AiO New Dawn firmware version
-#define FIRMWARE_VERSION "1.0.61-beta" // Added dynamic CAN filtering and Valtra/Massey support
+#define FIRMWARE_VERSION "1.0.62-beta" // Fixed CAN kickout and error detection for TRACTOR_CAN type
 
 // Teensy board type for OTA identification
 #define TEENSY_BOARD_TYPE "Teensy41"
