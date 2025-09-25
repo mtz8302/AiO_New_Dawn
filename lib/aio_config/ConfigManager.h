@@ -17,7 +17,7 @@ enum class CANFunction : uint8_t {
 // CAN Steer configuration structure
 struct CANSteerConfig {
     // Brand selection
-    uint8_t brand = 0;          // 0=Disabled, 1=Keya, 2=Fendt, 3=Valtra, etc, 10=Generic
+    uint8_t brand = 9;          // 0=Disabled, 1=Fendt, 2=Valtra, etc, 9=Generic (default)
 
     // CAN1 configuration
     uint8_t can1Speed = 0;      // 0=250k, 1=500k

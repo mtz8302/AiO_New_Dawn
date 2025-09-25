@@ -14,34 +14,53 @@ bool TractorCANDriver::init() {
 }
 
 void TractorCANDriver::assignCANBuses() {
-    // For now, simple mapping: find which bus has Keya function
-    // TODO: Implement full flexible mapping for all functions
-
-    // Check CAN1
-    if (config.can1Function == static_cast<uint8_t>(CANFunction::KEYA)) {
-        steerBusNum = 1;
-        steerCAN = getBusPointer(1);
-    }
-    // Check CAN2
-    else if (config.can2Function == static_cast<uint8_t>(CANFunction::KEYA)) {
-        steerBusNum = 2;
-        steerCAN = getBusPointer(2);
-    }
-    // Check CAN3
-    else if (config.can3Function == static_cast<uint8_t>(CANFunction::KEYA)) {
-        steerBusNum = 3;
-        steerCAN = getBusPointer(3);
-    }
-    else {
-        steerBusNum = 0;
-        steerCAN = nullptr;
-    }
-
-    // For now, no button or hitch bus assignment
+    // Reset all buses first
+    steerBusNum = 0;
+    steerCAN = nullptr;
     buttonBusNum = 0;
     buttonCAN = nullptr;
     hitchBusNum = 0;
     hitchCAN = nullptr;
+
+    // For Keya function, find which bus has it
+    if (hasKeyaFunction()) {
+        if (config.can1Function == static_cast<uint8_t>(CANFunction::KEYA)) {
+            steerBusNum = 1;
+            steerCAN = getBusPointer(1);
+        } else if (config.can2Function == static_cast<uint8_t>(CANFunction::KEYA)) {
+            steerBusNum = 2;
+            steerCAN = getBusPointer(2);
+        } else if (config.can3Function == static_cast<uint8_t>(CANFunction::KEYA)) {
+            steerBusNum = 3;
+            steerCAN = getBusPointer(3);
+        }
+    }
+    // For other brands, find V_Bus for steering
+    else if (config.brand != static_cast<uint8_t>(TractorBrand::DISABLED)) {
+        // Check which bus has V_Bus function
+        if (config.can1Function == static_cast<uint8_t>(CANFunction::V_BUS)) {
+            steerBusNum = 1;
+            steerCAN = getBusPointer(1);
+        } else if (config.can2Function == static_cast<uint8_t>(CANFunction::V_BUS)) {
+            steerBusNum = 2;
+            steerCAN = getBusPointer(2);
+        } else if (config.can3Function == static_cast<uint8_t>(CANFunction::V_BUS)) {
+            steerBusNum = 3;
+            steerCAN = getBusPointer(3);
+        }
+
+        // Check for K_Bus (buttons/hitch)
+        if (config.can1Function == static_cast<uint8_t>(CANFunction::K_BUS)) {
+            buttonBusNum = 1;
+            buttonCAN = getBusPointer(1);
+        } else if (config.can2Function == static_cast<uint8_t>(CANFunction::K_BUS)) {
+            buttonBusNum = 2;
+            buttonCAN = getBusPointer(2);
+        } else if (config.can3Function == static_cast<uint8_t>(CANFunction::K_BUS)) {
+            buttonBusNum = 3;
+            buttonCAN = getBusPointer(3);
+        }
+    }
 }
 
 void* TractorCANDriver::getBusPointer(uint8_t busNum) {
@@ -296,17 +315,66 @@ void TractorCANDriver::sendFendtCommands() {
     // This will send appropriate messages based on targetPWM
 }
 
-// ===== Valtra Implementation (placeholder) =====
+// ===== Valtra Implementation =====
 void TractorCANDriver::processValtraMessage(const CAN_message_t& msg) {
-    // TODO: Implement Valtra message processing
-    if (msg.id == 0x18EF52A0) {  // Example Valtra ready message
-        steerReady = true;
-        lastSteerReadyTime = millis();
+    // Check for curve data and valve state message
+    if (msg.id == 0x0CAC1C13) {
+        // Extract steering curve (little-endian)
+        int16_t estCurve = (msg.buf[1] << 8) | msg.buf[0];
+
+        // Extract valve ready state from byte 2
+        bool valveReady = (msg.buf[2] != 0);
+
+        if (valveReady) {
+            if (!steerReady) {
+                LOG_INFO(EventSource::AUTOSTEER, "Valtra steering valve ready");
+            }
+            steerReady = true;
+            lastSteerReadyTime = millis();
+        }
+
+        // Store actual position for feedback (convert to our scale)
+        // Valtra curve range appears to be different from our PWM range
+        actualRPM = (float)estCurve / 100.0f;  // Store as scaled value
+    }
+
+    // Check for engage messages
+    if (msg.id == 0x18EF1C32 || msg.id == 0x18EF1CFC || msg.id == 0x18EF1C00) {
+        // These are engage/disengage messages from different Valtra/MF variants
+        // Could be used to auto-enable/disable steering if needed
     }
 }
 
 void TractorCANDriver::sendValtraCommands() {
-    // TODO: Implement Valtra steering commands
+    // Only send if we have a valid steering bus
+    if (!steerCAN || steerBusNum == 0) return;
+
+    CAN_message_t msg;
+    msg.id = 0x0CAD131C;  // Valtra steering command ID
+    msg.flags.extended = 1;
+    msg.len = 8;
+
+    // Convert PWM to Valtra curve value
+    // PWM range: -255 to +255
+    // Valtra curve: needs to be determined, using similar scale for now
+    int16_t setCurve = 0;
+
+    if (enabled && steerReady) {
+        // Scale PWM to curve value (assuming similar range)
+        setCurve = (int16_t)(targetPWM * 128);  // Scale factor TBD
+    }
+
+    // Build message
+    msg.buf[0] = setCurve & 0xFF;        // Curve low byte
+    msg.buf[1] = (setCurve >> 8) & 0xFF; // Curve high byte
+    msg.buf[2] = enabled ? 253 : 252;    // 253 = steer intent, 252 = no intent
+    msg.buf[3] = 0;
+    msg.buf[4] = 0;
+    msg.buf[5] = 0;
+    msg.buf[6] = 0;
+    msg.buf[7] = 0;
+
+    writeCANMessage(steerBusNum, msg);
 }
 
 // ===== Common Methods =====

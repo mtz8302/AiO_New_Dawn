@@ -54,6 +54,10 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
         }
 
         .brand-row {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 10px;
+            align-items: center;
             margin-bottom: 25px;
             padding: 15px;
             background-color: #2c2c2c;
@@ -61,10 +65,8 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
         }
 
         .brand-row label {
-            display: block;
             font-weight: bold;
             font-size: 18px;
-            margin-bottom: 10px;
             color: white;
         }
 
@@ -95,14 +97,17 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
             padding: 15px;
             background-color: #2c2c2c;
             border-radius: 10px;
+            color: white;
         }
 
         .info h3 {
             margin-top: 0;
+            color: white;
         }
 
         .info p {
             margin: 5px 0;
+            color: white;
         }
     </style>
 </head>
@@ -130,6 +135,7 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
             <div class="brand-row">
                 <label for="brand">Tractor Brand</label>
                 <select id="brand" name="brand">
+                    <option value="9">Generic</option>
                     <option value="0">Disabled</option>
                     <option value="1">Fendt SCR/S4/Gen6</option>
                     <option value="2">Valtra/Massey Ferguson</option>
@@ -139,7 +145,6 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                     <option value="6">JCB</option>
                     <option value="7">Lindner</option>
                     <option value="8">CAT MT Series</option>
-                    <option value="9">Generic</option>
                 </select>
             </div>
 
@@ -193,11 +198,8 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
 
         <div class="info">
             <h3>Function Descriptions</h3>
-            <p><strong>Keya:</strong> Keya motor control protocol</p>
-            <p><strong>V_Bus:</strong> Valve/steering commands</p>
-            <p><strong>ISO_Bus:</strong> ISOBUS implement control</p>
-            <p><strong>K_Bus:</strong> Tractor control bus</p>
-            <p><strong>Generic:</strong> Use when mixing functions from different brands</p>
+            <p><strong>Keya:</strong> Keya motor control • <strong>V_Bus:</strong> Valve/steering commands • <strong>ISO_Bus:</strong> ISOBUS implement control</p>
+            <p><strong>K_Bus:</strong> Tractor control bus • <strong>Generic Brand:</strong> Use when mixing functions from different brands</p>
         </div>
     </div>
 
@@ -289,6 +291,141 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                     showStatus('Error restarting system', 'error');
                 });
         }
+
+        // Brand capabilities definition
+        const brandCapabilities = {
+            0: { // Disabled
+                name: 'Disabled',
+                functions: ['NONE']
+            },
+            1: { // Fendt SCR/S4/Gen6
+                name: 'Fendt SCR/S4/Gen6',
+                functions: ['NONE', 'V_BUS', 'K_BUS', 'ISO_BUS']
+            },
+            2: { // Valtra/Massey
+                name: 'Valtra/Massey Ferguson',
+                functions: ['NONE', 'V_BUS']
+            },
+            3: { // Case IH/NH
+                name: 'Case IH/New Holland',
+                functions: ['NONE', 'V_BUS', 'K_BUS']
+            },
+            4: { // Fendt One
+                name: 'Fendt One',
+                functions: ['NONE', 'V_BUS', 'K_BUS', 'ISO_BUS']
+            },
+            5: { // Claas
+                name: 'Claas',
+                functions: ['NONE', 'V_BUS']
+            },
+            6: { // JCB
+                name: 'JCB',
+                functions: ['NONE', 'V_BUS']
+            },
+            7: { // Lindner
+                name: 'Lindner',
+                functions: ['NONE', 'V_BUS']
+            },
+            8: { // CAT MT
+                name: 'CAT MT Series',
+                functions: ['NONE', 'V_BUS']
+            },
+            9: { // Generic
+                name: 'Generic',
+                functions: ['NONE', 'KEYA', 'V_BUS', 'ISO_BUS', 'K_BUS']
+            }
+        };
+
+        // Function value mapping
+        const functionValues = {
+            'NONE': 0,
+            'KEYA': 1,
+            'V_BUS': 2,
+            'ISO_BUS': 3,
+            'K_BUS': 4
+        };
+
+        // Update function dropdowns based on brand
+        function updateFunctionOptions() {
+            const brandSelect = document.getElementById('brand');
+            const brand = parseInt(brandSelect.value);
+            const capabilities = brandCapabilities[brand] || brandCapabilities[9]; // Default to Generic
+
+            // Update all three CAN function dropdowns
+            ['can1Function', 'can2Function', 'can3Function'].forEach(id => {
+                const select = document.getElementById(id);
+                const currentValue = select.value;
+
+                // Clear existing options
+                select.innerHTML = '';
+
+                // Add allowed functions for this brand
+                capabilities.functions.forEach(func => {
+                    const option = document.createElement('option');
+                    option.value = functionValues[func];
+                    option.text = func.replace('_', ' ');
+                    select.appendChild(option);
+                });
+
+                // Restore previous value if it's still valid
+                const validValues = capabilities.functions.map(f => functionValues[f].toString());
+                if (validValues.includes(currentValue)) {
+                    select.value = currentValue;
+                } else {
+                    select.value = 0; // Default to None
+                }
+            });
+
+            // Update info text based on brand
+            updateInfoText(brand);
+        }
+
+        // Update info text to show relevant functions only
+        function updateInfoText(brand) {
+            const infoDiv = document.querySelector('.info');
+            const capabilities = brandCapabilities[brand] || brandCapabilities[9];
+
+            let infoHtml = '<h3>Function Descriptions</h3>';
+
+            if (brand === 0) { // Disabled
+                infoHtml += '<p>CAN bus functions are disabled.</p>';
+            } else {
+                const descriptions = {
+                    'KEYA': '<strong>Keya:</strong> Keya motor control',
+                    'V_BUS': '<strong>V_Bus:</strong> Valve/steering commands',
+                    'ISO_BUS': '<strong>ISO_Bus:</strong> ISOBUS implement control',
+                    'K_BUS': '<strong>K_Bus:</strong> Tractor control bus'
+                };
+
+                const availableFuncs = capabilities.functions.filter(f => f !== 'NONE');
+                const descParts = availableFuncs.map(f => descriptions[f]).filter(d => d);
+
+                if (descParts.length > 0) {
+                    // Group into lines of 2-3 descriptions
+                    for (let i = 0; i < descParts.length; i += 3) {
+                        const line = descParts.slice(i, i + 3).join(' • ');
+                        infoHtml += `<p>${line}</p>`;
+                    }
+                }
+
+                if (brand === 9) { // Generic
+                    infoHtml += '<p><strong>Generic Brand:</strong> Use when mixing functions from different brands</p>';
+                }
+            }
+
+            infoDiv.innerHTML = infoHtml;
+        }
+
+        // Add brand change listener
+        document.addEventListener('DOMContentLoaded', function() {
+            const brandSelect = document.getElementById('brand');
+            brandSelect.addEventListener('change', updateFunctionOptions);
+
+            // Load configuration and update options
+            loadConfig().then(() => {
+                updateFunctionOptions();
+            });
+        });
 
         // Load configuration on page load
         window.addEventListener('DOMContentLoaded', loadConfig);
