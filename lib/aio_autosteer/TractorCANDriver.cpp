@@ -167,7 +167,11 @@ void TractorCANDriver::processIncomingMessages() {
     // Process button bus messages if configured
     if (buttonCAN && buttonBusNum > 0 && buttonBusNum != steerBusNum) {
         while (readCANMessage(buttonBusNum, msg)) {
-            // TODO: Process work switch messages
+            // Process K_Bus messages for Massey
+            if (static_cast<TractorBrand>(config.brand) == TractorBrand::VALTRA_MASSEY) {
+                processMasseyKBusMessage(msg);
+            }
+            // TODO: Process work switch messages for other brands
         }
     }
 
@@ -377,6 +381,68 @@ void TractorCANDriver::sendValtraCommands() {
     msg.buf[7] = 0;
 
     writeCANMessage(steerBusNum, msg);
+}
+
+// ===== Massey K_Bus Implementation =====
+void TractorCANDriver::processMasseyKBusMessage(const CAN_message_t& msg) {
+    // Check for K_Bus button status message (0xCFF2621)
+    if (msg.id == 0x0CFF2621 && msg.flags.extended) {
+        // Store the entire message for rolling counter
+        memcpy(mfRollingCounter, msg.buf, 8);
+
+        // Check bit 2 of byte 3 for engage button state
+        bool newEngageState = (msg.buf[3] & 0x04) != 0;
+
+        if (newEngageState != engageButtonPressed) {
+            engageButtonPressed = newEngageState;
+            LOG_INFO(EventSource::AUTOSTEER, "Massey K_Bus engage button %s",
+                     engageButtonPressed ? "pressed" : "released");
+        }
+    }
+}
+
+void TractorCANDriver::sendMasseyF1() {
+    if (!buttonCAN || buttonBusNum == 0) return;
+
+    CAN_message_t msg;
+    msg.id = 0x0CFF2621;  // K_Bus button command
+    msg.flags.extended = 1;
+    msg.len = 8;
+
+    // Increment rolling counter in byte 6
+    mfRollingCounter[6] = (mfRollingCounter[6] + 1) & 0xFF;
+
+    // Copy the last received message as base
+    memcpy(msg.buf, mfRollingCounter, 8);
+
+    // Set F1 bit (bit 4 of byte 3)
+    msg.buf[3] |= 0x10;
+
+    writeCANMessage(buttonBusNum, msg);
+
+    LOG_INFO(EventSource::AUTOSTEER, "Massey F1 button pressed");
+}
+
+void TractorCANDriver::sendMasseyF2() {
+    if (!buttonCAN || buttonBusNum == 0) return;
+
+    CAN_message_t msg;
+    msg.id = 0x0CFF2621;  // K_Bus button command
+    msg.flags.extended = 1;
+    msg.len = 8;
+
+    // Increment rolling counter in byte 6
+    mfRollingCounter[6] = (mfRollingCounter[6] + 1) & 0xFF;
+
+    // Copy the last received message as base
+    memcpy(msg.buf, mfRollingCounter, 8);
+
+    // Set F2 bit (bit 5 of byte 3)
+    msg.buf[3] |= 0x20;
+
+    writeCANMessage(buttonBusNum, msg);
+
+    LOG_INFO(EventSource::AUTOSTEER, "Massey F2 button pressed");
 }
 
 // ===== Common Methods =====

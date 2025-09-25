@@ -1041,14 +1041,17 @@ void SimpleWebManager::handleCANConfig(EthernetClient& client, const String& met
         // Return current CAN configuration
         CANSteerConfig config = configManager.getCANSteerConfig();
 
-        StaticJsonDocument<256> doc;
+        StaticJsonDocument<512> doc;
         doc["brand"] = config.brand;
         doc["can1Speed"] = config.can1Speed;
         doc["can1Function"] = config.can1Function;
+        doc["can1Name"] = config.can1Name;
         doc["can2Speed"] = config.can2Speed;
         doc["can2Function"] = config.can2Function;
+        doc["can2Name"] = config.can2Name;
         doc["can3Speed"] = config.can3Speed;
         doc["can3Function"] = config.can3Function;
+        doc["can3Name"] = config.can3Name;
         doc["moduleID"] = config.moduleID;
 
         String json;
@@ -1062,7 +1065,7 @@ void SimpleWebManager::handleCANConfig(EthernetClient& client, const String& met
         LOG_INFO(EventSource::NETWORK, "CAN config POST body: %s", body.c_str());
 
         // Parse JSON
-        StaticJsonDocument<256> doc;
+        StaticJsonDocument<512> doc;
         DeserializationError error = deserializeJson(doc, body);
 
         if (error) {
@@ -1084,17 +1087,26 @@ void SimpleWebManager::handleCANConfig(EthernetClient& client, const String& met
         if (doc.containsKey("can1Function")) {
             config.can1Function = doc["can1Function"];
         }
+        if (doc.containsKey("can1Name")) {
+            config.can1Name = doc["can1Name"];
+        }
         if (doc.containsKey("can2Speed")) {
             config.can2Speed = doc["can2Speed"];
         }
         if (doc.containsKey("can2Function")) {
             config.can2Function = doc["can2Function"];
         }
+        if (doc.containsKey("can2Name")) {
+            config.can2Name = doc["can2Name"];
+        }
         if (doc.containsKey("can3Speed")) {
             config.can3Speed = doc["can3Speed"];
         }
         if (doc.containsKey("can3Function")) {
             config.can3Function = doc["can3Function"];
+        }
+        if (doc.containsKey("can3Name")) {
+            config.can3Name = doc["can3Name"];
         }
         if (doc.containsKey("moduleID")) {
             config.moduleID = doc["moduleID"];

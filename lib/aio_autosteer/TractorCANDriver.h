@@ -61,6 +61,10 @@ private:
     };
     CommandState nextCommand = SEND_ENABLE;
 
+    // Massey K_Bus tracking
+    uint8_t mfRollingCounter[8] = {0};  // Track last K_Bus message for F1/F2
+    bool engageButtonPressed = false;   // Track K_Bus engage button
+
     // Helper methods
     void assignCANBuses();
     void* getBusPointer(uint8_t busNum);
@@ -74,11 +78,14 @@ private:
     void processKeyaMessage(const CAN_message_t& msg);
     void processFendtMessage(const CAN_message_t& msg);
     void processValtraMessage(const CAN_message_t& msg);
+    void processMasseyKBusMessage(const CAN_message_t& msg);
 
     // Brand-specific command senders
     void sendKeyaCommands();
     void sendFendtCommands();
     void sendValtraCommands();
+    void sendMasseyF1();
+    void sendMasseyF2();
 
 public:
     TractorCANDriver() {}
@@ -114,6 +121,11 @@ public:
     bool hasRPMFeedback() const {
         return hasKeyaFunction() && heartbeatValid;
     }
+
+    // Massey-specific methods
+    bool isEngageButtonPressed() const { return engageButtonPressed; }
+    void pressMasseyF1() { sendMasseyF1(); }
+    void pressMasseyF2() { sendMasseyF2(); }
 };
 
 #endif // TRACTOR_CAN_DRIVER_H

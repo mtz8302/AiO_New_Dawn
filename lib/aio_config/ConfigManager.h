@@ -14,6 +14,13 @@ enum class CANFunction : uint8_t {
     K_BUS = 4
 };
 
+enum class CANBusName : uint8_t {
+    NONE = 0,
+    V_BUS = 1,
+    K_BUS = 2,
+    ISO_BUS = 3
+};
+
 // CAN Steer configuration structure
 struct CANSteerConfig {
     // Brand selection
@@ -22,14 +29,17 @@ struct CANSteerConfig {
     // CAN1 configuration
     uint8_t can1Speed = 0;      // 0=250k, 1=500k
     uint8_t can1Function = 0;   // CANFunction enum
+    uint8_t can1Name = 0;       // 0=None, 1=V_Bus, 2=K_Bus, 3=ISO_Bus
 
     // CAN2 configuration
     uint8_t can2Speed = 0;      // 0=250k, 1=500k
     uint8_t can2Function = 0;   // CANFunction enum
+    uint8_t can2Name = 0;       // 0=None, 1=V_Bus, 2=K_Bus, 3=ISO_Bus
 
     // CAN3 configuration
     uint8_t can3Speed = 0;      // 0=250k, 1=500k
     uint8_t can3Function = 0;   // CANFunction enum
+    uint8_t can3Name = 0;       // 0=None, 1=V_Bus, 2=K_Bus, 3=ISO_Bus
 
     uint8_t moduleID = 0x1C;    // Module ID for protocols that need it
     uint8_t reserved[1];        // Future expansion

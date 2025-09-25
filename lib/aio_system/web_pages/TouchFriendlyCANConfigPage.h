@@ -78,13 +78,35 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
 
         .can-row {
             display: grid;
-            grid-template-columns: 80px 1fr 1fr;
+            grid-template-columns: 80px 120px 140px 1fr;
             gap: 10px;
             align-items: center;
             padding: 15px;
             background-color: #2c2c2c;
             border-radius: 10px;
         }
+
+        .function-checkboxes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .function-checkboxes label {
+            display: flex;
+            align-items: center;
+            color: white;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .function-checkboxes input[type="checkbox"] {
+            margin-right: 5px;
+            width: 18px;
+            height: 18px;
+        }
+
 
         .can-label {
             font-weight: bold;
@@ -155,7 +177,16 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                         <option value="0">250 kbps</option>
                         <option value="1">500 kbps</option>
                     </select>
-                    <select id="can1Function" name="can1Function">
+                    <select id="can1Name" class="bus-name-select">
+                        <option value="0">None</option>
+                        <option value="1">V_Bus</option>
+                        <option value="2">K_Bus</option>
+                        <option value="3">ISO_Bus</option>
+                    </select>
+                    <div class="function-checkboxes" id="can1Functions">
+                        <!-- Dynamically populated based on brand and bus name -->
+                    </div>
+                    <select id="can1Function" name="can1Function" style="display:none;">
                         <option value="0">None</option>
                         <option value="1">Keya</option>
                         <option value="2">V_Bus</option>
@@ -170,7 +201,16 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                         <option value="0">250 kbps</option>
                         <option value="1">500 kbps</option>
                     </select>
-                    <select id="can2Function" name="can2Function">
+                    <select id="can2Name" class="bus-name-select">
+                        <option value="0">None</option>
+                        <option value="1">V_Bus</option>
+                        <option value="2">K_Bus</option>
+                        <option value="3">ISO_Bus</option>
+                    </select>
+                    <div class="function-checkboxes" id="can2Functions">
+                        <!-- Dynamically populated based on brand and bus name -->
+                    </div>
+                    <select id="can2Function" name="can2Function" style="display:none;">
                         <option value="0">None</option>
                         <option value="1">Keya</option>
                         <option value="2">V_Bus</option>
@@ -185,7 +225,16 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                         <option value="0">250 kbps</option>
                         <option value="1">500 kbps</option>
                     </select>
-                    <select id="can3Function" name="can3Function">
+                    <select id="can3Name" class="bus-name-select">
+                        <option value="0">None</option>
+                        <option value="1">V_Bus</option>
+                        <option value="2">K_Bus</option>
+                        <option value="3">ISO_Bus</option>
+                    </select>
+                    <div class="function-checkboxes" id="can3Functions">
+                        <!-- Dynamically populated based on brand and bus name -->
+                    </div>
+                    <select id="can3Function" name="can3Function" style="display:none;">
                         <option value="0">None</option>
                         <option value="1">Keya</option>
                         <option value="2">V_Bus</option>
@@ -213,10 +262,13 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                     document.getElementById('brand').value = config.brand || 0;
                     document.getElementById('can1Speed').value = config.can1Speed || 0;
                     document.getElementById('can1Function').value = config.can1Function || 0;
+                    document.getElementById('can1Name').value = config.can1Name || 0;
                     document.getElementById('can2Speed').value = config.can2Speed || 0;
                     document.getElementById('can2Function').value = config.can2Function || 0;
+                    document.getElementById('can2Name').value = config.can2Name || 0;
                     document.getElementById('can3Speed').value = config.can3Speed || 0;
                     document.getElementById('can3Function').value = config.can3Function || 0;
+                    document.getElementById('can3Name').value = config.can3Name || 0;
                 }
             } catch (error) {
                 console.error('Error loading config:', error);
@@ -228,15 +280,21 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
         document.getElementById('canConfigForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
+            // Update all hidden selects from checkboxes before saving
+            [1, 2, 3].forEach(busNum => updateHiddenSelect(busNum));
+
             const formData = new FormData(e.target);
             const config = {
                 brand: parseInt(formData.get('brand')),
                 can1Speed: parseInt(formData.get('can1Speed')),
                 can1Function: parseInt(formData.get('can1Function')),
+                can1Name: parseInt(document.getElementById('can1Name').value),
                 can2Speed: parseInt(formData.get('can2Speed')),
                 can2Function: parseInt(formData.get('can2Function')),
+                can2Name: parseInt(document.getElementById('can2Name').value),
                 can3Speed: parseInt(formData.get('can3Speed')),
-                can3Function: parseInt(formData.get('can3Function'))
+                can3Function: parseInt(formData.get('can3Function')),
+                can3Name: parseInt(document.getElementById('can3Name').value)
             };
 
             try {
@@ -292,47 +350,85 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                 });
         }
 
-        // Brand capabilities definition
+        // Brand capabilities definition with bus-specific functions
         const brandCapabilities = {
             0: { // Disabled
                 name: 'Disabled',
-                functions: ['NONE']
+                busTypes: {}
             },
             1: { // Fendt SCR/S4/Gen6
                 name: 'Fendt SCR/S4/Gen6',
-                functions: ['NONE', 'V_BUS', 'K_BUS', 'ISO_BUS']
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': ['buttons', 'hitch'],
+                    'ISO_Bus': []
+                }
             },
             2: { // Valtra/Massey
                 name: 'Valtra/Massey Ferguson',
-                functions: ['NONE', 'V_BUS']
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': ['buttons', 'hitch'],
+                    'ISO_Bus': []
+                }
             },
             3: { // Case IH/NH
                 name: 'Case IH/New Holland',
-                functions: ['NONE', 'V_BUS', 'K_BUS']
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': ['hitch'],
+                    'ISO_Bus': []
+                }
             },
             4: { // Fendt One
                 name: 'Fendt One',
-                functions: ['NONE', 'V_BUS', 'K_BUS', 'ISO_BUS']
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': ['buttons', 'hitch'],
+                    'ISO_Bus': ['steering', 'implement']
+                }
             },
             5: { // Claas
                 name: 'Claas',
-                functions: ['NONE', 'V_BUS']
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': [],
+                    'ISO_Bus': []
+                }
             },
             6: { // JCB
                 name: 'JCB',
-                functions: ['NONE', 'V_BUS']
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': [],
+                    'ISO_Bus': []
+                }
             },
             7: { // Lindner
                 name: 'Lindner',
-                functions: ['NONE', 'V_BUS']
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': [],
+                    'ISO_Bus': []
+                }
             },
             8: { // CAT MT
                 name: 'CAT MT Series',
-                functions: ['NONE', 'V_BUS']
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': [],
+                    'ISO_Bus': []
+                }
             },
             9: { // Generic
                 name: 'Generic',
-                functions: ['NONE', 'KEYA', 'V_BUS', 'ISO_BUS', 'K_BUS']
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': ['buttons', 'hitch'],
+                    'ISO_Bus': ['steering', 'implement']
+                },
+                // Special case: Generic brand with bus name "None" shows Keya option
+                allowsKeya: true
             }
         };
 
@@ -345,39 +441,114 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
             'K_BUS': 4
         };
 
-        // Update function dropdowns based on brand
-        function updateFunctionOptions() {
-            const brandSelect = document.getElementById('brand');
-            const brand = parseInt(brandSelect.value);
-            const capabilities = brandCapabilities[brand] || brandCapabilities[9]; // Default to Generic
+        // Function labels
+        const functionLabels = {
+            'steering': 'Steering',
+            'buttons': 'Buttons',
+            'hitch': 'Hitch',
+            'implement': 'Implement',
+            'keya': 'Keya Motor'
+        };
 
-            // Update all three CAN function dropdowns
-            ['can1Function', 'can2Function', 'can3Function'].forEach(id => {
-                const select = document.getElementById(id);
-                const currentValue = select.value;
+        // Update function checkboxes based on brand AND bus name
+        function updateFunctionOptions(busNum) {
+            const brand = parseInt(document.getElementById('brand').value);
+            const capabilities = brandCapabilities[brand] || brandCapabilities[9];
+            const busNameSelect = document.getElementById(`can${busNum}Name`);
+            const busName = busNameSelect.options[busNameSelect.selectedIndex].text;
 
-                // Clear existing options
-                select.innerHTML = '';
+            const container = document.getElementById(`can${busNum}Functions`);
+            container.innerHTML = '';
 
-                // Add allowed functions for this brand
-                capabilities.functions.forEach(func => {
-                    const option = document.createElement('option');
-                    option.value = functionValues[func];
-                    option.text = func.replace('_', ' ');
-                    select.appendChild(option);
+            console.log(`updateFunctionOptions CAN${busNum}: brand=${brand}, busName="${busName}"`);
+
+            // If bus name is "None", only show functions for brands that support it
+            if (busName === 'None') {
+                // Special case: Generic brand with "None" shows Keya option
+                if (brand === 9 && capabilities.allowsKeya) {
+                    const availableFunctions = ['keya'];
+                    createFunctionCheckboxes(availableFunctions, container, busNum);
+                }
+                return;
+            }
+
+            // Get available functions for this brand and bus type
+            const availableFunctions = capabilities.busTypes[busName] || [];
+            console.log(`Available functions for ${busName}:`, availableFunctions);
+            createFunctionCheckboxes(availableFunctions, container, busNum);
+        }
+
+        // Helper function to create checkboxes
+        function createFunctionCheckboxes(availableFunctions, container, busNum) {
+            availableFunctions.forEach(funcKey => {
+                const label = document.createElement('label');
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = `can${busNum}_${funcKey}`;
+                checkbox.dataset.function = funcKey;
+                checkbox.dataset.busNum = busNum;
+                console.log(`Created checkbox: ${checkbox.id}`);
+
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode(` ${functionLabels[funcKey] || funcKey}`));
+
+                checkbox.addEventListener('change', function() {
+                    updateHiddenSelect(busNum);
                 });
 
-                // Restore previous value if it's still valid
-                const validValues = capabilities.functions.map(f => functionValues[f].toString());
-                if (validValues.includes(currentValue)) {
-                    select.value = currentValue;
-                } else {
-                    select.value = 0; // Default to None
+                container.appendChild(label);
+            });
+        }
+
+        // Update all bus function options based on brand
+        function updateAllBusFunctions() {
+            const brand = parseInt(document.getElementById('brand').value);
+            [1, 2, 3].forEach(busNum => updateFunctionOptions(busNum));
+            updateInfoText(brand);
+        }
+
+        // Update hidden select based on checkboxes
+        function updateHiddenSelect(busNum) {
+            const hiddenSelect = document.getElementById(`can${busNum}Function`);
+            const checkboxes = document.querySelectorAll(`#can${busNum}Functions input[type="checkbox"]`);
+            const busNameSelect = document.getElementById(`can${busNum}Name`);
+            const busNameValue = parseInt(busNameSelect.value);
+
+            let selectedFunction = 0; // Default to NONE
+
+            checkboxes.forEach(cb => {
+                if (cb.checked) {
+                    const funcKey = cb.dataset.function;
+
+                    if (funcKey === 'steering') {
+                        // Determine steering type based on bus name
+                        if (busNameValue === 1) { // V_Bus
+                            selectedFunction = functionValues['V_BUS'];
+                        } else if (busNameValue === 3) { // ISO_Bus
+                            selectedFunction = functionValues['ISO_BUS'];
+                        } else if (busNameValue === 0) { // None
+                            // For None, steering shouldn't be selected, but if it is, default to 0
+                            selectedFunction = 0;
+                        }
+                    } else if (funcKey === 'keya') {
+                        selectedFunction = functionValues['KEYA'];
+                    } else {
+                        // Map function to bus name selected
+                        if (busNameValue === 1) { // V_Bus
+                            selectedFunction = functionValues['V_BUS'];
+                        } else if (busNameValue === 2) { // K_Bus
+                            selectedFunction = functionValues['K_BUS'];
+                        } else if (busNameValue === 3) { // ISO_Bus
+                            selectedFunction = functionValues['ISO_BUS'];
+                        } else if (busNameValue === 0) { // None
+                            // For non-steering functions with None, default to 0
+                            selectedFunction = 0;
+                        }
+                    }
                 }
             });
 
-            // Update info text based on brand
-            updateInfoText(brand);
+            hiddenSelect.value = selectedFunction;
         }
 
         // Update info text to show relevant functions only
@@ -391,44 +562,128 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                 infoHtml += '<p>CAN bus functions are disabled.</p>';
             } else {
                 const descriptions = {
-                    'KEYA': '<strong>Keya:</strong> Keya motor control',
-                    'V_BUS': '<strong>V_Bus:</strong> Valve/steering commands',
-                    'ISO_BUS': '<strong>ISO_Bus:</strong> ISOBUS implement control',
-                    'K_BUS': '<strong>K_Bus:</strong> Tractor control bus'
+                    'steering': 'Control steering valve/motor',
+                    'buttons': 'Read control buttons',
+                    'hitch': 'Control 3-point hitch',
+                    'implement': 'ISOBUS implement control',
+                    'keya': 'Keya CAN motor control'
                 };
 
-                const availableFuncs = capabilities.functions.filter(f => f !== 'NONE');
-                const descParts = availableFuncs.map(f => descriptions[f]).filter(d => d);
+                const functionDescParts = [];
+                // Gather all unique functions from all bus types
+                const allFunctions = new Set();
+                Object.values(capabilities.busTypes).forEach(functions => {
+                    functions.forEach(func => allFunctions.add(func));
+                });
 
-                if (descParts.length > 0) {
-                    // Group into lines of 2-3 descriptions
-                    for (let i = 0; i < descParts.length; i += 3) {
-                        const line = descParts.slice(i, i + 3).join(' • ');
-                        infoHtml += `<p>${line}</p>`;
-                    }
+                // Special case: add keya if allowed
+                if (capabilities.allowsKeya) {
+                    allFunctions.add('keya');
                 }
 
-                if (brand === 9) { // Generic
-                    infoHtml += '<p><strong>Generic Brand:</strong> Use when mixing functions from different brands</p>';
+                // Build descriptions for available functions
+                allFunctions.forEach(funcKey => {
+                    if (descriptions[funcKey]) {
+                        let desc = `<strong>${functionLabels[funcKey] || funcKey}:</strong> ${descriptions[funcKey]}`;
+                        functionDescParts.push(desc);
+                    }
+                });
+
+                if (functionDescParts.length > 0) {
+                    infoHtml += `<p>${functionDescParts.join(' • ')}</p>`;
+                }
+
+                // Add brand-specific notes
+                if (brand === 1) { // Fendt
+                    infoHtml += '<p>K_Bus typically handles buttons and hitch • V_Bus for steering</p>';
+                } else if (brand === 2) { // Valtra
+                    infoHtml += '<p>V_Bus steering only - requires continuous valve ready messages</p>';
+                } else if (brand === 9) { // Generic
+                    infoHtml += '<p><strong>Generic Brand:</strong> Use when mixing functions from different brands or using Keya steering</p>';
                 }
             }
 
             infoDiv.innerHTML = infoHtml;
         }
 
-        // Add brand change listener
-        document.addEventListener('DOMContentLoaded', function() {
-            const brandSelect = document.getElementById('brand');
-            brandSelect.addEventListener('change', updateFunctionOptions);
+        // Load saved config into checkboxes
+        function loadConfigIntoUI() {
+            // Use setTimeout to ensure DOM is fully ready
+            setTimeout(() => {
+                [1, 2, 3].forEach(busNum => {
+                    const hiddenSelect = document.getElementById(`can${busNum}Function`);
+                    const busNameSelect = document.getElementById(`can${busNum}Name`);
+                    const savedValue = parseInt(hiddenSelect.value);
+                    const busNameValue = parseInt(busNameSelect.value);
 
-            // Load configuration and update options
-            loadConfig().then(() => {
-                updateFunctionOptions();
-            });
-        });
+                    console.log(`CAN${busNum}: savedValue=${savedValue}, busName=${busNameValue}`);
+
+                    if (savedValue !== 0) {
+                        // Check for steering types
+                        if (savedValue === functionValues['KEYA']) {
+                            const keyaCb = document.getElementById(`can${busNum}_keya`);
+                            if (keyaCb) {
+                                keyaCb.checked = true;
+                                console.log(`Checked keya for CAN${busNum}`);
+                            }
+                        } else if (savedValue === functionValues['V_BUS'] ||
+                                   savedValue === functionValues['ISO_BUS']) {
+                            const steeringCb = document.getElementById(`can${busNum}_steering`);
+                            if (steeringCb) {
+                                steeringCb.checked = true;
+                                console.log(`Checked steering for CAN${busNum}`);
+                            } else {
+                                console.log(`Steering checkbox not found for CAN${busNum}`);
+                            }
+                        }
+                        // Check for K_BUS functions
+                        else if (savedValue === functionValues['K_BUS']) {
+                            // For K_BUS, check if buttons or hitch checkboxes exist
+                            console.log(`Processing K_BUS for CAN${busNum}`);
+                            ['buttons', 'hitch'].forEach(func => {
+                                const cb = document.getElementById(`can${busNum}_${func}`);
+                                console.log(`Looking for checkbox: can${busNum}_${func}, found: ${cb ? 'yes' : 'no'}`);
+                                if (cb) {
+                                    cb.checked = true;
+                                    console.log(`Checked ${func} for CAN${busNum}`);
+                                } else {
+                                    console.log(`WARNING: Checkbox can${busNum}_${func} not found!`);
+                                }
+                            });
+                        }
+                    }
+                });
+            }, 200); // Increased delay
+        }
 
         // Load configuration on page load
-        window.addEventListener('DOMContentLoaded', loadConfig);
+        window.addEventListener('DOMContentLoaded', async function() {
+            const brandSelect = document.getElementById('brand');
+            brandSelect.addEventListener('change', () => {
+                updateAllBusFunctions();
+                // Don't restore checkboxes when brand changes manually
+            });
+
+            // Add event listeners for bus name changes
+            [1, 2, 3].forEach(busNum => {
+                const busNameSelect = document.getElementById(`can${busNum}Name`);
+                busNameSelect.addEventListener('change', () => {
+                    updateFunctionOptions(busNum);
+                    // Update the hidden select when bus name changes
+                    updateHiddenSelect(busNum);
+                });
+            });
+
+            // Load configuration and update UI in proper sequence
+            await loadConfig();
+            // First create all the checkboxes based on brand and bus names
+            updateAllBusFunctions();
+            // Wait a bit for DOM to update after creating checkboxes
+            setTimeout(() => {
+                // Then restore the checkbox states
+                loadConfigIntoUI();
+            }, 100);
+        });
     </script>
 </body>
 </html>
