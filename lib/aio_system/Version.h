@@ -2,7 +2,7 @@
 #define VERSION_H
 
 // AiO New Dawn firmware version
-#define FIRMWARE_VERSION "1.0.63-beta" // Added Massey K_Bus functions and fixed CAN config UI checkbox persistence
+#define FIRMWARE_VERSION "1.0.64-beta" // Massey K_Bus engage button now controls autosteer engagement
 
 // Teensy board type for OTA identification
 #define TEENSY_BOARD_TYPE "Teensy41"

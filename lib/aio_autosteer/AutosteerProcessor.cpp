@@ -4,6 +4,7 @@
 #include "EncoderProcessor.h"
 #include "MotorDriverInterface.h"
 #include "KeyaCANDriver.h"
+#include "TractorCANDriver.h"
 #include "ConfigManager.h"
 #include "LEDManagerFSM.h"
 #include "EventLogger.h"
@@ -186,24 +187,51 @@ void AutosteerProcessor::process() {
     }
     
     // === BUTTON/SWITCH LOGIC ===
+    // Static variable for Massey button state tracking (needs to persist across cycles)
+    static bool lastMasseyEngageState = false;
+
+    // Debug: log button/switch config periodically
+    static uint32_t lastConfigLog = 0;
+    if (millis() - lastConfigLog > 5000) {
+        lastConfigLog = millis();
+        LOG_DEBUG(EventSource::AUTOSTEER, "Button config: button=%d, switch=%d",
+                  configManager.getSteerButton(), configManager.getSteerSwitch());
+    }
+
     if (configManager.getSteerButton() || configManager.getSteerSwitch()) {
         if (configManager.getSteerButton()) {
             // BUTTON MODE - Toggle on press
             static bool lastButtonReading = HIGH;
             bool buttonReading = adProcessor.isSteerSwitchOn() ? LOW : HIGH;  // Convert to active low
-            
-            if (buttonReading == LOW && lastButtonReading == HIGH) {
+
+            // Also check Massey K_Bus engage button if using TractorCANDriver
+            bool masseyEngagePressed = false;
+
+            if (motorPTR && motorPTR->getType() == MotorDriverType::TRACTOR_CAN) {
+                TractorCANDriver* tractorCAN = static_cast<TractorCANDriver*>(motorPTR);
+                bool currentMasseyEngage = tractorCAN->isEngageButtonPressed();
+
+                // Detect rising edge of Massey engage button
+                if (currentMasseyEngage && !lastMasseyEngageState) {
+                    masseyEngagePressed = true;
+                }
+                lastMasseyEngageState = currentMasseyEngage;
+            }
+
+            // Check if either physical button or Massey engage button was pressed
+            if ((buttonReading == LOW && lastButtonReading == HIGH) || masseyEngagePressed) {
                 // Button was just pressed - toggle state
                 steerState = !steerState;
-                LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via button press", 
-                         steerState == 0 ? "ARMED" : "DISARMED");
-                
+                LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via %s press",
+                         steerState == 0 ? "ARMED" : "DISARMED",
+                         masseyEngagePressed ? "Massey K_Bus button" : "button");
+
                 // Reset encoder count when autosteer is armed
                 if (steerState == 0 && EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
                     EncoderProcessor::getInstance()->resetPulseCount();
                     LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
                 }
-                
+
                 // Pulse blue LED for button press
                 ledManagerFSM.pulseButton();
             }
@@ -232,15 +260,15 @@ void AutosteerProcessor::process() {
     
     // Check if guidance status changed from AgOpenGPS
     if (guidanceStatusChanged) {
-        LOG_DEBUG(EventSource::AUTOSTEER, "Guidance status changed: %s (steerState=%d, hasKickout=%d)",
+        LOG_INFO(EventSource::AUTOSTEER, "Guidance status changed: %s (steerState=%d, hasKickout=%d)",
                  guidanceActive ? "ACTIVE" : "INACTIVE", steerState,
                  kickoutMonitor ? kickoutMonitor->hasKickout() : 0);
-        
+
         if (guidanceActive) {
             // Guidance turned ON in AgOpenGPS
             steerState = 0;  // Activate steering
             LOG_INFO(EventSource::AUTOSTEER, "Autosteer ARMED via AgOpenGPS (OSB)");
-            
+
             // If there's a kickout active, clear it
             if (kickoutMonitor && kickoutMonitor->hasKickout()) {
                 kickoutMonitor->clearKickout();
@@ -360,13 +388,13 @@ void AutosteerProcessor::process() {
                 lastGuidanceOffTime = millis();
                 waitingForGuidanceOn = true;
             }
-            else if (guidanceActive && !prevGuidanceStatus && waitingForGuidanceOn && 
+            else if (guidanceActive && !prevGuidanceStatus && waitingForGuidanceOn &&
                      (millis() - lastGuidanceOffTime < 1000)) {
                 // Guidance went back ON within 1 second - this is an OSB toggle
                 waitingForGuidanceOn = false;
-                
+
                 LOG_INFO(EventSource::AUTOSTEER, "OSB toggle detected during kickout - clearing kickout");
-                
+
                 // Clear kickout and re-arm
                 kickoutMonitor->clearKickout();
                 steerState = 0;  // Re-arm
@@ -841,24 +869,30 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     // Track autosteer enable bit changes for OSB handling
     static bool prevAutosteerEnabled = false;
     if (newAutosteerState != prevAutosteerEnabled) {
-        LOG_DEBUG(EventSource::AUTOSTEER, "AgOpenGPS autosteer bit changed: %s", 
+        LOG_INFO(EventSource::AUTOSTEER, "AgOpenGPS autosteer bit changed: %s",
                       newAutosteerState ? "ENABLED" : "DISABLED");
-        
-        // If autosteer bit goes high and we're in kickout, this might be OSB press
-        if (newAutosteerState && !prevAutosteerEnabled && steerState == 1) {
-            // Check if we have an active kickout
+
+        // OSB button was pressed - handle it even when button mode is configured
+        if (newAutosteerState && !prevAutosteerEnabled) {
+            // OSB turned ON - arm autosteer
+            steerState = 0;
+            LOG_INFO(EventSource::AUTOSTEER, "Autosteer ARMED via AgOpenGPS (OSB bit 6)");
+
+            // If there's a kickout active, clear it
             if (kickoutMonitor && kickoutMonitor->hasKickout()) {
-                // OSB pressed during kickout - clear it and re-arm
                 kickoutMonitor->clearKickout();
-                steerState = 0;  // Re-arm
-                LOG_INFO(EventSource::AUTOSTEER, "KICKOUT: Cleared via OSB - autosteer re-armed");
-                
-                // Reset encoder count
-                if (EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
-                    EncoderProcessor::getInstance()->resetPulseCount();
-                    LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
-                }
+                LOG_INFO(EventSource::AUTOSTEER, "KICKOUT: Cleared via OSB");
             }
+
+            // Reset encoder count
+            if (EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
+                EncoderProcessor::getInstance()->resetPulseCount();
+                LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
+            }
+        } else if (!newAutosteerState && prevAutosteerEnabled) {
+            // OSB turned OFF - disarm autosteer
+            steerState = 1;
+            LOG_INFO(EventSource::AUTOSTEER, "Autosteer DISARMED via AgOpenGPS (OSB bit 6)");
         }
         prevAutosteerEnabled = newAutosteerState;
     }
