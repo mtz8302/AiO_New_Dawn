@@ -126,15 +126,22 @@ void TractorCANDriver::process() {
     }
 
     // Check for timeouts
+    static bool timeoutLogged = false;
     if (config.brand != static_cast<uint8_t>(TractorBrand::DISABLED)) {
-        if (steerReady && (millis() - lastSteerReadyTime > 200)) {
+        if (steerReady && (millis() - lastSteerReadyTime > 250)) {
             steerReady = false;
-            if (hasKeyaFunction()) {
-                heartbeatValid = false;
-                LOG_ERROR(EventSource::AUTOSTEER, "TractorCAN connection lost - no heartbeat");
-            } else {
-                LOG_WARNING(EventSource::AUTOSTEER, "%s connection timeout - no valve ready for >200ms", getTypeName());
+            if (!timeoutLogged) {
+                if (hasKeyaFunction()) {
+                    heartbeatValid = false;
+                    LOG_ERROR(EventSource::AUTOSTEER, "TractorCAN connection lost - no heartbeat");
+                } else {
+                    LOG_WARNING(EventSource::AUTOSTEER, "%s connection timeout - no valve ready for >200ms", getTypeName());
+                }
+                timeoutLogged = true;
             }
+        } else if (steerReady) {
+            // Reset the timeout logged flag when connection is good
+            timeoutLogged = false;
         }
     }
 }

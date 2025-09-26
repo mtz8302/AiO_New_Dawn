@@ -157,7 +157,7 @@ When CAN messages are processed, the system logs events:
 1. All multi-byte values follow the endianness specified in each message description
 2. Reserved/unknown bytes should be set to 0x00 unless copying from received message
 3. The system stores complete received messages for protocols that require message echo/modification (like Massey K_Bus)
-4. Timeout for valve ready is 200ms - if no ready message received, steering is disabled
+4. Timeout for valve ready is 250ms - if no ready message received, steering is disabled
 
 ---
 

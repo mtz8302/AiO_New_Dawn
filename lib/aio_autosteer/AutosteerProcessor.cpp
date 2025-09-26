@@ -211,8 +211,8 @@ void AutosteerProcessor::process() {
                 TractorCANDriver* tractorCAN = static_cast<TractorCANDriver*>(motorPTR);
                 bool currentMasseyEngage = tractorCAN->isEngageButtonPressed();
 
-                // Detect rising edge of Massey engage button
-                if (currentMasseyEngage && !lastMasseyEngageState) {
+                // Detect falling edge of Massey engage button (release)
+                if (!currentMasseyEngage && lastMasseyEngageState) {
                     masseyEngagePressed = true;
                 }
                 lastMasseyEngageState = currentMasseyEngage;
@@ -285,11 +285,12 @@ void AutosteerProcessor::process() {
     }
     
     // If AgOpenGPS has stopped steering, turn off after delay
-    // BUT only if not using a physical switch in switch mode
+    // BUT only if not using a physical switch in switch mode OR button mode
     static int switchCounter = 0;
     bool physicalSwitchActive = configManager.getSteerSwitch() && adProcessor.isSteerSwitchOn();
-    
-    if (steerState == 0 && !guidanceActive && !physicalSwitchActive) {
+    bool buttonModeActive = configManager.getSteerButton();
+
+    if (steerState == 0 && !guidanceActive && !physicalSwitchActive && !buttonModeActive) {
         if (switchCounter++ > 30) {  // 30 * 10ms = 300ms delay
             steerState = 1;
             switchCounter = 0;
