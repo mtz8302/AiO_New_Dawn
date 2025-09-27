@@ -187,8 +187,9 @@ void AutosteerProcessor::process() {
     }
     
     // === BUTTON/SWITCH LOGIC ===
-    // Static variable for Massey button state tracking (needs to persist across cycles)
+    // Static variable for Massey/Fendt button state tracking (needs to persist across cycles)
     static bool lastMasseyEngageState = false;
+    static bool lastFendtButtonState = false;
 
     // Debug: log button/switch config periodically
     static uint32_t lastConfigLog = 0;
@@ -204,27 +205,39 @@ void AutosteerProcessor::process() {
             static bool lastButtonReading = HIGH;
             bool buttonReading = adProcessor.isSteerSwitchOn() ? LOW : HIGH;  // Convert to active low
 
-            // Also check Massey K_Bus engage button if using TractorCANDriver
+            // Also check Massey K_Bus engage button and Fendt armrest button if using TractorCANDriver
             bool masseyEngagePressed = false;
+            bool fendtButtonPressed = false;
 
             if (motorPTR && motorPTR->getType() == MotorDriverType::TRACTOR_CAN) {
                 TractorCANDriver* tractorCAN = static_cast<TractorCANDriver*>(motorPTR);
-                bool currentMasseyEngage = tractorCAN->isEngageButtonPressed();
 
+                // Check Massey button
+                bool currentMasseyEngage = tractorCAN->isEngageButtonPressed();
                 // Detect falling edge of Massey engage button (release)
                 if (!currentMasseyEngage && lastMasseyEngageState) {
                     masseyEngagePressed = true;
                 }
                 lastMasseyEngageState = currentMasseyEngage;
+
+                // Check Fendt button
+                bool currentFendtButton = tractorCAN->isFendtButtonPressed();
+                // Detect falling edge of Fendt button (release)
+                if (!currentFendtButton && lastFendtButtonState) {
+                    fendtButtonPressed = true;
+                }
+                lastFendtButtonState = currentFendtButton;
             }
 
-            // Check if either physical button or Massey engage button was pressed
-            if ((buttonReading == LOW && lastButtonReading == HIGH) || masseyEngagePressed) {
+            // Check if either physical button, Massey engage button, or Fendt armrest button was pressed
+            if ((buttonReading == LOW && lastButtonReading == HIGH) || masseyEngagePressed || fendtButtonPressed) {
                 // Button was just pressed - toggle state
                 steerState = !steerState;
+                const char* buttonType = masseyEngagePressed ? "Massey K_Bus button" :
+                                        fendtButtonPressed ? "Fendt armrest button" : "button";
                 LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via %s press",
                          steerState == 0 ? "ARMED" : "DISARMED",
-                         masseyEngagePressed ? "Massey K_Bus button" : "button");
+                         buttonType);
 
                 // Reset encoder count when autosteer is armed
                 if (steerState == 0 && EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {

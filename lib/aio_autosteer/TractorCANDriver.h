@@ -65,6 +65,9 @@ private:
     uint8_t mfRollingCounter[8] = {0};  // Track last K_Bus message for F1/F2
     bool engageButtonPressed = false;   // Track K_Bus engage button
 
+    // Fendt K_Bus tracking
+    bool fendtButtonPressed = false;    // Track Fendt armrest button
+
     // Helper methods
     void assignCANBuses();
     void* getBusPointer(uint8_t busNum);
@@ -77,6 +80,7 @@ private:
     // Brand-specific message handlers
     void processKeyaMessage(const CAN_message_t& msg);
     void processFendtMessage(const CAN_message_t& msg);
+    void processFendtKBusMessage(const CAN_message_t& msg);
     void processValtraMessage(const CAN_message_t& msg);
     void processMasseyKBusMessage(const CAN_message_t& msg);
 
@@ -126,6 +130,9 @@ public:
     bool isEngageButtonPressed() const { return engageButtonPressed; }
     void pressMasseyF1() { sendMasseyF1(); }
     void pressMasseyF2() { sendMasseyF2(); }
+
+    // Fendt-specific methods
+    bool isFendtButtonPressed() const { return fendtButtonPressed; }
 };
 
 #endif // TRACTOR_CAN_DRIVER_H

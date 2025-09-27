@@ -135,7 +135,7 @@ void TractorCANDriver::process() {
                     heartbeatValid = false;
                     LOG_ERROR(EventSource::AUTOSTEER, "TractorCAN connection lost - no heartbeat");
                 } else {
-                    LOG_WARNING(EventSource::AUTOSTEER, "%s connection timeout - no valve ready for >200ms", getTypeName());
+                    LOG_WARNING(EventSource::AUTOSTEER, "%s connection timeout - no valve ready for >250ms", getTypeName());
                 }
                 timeoutLogged = true;
             }
@@ -174,11 +174,16 @@ void TractorCANDriver::processIncomingMessages() {
     // Process button bus messages if configured
     if (buttonCAN && buttonBusNum > 0 && buttonBusNum != steerBusNum) {
         while (readCANMessage(buttonBusNum, msg)) {
-            // Process K_Bus messages for Massey
-            if (static_cast<TractorBrand>(config.brand) == TractorBrand::VALTRA_MASSEY) {
-                processMasseyKBusMessage(msg);
+            switch (static_cast<TractorBrand>(config.brand)) {
+                case TractorBrand::VALTRA_MASSEY:
+                    processMasseyKBusMessage(msg);
+                    break;
+                case TractorBrand::FENDT:
+                case TractorBrand::FENDT_ONE:
+                    processFendtKBusMessage(msg);
+                    break;
+                // TODO: Process work switch messages for other brands
             }
-            // TODO: Process work switch messages for other brands
         }
     }
 
@@ -315,17 +320,87 @@ void TractorCANDriver::sendKeyaCommands() {
 
 // ===== Fendt Implementation (placeholder) =====
 void TractorCANDriver::processFendtMessage(const CAN_message_t& msg) {
-    // TODO: Implement Fendt message processing
-    // Check for Fendt steer ready signals
-    if (msg.id == 0x0CF02300) {  // Example Fendt ready message
-        steerReady = true;
-        lastSteerReadyTime = millis();
+    // Check for Fendt valve status message (0x0CEF2CF0)
+    if (msg.id == 0x0CEF2CF0 && msg.flags.extended) {
+        // Special valve ready detection for Fendt
+        // If message length is 3 and byte 2 is 0, valve is NOT ready
+        if (msg.len == 3 && msg.buf[2] == 0) {
+            if (steerReady) {
+                LOG_WARNING(EventSource::AUTOSTEER, "Fendt steering valve not ready");
+            }
+            steerReady = false;
+        } else {
+            if (!steerReady) {
+                LOG_INFO(EventSource::AUTOSTEER, "Fendt steering valve ready");
+            }
+            steerReady = true;
+            lastSteerReadyTime = millis();
+
+            // Extract curve value if available (for feedback)
+            if (msg.len >= 2) {
+                // Fendt uses big-endian format
+                int16_t estCurve = (msg.buf[0] << 8) | msg.buf[1];
+                actualRPM = (float)estCurve / 100.0f;  // Store as scaled value
+            }
+        }
     }
 }
 
 void TractorCANDriver::sendFendtCommands() {
-    // TODO: Implement Fendt steering commands
-    // This will send appropriate messages based on targetPWM
+    if (!steerCAN || steerBusNum == 0) return;
+
+    CAN_message_t msg;
+    msg.id = 0x0CEFF02C;  // Fendt steering command ID
+    msg.flags.extended = 1;
+    msg.len = 6;  // Fendt uses 6-byte messages
+
+    // Fixed bytes
+    msg.buf[0] = 0x05;
+    msg.buf[1] = 0x09;
+    msg.buf[3] = 0x0A;
+
+    if (enabled && steerReady) {
+        // Active steering
+        msg.buf[2] = 0x03;  // Steer active
+
+        // Calculate Fendt curve value with offset
+        int16_t fendtCurve = targetPWM - 32128;
+
+        // Big-endian format (MSB first)
+        msg.buf[4] = (fendtCurve >> 8) & 0xFF;
+        msg.buf[5] = fendtCurve & 0xFF;
+    } else {
+        // Inactive steering
+        msg.buf[2] = 0x02;  // Steer inactive
+        msg.buf[4] = 0x00;
+        msg.buf[5] = 0x00;
+    }
+
+    writeCANMessage(steerBusNum, msg);
+}
+
+void TractorCANDriver::processFendtKBusMessage(const CAN_message_t& msg) {
+    // Check for Fendt armrest buttons (0x613 - Standard ID, not extended!)
+    if (msg.id == 0x613 && !msg.flags.extended) {
+        // Check for button state in byte 1
+        bool buttonState = (msg.buf[1] & 0x80) != 0;
+
+        // Check for auto steer active state (disables valve)
+        if (msg.buf[1] == 0x8A && msg.buf[4] == 0x80) {
+            // Auto steer is active on the tractor - set valve not ready
+            if (steerReady) {
+                LOG_INFO(EventSource::AUTOSTEER, "Fendt auto steer active - disabling valve");
+            }
+            steerReady = false;
+        }
+
+        // Track button state changes for autosteer control
+        if (buttonState != fendtButtonPressed) {
+            fendtButtonPressed = buttonState;
+            LOG_INFO(EventSource::AUTOSTEER, "Fendt armrest button %s",
+                     buttonState ? "pressed" : "released");
+        }
+    }
 }
 
 // ===== Valtra Implementation =====

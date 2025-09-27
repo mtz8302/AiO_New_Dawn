@@ -93,12 +93,44 @@ This document contains all CAN message IDs and payloads implemented in the AiO N
 
 ---
 
-## Fendt
+## Fendt SCR/S4/Gen6
 
-### Steering Ready Message (Placeholder)
-- **ID:** `0x0CF02300` (Extended)
+### V_Bus (Steering Control)
+
+#### Valve Status Message
+- **ID:** `0x0CEF2CF0` (Extended)
 - **Direction:** Valve → Controller
-- **Note:** Example ID only - full implementation pending
+- **Data Format:**
+  - Special valve ready detection:
+    - If message length = 3 AND byte 2 = 0: Valve NOT ready
+    - Otherwise: Valve is ready
+  - Bytes 0-1: Steering curve/position (int16, big-endian)
+  - Other bytes: Reserved/Unknown
+
+#### Steering Command
+- **ID:** `0x0CEFF02C` (Extended)
+- **Direction:** Controller → Valve
+- **Length:** 6 bytes (Fendt uses shorter messages)
+- **Data Format:**
+  - Byte 0: 0x05 (Fixed)
+  - Byte 1: 0x09 (Fixed)
+  - Byte 2: State (3 = steer active, 2 = inactive)
+  - Byte 3: 0x0A (Fixed)
+  - Bytes 4-5: Curve value (int16, big-endian)
+  - **Note:** Curve = targetPWM - 32128 (special offset)
+
+### K_Bus (Armrest Control)
+
+#### Armrest Button Message
+- **ID:** `0x613` (Standard - NOT extended!)
+- **Direction:** Armrest → Controller
+- **Data Format:**
+  - Byte 1, Bit 7 (0x80): Button state (toggles autosteer when pressed)
+  - Special state: When Buf[1] = 0x8A AND Buf[4] = 0x80: Auto steer active on tractor (disables valve)
+
+**Note:**
+- Unlike other brands, Fendt K_Bus uses standard CAN IDs (11-bit), not extended
+- The armrest button functions like the physical autosteer button - pressing it toggles between armed/disarmed states
 
 ---
 
