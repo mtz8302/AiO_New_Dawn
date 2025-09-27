@@ -8,18 +8,18 @@
 #include "ConfigManager.h"
 #include "ConfigGlobals.h"
 
-// Tractor brands enumeration
+// Tractor brands enumeration (alphabetized except DISABLED)
 enum class TractorBrand : uint8_t {
     DISABLED = 0,
-    FENDT = 1,
-    VALTRA_MASSEY = 2,
-    CASEIH_NH = 3,
-    FENDT_ONE = 4,
-    CLAAS = 5,
-    JCB = 6,
-    LINDNER = 7,
-    CAT_MT = 8,
-    GENERIC = 9
+    CASEIH_NH = 1,      // Case IH/New Holland
+    CAT_MT = 2,         // CAT MT Series
+    CLAAS = 3,
+    FENDT = 4,          // Fendt SCR/S4/Gen6
+    FENDT_ONE = 5,      // Fendt One
+    GENERIC = 6,        // Generic (Keya)
+    JCB = 7,
+    LINDNER = 8,
+    VALTRA_MASSEY = 9   // Valtra/Massey Ferguson
 };
 
 class TractorCANDriver : public MotorDriverInterface {
@@ -68,6 +68,9 @@ private:
     // Fendt K_Bus tracking
     bool fendtButtonPressed = false;    // Track Fendt armrest button
 
+    // Case IH K_Bus tracking
+    bool caseIHEngaged = false;         // Track Case IH engage state
+
     // Helper methods
     void assignCANBuses();
     void* getBusPointer(uint8_t busNum);
@@ -79,6 +82,8 @@ private:
 
     // Brand-specific message handlers
     void processKeyaMessage(const CAN_message_t& msg);
+    void processCaseIHMessage(const CAN_message_t& msg);
+    void processCaseIHKBusMessage(const CAN_message_t& msg);
     void processFendtMessage(const CAN_message_t& msg);
     void processFendtKBusMessage(const CAN_message_t& msg);
     void processValtraMessage(const CAN_message_t& msg);
@@ -86,6 +91,7 @@ private:
 
     // Brand-specific command senders
     void sendKeyaCommands();
+    void sendCaseIHCommands();
     void sendFendtCommands();
     void sendValtraCommands();
     void sendMasseyF1();
@@ -133,6 +139,9 @@ public:
 
     // Fendt-specific methods
     bool isFendtButtonPressed() const { return fendtButtonPressed; }
+
+    // Case IH-specific methods
+    bool isCaseIHEngaged() const { return caseIHEngaged; }
 };
 
 #endif // TRACTOR_CAN_DRIVER_H

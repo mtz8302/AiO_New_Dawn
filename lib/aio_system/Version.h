@@ -2,7 +2,7 @@
 #define VERSION_H
 
 // AiO New Dawn firmware version
-#define FIRMWARE_VERSION "1.0.65-beta" // Added Fendt SCR/S4/Gen6 CAN support with steering and armrest button control
+#define FIRMWARE_VERSION "1.0.66-beta" // Added Case IH/New Holland CAN support with steering and engage detection
 
 // Teensy board type for OTA identification
 #define TEENSY_BOARD_TYPE "Teensy41"

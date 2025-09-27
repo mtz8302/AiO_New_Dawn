@@ -158,6 +158,9 @@ void TractorCANDriver::processIncomingMessages() {
             } else {
                 // Otherwise process based on brand
                 switch (static_cast<TractorBrand>(config.brand)) {
+                    case TractorBrand::CASEIH_NH:
+                        processCaseIHMessage(msg);
+                        break;
                     case TractorBrand::FENDT:
                     case TractorBrand::FENDT_ONE:
                         processFendtMessage(msg);
@@ -175,6 +178,9 @@ void TractorCANDriver::processIncomingMessages() {
     if (buttonCAN && buttonBusNum > 0 && buttonBusNum != steerBusNum) {
         while (readCANMessage(buttonBusNum, msg)) {
             switch (static_cast<TractorBrand>(config.brand)) {
+                case TractorBrand::CASEIH_NH:
+                    processCaseIHKBusMessage(msg);
+                    break;
                 case TractorBrand::VALTRA_MASSEY:
                     processMasseyKBusMessage(msg);
                     break;
@@ -202,6 +208,9 @@ void TractorCANDriver::sendSteerCommands() {
     } else {
         // Otherwise send based on brand
         switch (static_cast<TractorBrand>(config.brand)) {
+            case TractorBrand::CASEIH_NH:
+                sendCaseIHCommands();
+                break;
             case TractorBrand::FENDT:
             case TractorBrand::FENDT_ONE:
                 sendFendtCommands();
@@ -399,6 +408,87 @@ void TractorCANDriver::processFendtKBusMessage(const CAN_message_t& msg) {
             fendtButtonPressed = buttonState;
             LOG_INFO(EventSource::AUTOSTEER, "Fendt armrest button %s",
                      buttonState ? "pressed" : "released");
+        }
+    }
+}
+
+// ===== Case IH/New Holland Implementation =====
+void TractorCANDriver::processCaseIHMessage(const CAN_message_t& msg) {
+    // Check for valve status message (0x0CACAA08)
+    if (msg.id == 0x0CACAA08 && msg.flags.extended) {
+        // Extract steering curve (little-endian)
+        int16_t estCurve = msg.buf[0] | (msg.buf[1] << 8);
+        actualRPM = (float)estCurve / 100.0f;  // Store as scaled value
+
+        // Check valve ready (byte 2)
+        if (msg.buf[2] != 0) {
+            if (!steerReady) {
+                LOG_INFO(EventSource::AUTOSTEER, "Case IH steering valve ready");
+            }
+            steerReady = true;
+            lastSteerReadyTime = millis();
+        } else {
+            if (steerReady) {
+                LOG_WARNING(EventSource::AUTOSTEER, "Case IH steering valve not ready");
+            }
+            steerReady = false;
+        }
+    }
+}
+
+void TractorCANDriver::sendCaseIHCommands() {
+    // Only send if we have a valid steering bus
+    if (!steerCAN || steerBusNum == 0) return;
+
+    CAN_message_t msg;
+    msg.id = 0x0CAD08AA;  // Case IH steering command ID
+    msg.flags.extended = 1;  // Extended ID (29-bit)
+    msg.len = 8;
+
+    // Convert PWM to Case IH curve value (similar to Valtra)
+    int16_t setCurve = 0;
+    if (enabled && steerReady) {
+        // Scale PWM to curve value
+        setCurve = (int16_t)(targetPWM * 128);  // Scale factor TBD
+    }
+
+    // Build message
+    msg.buf[0] = setCurve & 0xFF;        // Curve low byte
+    msg.buf[1] = (setCurve >> 8) & 0xFF; // Curve high byte
+    msg.buf[2] = enabled ? 253 : 252;    // 253 = steer intent, 252 = no intent
+    msg.buf[3] = 0xFF;  // Case IH uses 0xFF for bytes 3-7
+    msg.buf[4] = 0xFF;
+    msg.buf[5] = 0xFF;
+    msg.buf[6] = 0xFF;
+    msg.buf[7] = 0xFF;
+
+    writeCANMessage(steerBusNum, msg);
+}
+
+void TractorCANDriver::processCaseIHKBusMessage(const CAN_message_t& msg) {
+    // Check for engage message (0x14FF7706)
+    if (msg.id == 0x14FF7706 && msg.flags.extended) {
+        // Two possible engage conditions:
+        // 1) Buf[0] == 130 && Buf[1] == 1
+        // 2) Buf[0] == 178 && Buf[4] == 1
+        bool newEngageState = ((msg.buf[0] == 130 && msg.buf[1] == 1) ||
+                               (msg.buf[0] == 178 && msg.buf[4] == 1));
+
+        if (newEngageState != caseIHEngaged) {
+            caseIHEngaged = newEngageState;
+            LOG_INFO(EventSource::AUTOSTEER, "Case IH engage %s",
+                     caseIHEngaged ? "ON" : "OFF");
+        }
+    }
+
+    // Check for rear hitch information (0x18FE4523)
+    if (msg.id == 0x18FE4523 && msg.flags.extended) {
+        // Byte 0 contains rear hitch pressure status
+        // Log it for future use
+        static uint8_t lastHitchStatus = 0xFF;
+        if (msg.buf[0] != lastHitchStatus) {
+            lastHitchStatus = msg.buf[0];
+            LOG_DEBUG(EventSource::AUTOSTEER, "Case IH rear hitch status: 0x%02X", msg.buf[0]);
         }
     }
 }

@@ -134,6 +134,47 @@ This document contains all CAN message IDs and payloads implemented in the AiO N
 
 ---
 
+## Case IH/New Holland
+
+### V_Bus (Steering Control)
+
+#### Valve Status Message
+- **ID:** `0x0CACAA08` (Extended)
+- **Direction:** Valve → Controller
+- **Data Format:**
+  - Bytes 0-1: Steering curve/position (int16, little-endian)
+  - Byte 2: Valve ready state (0 = not ready, non-zero = ready)
+  - Bytes 3-7: Reserved/Unknown
+
+#### Steering Command
+- **ID:** `0x0CAD08AA` (Extended)
+- **Direction:** Controller → Valve
+- **Data Format:**
+  - Bytes 0-1: Set curve value (int16, little-endian)
+  - Byte 2: Intent flag (253 = steer intent, 252 = no intent)
+  - Bytes 3-7: 0xFF
+
+### K_Bus (Engage/Hitch Control)
+
+#### Engage Message
+- **ID:** `0x14FF7706` (Extended)
+- **Direction:** Tractor → Controller
+- **Data Format:**
+  - Engage conditions (either):
+    - Buf[0] = 130 AND Buf[1] = 1
+    - Buf[0] = 178 AND Buf[4] = 1
+  - **Function:** When engage goes from OFF to ON, toggles autosteer armed/disarmed state
+
+#### Rear Hitch Information
+- **ID:** `0x18FE4523` (Extended)
+- **Direction:** Tractor → Controller
+- **Data Format:**
+  - Byte 0: Rear hitch pressure status
+
+**Note:** Case IH/NH uses Module ID 0xAA in message addressing
+
+---
+
 ## Generic CAN Message Format
 
 ### Extended CAN IDs

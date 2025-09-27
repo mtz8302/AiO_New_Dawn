@@ -187,9 +187,10 @@ void AutosteerProcessor::process() {
     }
     
     // === BUTTON/SWITCH LOGIC ===
-    // Static variable for Massey/Fendt button state tracking (needs to persist across cycles)
+    // Static variable for Massey/Fendt/CaseIH button state tracking (needs to persist across cycles)
     static bool lastMasseyEngageState = false;
     static bool lastFendtButtonState = false;
+    static bool lastCaseIHEngageState = false;
 
     // Debug: log button/switch config periodically
     static uint32_t lastConfigLog = 0;
@@ -205,9 +206,10 @@ void AutosteerProcessor::process() {
             static bool lastButtonReading = HIGH;
             bool buttonReading = adProcessor.isSteerSwitchOn() ? LOW : HIGH;  // Convert to active low
 
-            // Also check Massey K_Bus engage button and Fendt armrest button if using TractorCANDriver
+            // Also check tractor-specific buttons if using TractorCANDriver
             bool masseyEngagePressed = false;
             bool fendtButtonPressed = false;
+            bool caseIHEngagePressed = false;
 
             if (motorPTR && motorPTR->getType() == MotorDriverType::TRACTOR_CAN) {
                 TractorCANDriver* tractorCAN = static_cast<TractorCANDriver*>(motorPTR);
@@ -227,14 +229,24 @@ void AutosteerProcessor::process() {
                     fendtButtonPressed = true;
                 }
                 lastFendtButtonState = currentFendtButton;
+
+                // Check Case IH engage state
+                bool currentCaseIHEngage = tractorCAN->isCaseIHEngaged();
+                // Detect rising edge of Case IH engage (OFF to ON transition)
+                if (currentCaseIHEngage && !lastCaseIHEngageState) {
+                    caseIHEngagePressed = true;
+                }
+                lastCaseIHEngageState = currentCaseIHEngage;
             }
 
-            // Check if either physical button, Massey engage button, or Fendt armrest button was pressed
-            if ((buttonReading == LOW && lastButtonReading == HIGH) || masseyEngagePressed || fendtButtonPressed) {
+            // Check if any button was pressed
+            if ((buttonReading == LOW && lastButtonReading == HIGH) || masseyEngagePressed ||
+                fendtButtonPressed || caseIHEngagePressed) {
                 // Button was just pressed - toggle state
                 steerState = !steerState;
                 const char* buttonType = masseyEngagePressed ? "Massey K_Bus button" :
-                                        fendtButtonPressed ? "Fendt armrest button" : "button";
+                                        fendtButtonPressed ? "Fendt armrest button" :
+                                        caseIHEngagePressed ? "Case IH engage" : "button";
                 LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via %s press",
                          steerState == 0 ? "ARMED" : "DISARMED",
                          buttonType);

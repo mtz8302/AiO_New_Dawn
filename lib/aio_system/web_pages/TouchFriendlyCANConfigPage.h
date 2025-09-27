@@ -157,16 +157,16 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
             <div class="brand-row">
                 <label for="brand">Tractor Brand</label>
                 <select id="brand" name="brand">
-                    <option value="9">Generic</option>
                     <option value="0">Disabled</option>
-                    <option value="1">Fendt SCR/S4/Gen6</option>
-                    <option value="2">Valtra/Massey Ferguson</option>
-                    <option value="3">Case IH/New Holland</option>
-                    <option value="4">Fendt One</option>
-                    <option value="5">Claas</option>
-                    <option value="6">JCB</option>
-                    <option value="7">Lindner</option>
-                    <option value="8">CAT MT Series</option>
+                    <option value="1">Case IH/New Holland</option>
+                    <option value="2">CAT MT Series</option>
+                    <option value="3">Claas</option>
+                    <option value="4">Fendt SCR/S4/Gen6</option>
+                    <option value="5">Fendt One</option>
+                    <option value="6">Generic</option>
+                    <option value="7">JCB</option>
+                    <option value="8">Lindner</option>
+                    <option value="9">Valtra/Massey Ferguson</option>
                 </select>
             </div>
 
@@ -350,69 +350,21 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                 });
         }
 
-        // Brand capabilities definition with bus-specific functions
+        // Brand capabilities definition with bus-specific functions (matches alphabetized enum)
         const brandCapabilities = {
             0: { // Disabled
                 name: 'Disabled',
                 busTypes: {}
             },
-            1: { // Fendt SCR/S4/Gen6
-                name: 'Fendt SCR/S4/Gen6',
-                busTypes: {
-                    'V_Bus': ['steering'],
-                    'K_Bus': ['buttons', 'hitch'],
-                    'ISO_Bus': []
-                }
-            },
-            2: { // Valtra/Massey
-                name: 'Valtra/Massey Ferguson',
-                busTypes: {
-                    'V_Bus': ['steering'],
-                    'K_Bus': ['buttons', 'hitch'],
-                    'ISO_Bus': []
-                }
-            },
-            3: { // Case IH/NH
+            1: { // Case IH/NH
                 name: 'Case IH/New Holland',
                 busTypes: {
                     'V_Bus': ['steering'],
-                    'K_Bus': ['hitch'],
-                    'ISO_Bus': []
-                }
-            },
-            4: { // Fendt One
-                name: 'Fendt One',
-                busTypes: {
-                    'V_Bus': ['steering'],
                     'K_Bus': ['buttons', 'hitch'],
-                    'ISO_Bus': ['steering', 'implement']
-                }
-            },
-            5: { // Claas
-                name: 'Claas',
-                busTypes: {
-                    'V_Bus': ['steering'],
-                    'K_Bus': [],
                     'ISO_Bus': []
                 }
             },
-            6: { // JCB
-                name: 'JCB',
-                busTypes: {
-                    'V_Bus': ['steering'],
-                    'K_Bus': [],
-                    'ISO_Bus': []
-                }
-            },
-            7: { // Lindner
-                name: 'Lindner',
-                busTypes: {
-                    'V_Bus': ['steering'],
-                    'K_Bus': [],
-                    'ISO_Bus': []
-                }
-            },
-            8: { // CAT MT
+            2: { // CAT MT
                 name: 'CAT MT Series',
                 busTypes: {
                     'V_Bus': ['steering'],
@@ -420,7 +372,31 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                     'ISO_Bus': []
                 }
             },
-            9: { // Generic
+            3: { // Claas
+                name: 'Claas',
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': [],
+                    'ISO_Bus': []
+                }
+            },
+            4: { // Fendt SCR/S4/Gen6
+                name: 'Fendt SCR/S4/Gen6',
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': ['buttons', 'hitch'],
+                    'ISO_Bus': []
+                }
+            },
+            5: { // Fendt One
+                name: 'Fendt One',
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': ['buttons', 'hitch'],
+                    'ISO_Bus': ['steering', 'implement']
+                }
+            },
+            6: { // Generic
                 name: 'Generic',
                 busTypes: {
                     'V_Bus': ['steering'],
@@ -429,6 +405,30 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                 },
                 // Special case: Generic brand with bus name "None" shows Keya option
                 allowsKeya: true
+            },
+            7: { // JCB
+                name: 'JCB',
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': [],
+                    'ISO_Bus': []
+                }
+            },
+            8: { // Lindner
+                name: 'Lindner',
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': [],
+                    'ISO_Bus': []
+                }
+            },
+            9: { // Valtra/Massey Ferguson
+                name: 'Valtra/Massey Ferguson',
+                busTypes: {
+                    'V_Bus': ['steering'],
+                    'K_Bus': ['buttons', 'hitch'],
+                    'ISO_Bus': []
+                }
             }
         };
 
@@ -465,7 +465,7 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
             // If bus name is "None", only show functions for brands that support it
             if (busName === 'None') {
                 // Special case: Generic brand with "None" shows Keya option
-                if (brand === 9 && capabilities.allowsKeya) {
+                if (brand === 6 && capabilities.allowsKeya) {
                     const availableFunctions = ['keya'];
                     createFunctionCheckboxes(availableFunctions, container, busNum);
                 }
@@ -594,12 +594,14 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                 }
 
                 // Add brand-specific notes
-                if (brand === 1) { // Fendt
+                if (brand === 1) { // Case IH
+                    infoHtml += '<p>V_Bus for steering • K_Bus for engage button and hitch control</p>';
+                } else if (brand === 4) { // Fendt
                     infoHtml += '<p>K_Bus typically handles buttons and hitch • V_Bus for steering</p>';
-                } else if (brand === 2) { // Valtra
-                    infoHtml += '<p>V_Bus steering only - requires continuous valve ready messages</p>';
-                } else if (brand === 9) { // Generic
+                } else if (brand === 6) { // Generic
                     infoHtml += '<p><strong>Generic Brand:</strong> Use when mixing functions from different brands or using Keya steering</p>';
+                } else if (brand === 9) { // Valtra
+                    infoHtml += '<p>V_Bus steering only - requires continuous valve ready messages</p>';
                 }
             }
 
