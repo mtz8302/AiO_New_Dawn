@@ -72,25 +72,68 @@ void RTCMProcessor::processRTCM(const uint8_t* data, size_t len, const IPAddress
 
 void RTCMProcessor::processRadioRTCM()
 {
+    // Static variables for diagnostic tracking
+    static uint32_t radioByteCount = 0;
+    static uint32_t forwardedByteCount = 0;
+    static uint32_t lastRadioLog = 0;
+    static uint32_t lastDataTime = 0;
+    static bool radioDataActive = false;
+
     // Process RTCM data from radio serial port
     while (SerialRadio.available())
     {
         uint8_t rtcmByte = SerialRadio.read();
-        
+        radioByteCount++;
+        lastDataTime = millis();
+
+        // Mark data stream as active
+        if (!radioDataActive) {
+            radioDataActive = true;
+            LOG_INFO(EventSource::NETWORK, "Radio RTCM data stream started");
+        }
+
         // Forward RTCM to GPS1 (unless bridged)
         if (!SerialManager::getInstance()->isGPS1Bridged())
         {
-            SerialGPS1.write(rtcmByte);
+            // Check if write was successful
+            size_t written = SerialGPS1.write(rtcmByte);
+            if (written > 0) {
+                forwardedByteCount++;
+            } else {
+                LOG_WARNING(EventSource::NETWORK, "Failed to write byte to GPS1 - buffer may be full");
+            }
         }
-        
-        // Note: We could accumulate bytes and pulse LED per complete RTCM frame
-        // For now, pulse periodically to show radio RTCM activity
+
+        // Pulse LED periodically to show radio RTCM activity
         static uint32_t lastPulse = 0;
         if (millis() - lastPulse > 1000) // Pulse every second when receiving
         {
             ledManagerFSM.pulseRTCM();
             lastPulse = millis();
         }
+    }
+
+    // Log radio RTCM statistics periodically
+    if (radioByteCount > 0 && millis() - lastRadioLog > 5000) {
+        lastRadioLog = millis();
+        LOG_INFO(EventSource::NETWORK, "Radio RTCM: %lu bytes received, %lu forwarded to GPS1",
+                 radioByteCount, forwardedByteCount);
+
+        // Check for data loss
+        if (forwardedByteCount < radioByteCount) {
+            LOG_WARNING(EventSource::NETWORK, "Radio RTCM data loss: %lu bytes dropped",
+                        radioByteCount - forwardedByteCount);
+        }
+
+        // Reset counters
+        radioByteCount = 0;
+        forwardedByteCount = 0;
+    }
+
+    // Detect when radio data stream stops
+    if (radioDataActive && millis() - lastDataTime > 10000) {
+        radioDataActive = false;
+        LOG_INFO(EventSource::NETWORK, "Radio RTCM data stream stopped");
     }
 }
 
