@@ -6,6 +6,8 @@ This document contains all CAN message IDs and payloads implemented in the AiO N
 - [Keya Motor](#keya-motor)
 - [Valtra/Massey Ferguson](#valtramassey-ferguson)
 - [Fendt](#fendt)
+- [Case IH/New Holland](#case-ihnew-holland)
+- [CAT MT Series](#cat-mt-series)
 - [Generic CAN Message Format](#generic-can-message-format)
 
 ---
@@ -175,6 +177,40 @@ This document contains all CAN message IDs and payloads implemented in the AiO N
 
 ---
 
+## CAT MT Series
+
+### V_Bus (Steering Control)
+
+#### Curve Data Message
+- **ID:** `0x0FFF9880` (Extended)
+- **Direction:** Valve → Controller
+- **Data Format:**
+  - Bytes 4-5: Steering curve/position (int16, big-endian)
+  - **Valve Ready:** Curve value between 15000-17000 indicates valve is ready
+  - Other bytes: Reserved/Unknown
+
+#### Steering Command
+- **ID:** `0x0EF87F80` (Extended)
+- **Direction:** Controller → Valve
+- **Data Format:**
+  - Bytes 0-1: 0x40, 0x01 (Fixed)
+  - Bytes 2-3: Set curve value (int16, big-endian)
+  - **Note:** Curve = targetPWM - 2048 (special calculation)
+  - Bytes 4-7: 0xFF (Fixed)
+
+### K_Bus (Engage Control)
+
+#### Engage Message
+- **ID:** `0x18F00400` (Extended)
+- **Direction:** Tractor → Controller
+- **Data Format:**
+  - Engage condition: (Buf[0] & 0x0F) == 4
+  - **Function:** When engage goes from OFF to ON, toggles autosteer armed/disarmed state
+
+**Note:** CAT MT uses Module ID 0x1C and big-endian byte ordering for curve values
+
+---
+
 ## Generic CAN Message Format
 
 ### Extended CAN IDs
@@ -195,7 +231,7 @@ All tractor CAN messages use 29-bit extended IDs. When using CAN sniffers or tes
 | Claas | - | - | Steering |
 | JCB | Buttons | - | Steering |
 | Lindner | Buttons | - | Steering |
-| CAT MT | - | - | Steering |
+| CAT MT | Engage | - | Steering |
 | Generic | Keya* | Keya* | Keya* |
 
 *Keya motor can be assigned to any bus when using Generic brand

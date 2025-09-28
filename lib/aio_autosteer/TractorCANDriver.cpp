@@ -168,6 +168,9 @@ void TractorCANDriver::processIncomingMessages() {
                     case TractorBrand::VALTRA_MASSEY:
                         processValtraMessage(msg);
                         break;
+                    case TractorBrand::CAT_MT:
+                        processCATMessage(msg);
+                        break;
                     // Add other brands as needed
                 }
             }
@@ -187,6 +190,9 @@ void TractorCANDriver::processIncomingMessages() {
                 case TractorBrand::FENDT:
                 case TractorBrand::FENDT_ONE:
                     processFendtKBusMessage(msg);
+                    break;
+                case TractorBrand::CAT_MT:
+                    processCATKBusMessage(msg);
                     break;
                 // TODO: Process work switch messages for other brands
             }
@@ -217,6 +223,9 @@ void TractorCANDriver::sendSteerCommands() {
                 break;
             case TractorBrand::VALTRA_MASSEY:
                 sendValtraCommands();
+                break;
+            case TractorBrand::CAT_MT:
+                sendCATCommands();
                 break;
             // Add other brands as needed
         }
@@ -489,6 +498,84 @@ void TractorCANDriver::processCaseIHKBusMessage(const CAN_message_t& msg) {
         if (msg.buf[0] != lastHitchStatus) {
             lastHitchStatus = msg.buf[0];
             LOG_DEBUG(EventSource::AUTOSTEER, "Case IH rear hitch status: 0x%02X", msg.buf[0]);
+        }
+    }
+}
+
+// ===== CAT MT Series Implementation =====
+void TractorCANDriver::processCATMessage(const CAN_message_t& msg) {
+    // Check for curve data message (0x0FFF9880)
+    if (msg.id == 0x0FFF9880 && msg.flags.extended) {
+        // Extract steering curve from bytes 4-5 (big-endian)
+        int16_t estCurve = (msg.buf[4] << 8) | msg.buf[5];
+        actualRPM = (float)estCurve / 100.0f;  // Store as scaled value
+
+        // Check valve ready - curve value between 15000 and 17000
+        if (estCurve >= 15000 && estCurve <= 17000) {
+            if (!steerReady) {
+                LOG_INFO(EventSource::AUTOSTEER, "CAT MT steering valve ready (curve=%d)", estCurve);
+            }
+            steerReady = true;
+            lastSteerReadyTime = millis();
+        } else {
+            if (steerReady) {
+                LOG_WARNING(EventSource::AUTOSTEER, "CAT MT steering valve not ready (curve=%d)", estCurve);
+            }
+            steerReady = false;
+        }
+    }
+}
+
+void TractorCANDriver::sendCATCommands() {
+    // Only send if we have a valid steering bus
+    if (!steerCAN || steerBusNum == 0) return;
+
+    CAN_message_t msg;
+    msg.id = 0x0EF87F80;  // CAT MT steering command ID
+    msg.flags.extended = 1;  // Extended ID (29-bit)
+    msg.len = 8;
+
+    // Convert PWM to CAT curve value with special calculation
+    int16_t setCurve = 0;
+    if (enabled && steerReady) {
+        // Scale PWM to curve value
+        int16_t scaledPWM = (int16_t)(targetPWM * 128);  // Scale factor TBD
+
+        // CAT MT special curve calculation: curve = setCurve - 2048
+        // So to send the desired curve, we need: setCurve = curve + 2048
+        setCurve = scaledPWM + 2048;
+
+        // Handle negative values specially as per documentation
+        if (scaledPWM < 0) {
+            // For negative values, the calculation might be different
+            // Based on the guide's note about "special handling for negatives"
+            setCurve = scaledPWM + 2048;
+        }
+    }
+
+    // Build message
+    msg.buf[0] = 0x40;  // Fixed values for bytes 0-1
+    msg.buf[1] = 0x01;
+    msg.buf[2] = (setCurve >> 8) & 0xFF;  // Curve high byte (big-endian)
+    msg.buf[3] = setCurve & 0xFF;         // Curve low byte
+    msg.buf[4] = 0xFF;  // Fixed 0xFF for bytes 4-7
+    msg.buf[5] = 0xFF;
+    msg.buf[6] = 0xFF;
+    msg.buf[7] = 0xFF;
+
+    writeCANMessage(steerBusNum, msg);
+}
+
+void TractorCANDriver::processCATKBusMessage(const CAN_message_t& msg) {
+    // Check for engage message (0x18F00400)
+    if (msg.id == 0x18F00400 && msg.flags.extended) {
+        // Engage if (Buf[0] & 0x0F) == 4
+        bool newEngageState = ((msg.buf[0] & 0x0F) == 4);
+
+        if (newEngageState != catMTEngaged) {
+            catMTEngaged = newEngageState;
+            LOG_INFO(EventSource::AUTOSTEER, "CAT MT engage %s",
+                     catMTEngaged ? "ON" : "OFF");
         }
     }
 }

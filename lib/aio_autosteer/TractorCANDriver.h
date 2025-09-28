@@ -71,6 +71,9 @@ private:
     // Case IH K_Bus tracking
     bool caseIHEngaged = false;         // Track Case IH engage state
 
+    // CAT MT tracking
+    bool catMTEngaged = false;          // Track CAT MT engage state
+
     // Helper methods
     void assignCANBuses();
     void* getBusPointer(uint8_t busNum);
@@ -88,12 +91,15 @@ private:
     void processFendtKBusMessage(const CAN_message_t& msg);
     void processValtraMessage(const CAN_message_t& msg);
     void processMasseyKBusMessage(const CAN_message_t& msg);
+    void processCATMessage(const CAN_message_t& msg);
+    void processCATKBusMessage(const CAN_message_t& msg);
 
     // Brand-specific command senders
     void sendKeyaCommands();
     void sendCaseIHCommands();
     void sendFendtCommands();
     void sendValtraCommands();
+    void sendCATCommands();
     void sendMasseyF1();
     void sendMasseyF2();
 
@@ -142,6 +148,9 @@ public:
 
     // Case IH-specific methods
     bool isCaseIHEngaged() const { return caseIHEngaged; }
+
+    // CAT MT-specific methods
+    bool isCATMTEngaged() const { return catMTEngaged; }
 };
 
 #endif // TRACTOR_CAN_DRIVER_H

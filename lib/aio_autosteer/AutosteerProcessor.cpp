@@ -191,6 +191,7 @@ void AutosteerProcessor::process() {
     static bool lastMasseyEngageState = false;
     static bool lastFendtButtonState = false;
     static bool lastCaseIHEngageState = false;
+    static bool lastCATMTEngageState = false;
 
     // Debug: log button/switch config periodically
     static uint32_t lastConfigLog = 0;
@@ -210,6 +211,7 @@ void AutosteerProcessor::process() {
             bool masseyEngagePressed = false;
             bool fendtButtonPressed = false;
             bool caseIHEngagePressed = false;
+            bool catMTEngagePressed = false;
 
             if (motorPTR && motorPTR->getType() == MotorDriverType::TRACTOR_CAN) {
                 TractorCANDriver* tractorCAN = static_cast<TractorCANDriver*>(motorPTR);
@@ -237,16 +239,25 @@ void AutosteerProcessor::process() {
                     caseIHEngagePressed = true;
                 }
                 lastCaseIHEngageState = currentCaseIHEngage;
+
+                // Check CAT MT engage state
+                bool currentCATMTEngage = tractorCAN->isCATMTEngaged();
+                // Detect rising edge of CAT MT engage (OFF to ON transition)
+                if (currentCATMTEngage && !lastCATMTEngageState) {
+                    catMTEngagePressed = true;
+                }
+                lastCATMTEngageState = currentCATMTEngage;
             }
 
             // Check if any button was pressed
             if ((buttonReading == LOW && lastButtonReading == HIGH) || masseyEngagePressed ||
-                fendtButtonPressed || caseIHEngagePressed) {
+                fendtButtonPressed || caseIHEngagePressed || catMTEngagePressed) {
                 // Button was just pressed - toggle state
                 steerState = !steerState;
                 const char* buttonType = masseyEngagePressed ? "Massey K_Bus button" :
                                         fendtButtonPressed ? "Fendt armrest button" :
-                                        caseIHEngagePressed ? "Case IH engage" : "button";
+                                        caseIHEngagePressed ? "Case IH engage" :
+                                        catMTEngagePressed ? "CAT MT engage" : "button";
                 LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via %s press",
                          steerState == 0 ? "ARMED" : "DISARMED",
                          buttonType);

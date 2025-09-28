@@ -14,7 +14,7 @@ This document contains complete implementation details for all tractor brands ba
 | 5 | Fendt One | ❌ Not Implemented | ✅ Steering | ✅ Engage (500k) | ✅ Implement |
 | 6 | Lindner | ❌ Not Implemented | ✅ Steering | ✅ Engage | - |
 | 7 | AgOpenGPS | ❌ Not Implemented | ✅ Steering | - | - |
-| 8 | CAT MT Series | ❌ Not Implemented | ✅ Steering | ✅ Engage | - |
+| 8 | CAT MT Series | ✅ Implemented | ✅ Steering | ✅ Engage | - |
 | 9 | Generic (Keya) | ✅ Implemented | - | - | - |
 
 ---
