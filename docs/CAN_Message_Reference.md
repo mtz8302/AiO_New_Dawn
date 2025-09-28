@@ -8,6 +8,7 @@ This document contains all CAN message IDs and payloads implemented in the AiO N
 - [Fendt](#fendt)
 - [Case IH/New Holland](#case-ihnew-holland)
 - [CAT MT Series](#cat-mt-series)
+- [Claas](#claas)
 - [Generic CAN Message Format](#generic-can-message-format)
 
 ---
@@ -211,6 +212,37 @@ This document contains all CAN message IDs and payloads implemented in the AiO N
 
 ---
 
+## Claas
+
+### V_Bus (Steering Control)
+
+#### Valve Status Message
+- **ID:** `0x0CAC1E13` (Extended)
+- **Direction:** Valve → Controller
+- **Data Format:**
+  - Bytes 0-1: Steering curve/position (int16, little-endian)
+  - Byte 2: Valve ready state (0 = not ready, non-zero = ready)
+  - Bytes 3-7: Reserved/Unknown
+
+#### Steering Command
+- **ID:** `0x0CAD131E` (Extended)
+- **Direction:** Controller → Valve
+- **Data Format:**
+  - Bytes 0-1: Set curve value (int16, little-endian)
+  - Byte 2: Intent flag (253 = steer intent, 252 = no intent)
+  - Bytes 3-7: 0xFF
+
+### K_Bus (Engage Control)
+
+#### Engage Message
+- **ID:** `0x18EF1CD2` (Extended)
+- **Direction:** Tractor → Controller
+- **Data Format:**
+  - Engage conditions: Buf[1] == 0x81 OR Buf[1] == 0xF1
+  - **Function:** When engage goes from OFF to ON, toggles autosteer armed/disarmed state
+
+---
+
 ## Generic CAN Message Format
 
 ### Extended CAN IDs
@@ -228,7 +260,7 @@ All tractor CAN messages use 29-bit extended IDs. When using CAN sniffers or tes
 | Valtra/Massey | Buttons, Hitch | - | Steering |
 | Case IH/NH | Hitch | - | Steering |
 | Fendt One | Buttons, Hitch | Steering, Implement | Steering |
-| Claas | - | - | Steering |
+| Claas | Engage | - | Steering |
 | JCB | Buttons | - | Steering |
 | Lindner | Buttons | - | Steering |
 | CAT MT | Engage | - | Steering |

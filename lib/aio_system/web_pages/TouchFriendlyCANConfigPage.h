@@ -376,7 +376,7 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                 name: 'Claas',
                 busTypes: {
                     'V_Bus': ['steering'],
-                    'K_Bus': [],
+                    'K_Bus': ['buttons'],
                     'ISO_Bus': []
                 }
             },

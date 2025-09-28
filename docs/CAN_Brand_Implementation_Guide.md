@@ -6,7 +6,7 @@ This document contains complete implementation details for all tractor brands ba
 
 | Brand # | Name | Status | V_Bus | K_Bus | ISO_Bus |
 |---------|------|--------|-------|-------|---------|
-| 0 | Claas | ❌ Not Implemented | ✅ Steering | ✅ Engage | - |
+| 0 | Claas | ✅ Implemented | ✅ Steering | ✅ Engage | - |
 | 1 | Valtra/Massey Ferguson | ✅ Implemented | ✅ Steering | ✅ Buttons/Hitch | - |
 | 2 | Case IH/New Holland | ❌ Not Implemented | ✅ Steering | ✅ Engage/Hitch | - |
 | 3 | Fendt SCR/S4/Gen6 | ❌ Not Implemented | ✅ Steering | ✅ Buttons | - |

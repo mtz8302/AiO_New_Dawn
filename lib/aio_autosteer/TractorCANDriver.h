@@ -74,6 +74,9 @@ private:
     // CAT MT tracking
     bool catMTEngaged = false;          // Track CAT MT engage state
 
+    // CLAAS tracking
+    bool claasEngaged = false;          // Track CLAAS engage state
+
     // Helper methods
     void assignCANBuses();
     void* getBusPointer(uint8_t busNum);
@@ -93,6 +96,8 @@ private:
     void processMasseyKBusMessage(const CAN_message_t& msg);
     void processCATMessage(const CAN_message_t& msg);
     void processCATKBusMessage(const CAN_message_t& msg);
+    void processClaasMessage(const CAN_message_t& msg);
+    void processClaasKBusMessage(const CAN_message_t& msg);
 
     // Brand-specific command senders
     void sendKeyaCommands();
@@ -100,6 +105,7 @@ private:
     void sendFendtCommands();
     void sendValtraCommands();
     void sendCATCommands();
+    void sendClaasCommands();
     void sendMasseyF1();
     void sendMasseyF2();
 
@@ -151,6 +157,9 @@ public:
 
     // CAT MT-specific methods
     bool isCATMTEngaged() const { return catMTEngaged; }
+
+    // CLAAS-specific methods
+    bool isClaasEngaged() const { return claasEngaged; }
 };
 
 #endif // TRACTOR_CAN_DRIVER_H

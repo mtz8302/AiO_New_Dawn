@@ -171,6 +171,9 @@ void TractorCANDriver::processIncomingMessages() {
                     case TractorBrand::CAT_MT:
                         processCATMessage(msg);
                         break;
+                    case TractorBrand::CLAAS:
+                        processClaasMessage(msg);
+                        break;
                     // Add other brands as needed
                 }
             }
@@ -193,6 +196,9 @@ void TractorCANDriver::processIncomingMessages() {
                     break;
                 case TractorBrand::CAT_MT:
                     processCATKBusMessage(msg);
+                    break;
+                case TractorBrand::CLAAS:
+                    processClaasKBusMessage(msg);
                     break;
                 // TODO: Process work switch messages for other brands
             }
@@ -226,6 +232,9 @@ void TractorCANDriver::sendSteerCommands() {
                 break;
             case TractorBrand::CAT_MT:
                 sendCATCommands();
+                break;
+            case TractorBrand::CLAAS:
+                sendClaasCommands();
                 break;
             // Add other brands as needed
         }
@@ -576,6 +585,73 @@ void TractorCANDriver::processCATKBusMessage(const CAN_message_t& msg) {
             catMTEngaged = newEngageState;
             LOG_INFO(EventSource::AUTOSTEER, "CAT MT engage %s",
                      catMTEngaged ? "ON" : "OFF");
+        }
+    }
+}
+
+// ===== CLAAS Implementation =====
+void TractorCANDriver::processClaasMessage(const CAN_message_t& msg) {
+    // Check for valve status message (0x0CAC1E13)
+    if (msg.id == 0x0CAC1E13 && msg.flags.extended) {
+        // Extract steering curve (little-endian)
+        int16_t estCurve = msg.buf[0] | (msg.buf[1] << 8);
+        actualRPM = (float)estCurve / 100.0f;  // Store as scaled value
+
+        // Check valve ready (byte 2)
+        if (msg.buf[2] != 0) {
+            if (!steerReady) {
+                LOG_INFO(EventSource::AUTOSTEER, "Claas steering valve ready");
+            }
+            steerReady = true;
+            lastSteerReadyTime = millis();
+        } else {
+            if (steerReady) {
+                LOG_WARNING(EventSource::AUTOSTEER, "Claas steering valve not ready");
+            }
+            steerReady = false;
+        }
+    }
+}
+
+void TractorCANDriver::sendClaasCommands() {
+    // Only send if we have a valid steering bus
+    if (!steerCAN || steerBusNum == 0) return;
+
+    CAN_message_t msg;
+    msg.id = 0x0CAD131E;  // Claas steering command ID
+    msg.flags.extended = 1;  // Extended ID (29-bit)
+    msg.len = 8;
+
+    // Convert PWM to Claas curve value (similar to Valtra/Case IH)
+    int16_t setCurve = 0;
+    if (enabled && steerReady) {
+        // Scale PWM to curve value
+        setCurve = (int16_t)(targetPWM * 128);  // Scale factor TBD
+    }
+
+    // Build message
+    msg.buf[0] = setCurve & 0xFF;        // Curve low byte
+    msg.buf[1] = (setCurve >> 8) & 0xFF; // Curve high byte
+    msg.buf[2] = enabled ? 253 : 252;    // 253 = steer intent, 252 = no intent
+    msg.buf[3] = 0xFF;  // Claas uses 0xFF for bytes 3-7
+    msg.buf[4] = 0xFF;
+    msg.buf[5] = 0xFF;
+    msg.buf[6] = 0xFF;
+    msg.buf[7] = 0xFF;
+
+    writeCANMessage(steerBusNum, msg);
+}
+
+void TractorCANDriver::processClaasKBusMessage(const CAN_message_t& msg) {
+    // Check for engage message (0x18EF1CD2)
+    if (msg.id == 0x18EF1CD2 && msg.flags.extended) {
+        // Engage conditions: Buf[1] == 0x81 OR Buf[1] == 0xF1
+        bool newEngageState = (msg.buf[1] == 0x81 || msg.buf[1] == 0xF1);
+
+        if (newEngageState != claasEngaged) {
+            claasEngaged = newEngageState;
+            LOG_INFO(EventSource::AUTOSTEER, "Claas engage %s",
+                     claasEngaged ? "ON" : "OFF");
         }
     }
 }
