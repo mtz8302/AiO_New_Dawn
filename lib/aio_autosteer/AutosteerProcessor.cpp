@@ -682,7 +682,20 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     configManager.saveSteerConfig();
     configManager.saveTurnSensorConfig();  // Also save turn sensor config (includes current threshold)
     LOG_INFO(EventSource::AUTOSTEER, "Steer config saved to EEPROM");
-    
+
+    // Apply encoder settings if changed
+    if (EncoderProcessor::getInstance()) {
+        bool currentEncoderEnabled = EncoderProcessor::getInstance()->isEnabled();
+
+        // Update encoder enable state if changed
+        if (currentEncoderEnabled != shaftEncoder) {
+            EncoderProcessor::getInstance()->updateConfig(
+                (EncoderType)configManager.getEncoderType(), shaftEncoder);
+            LOG_INFO(EventSource::AUTOSTEER, "Encoder %s via PGN 251", shaftEncoder ? "enabled" : "disabled");
+        }
+    }
+
+
     if (motorTypeChanged) {
         LOG_WARNING(EventSource::AUTOSTEER, "Motor type changed - rebooting in 2 seconds...");
         delay(2000);
