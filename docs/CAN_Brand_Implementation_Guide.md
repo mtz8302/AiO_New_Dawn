@@ -8,14 +8,40 @@ This document contains complete implementation details for all tractor brands ba
 |---------|------|--------|-------|-------|---------|
 | 0 | Claas | ✅ Implemented | ✅ Steering | ✅ Engage | - |
 | 1 | Valtra/Massey Ferguson | ✅ Implemented | ✅ Steering | ✅ Buttons/Hitch | - |
-| 2 | Case IH/New Holland | ❌ Not Implemented | ✅ Steering | ✅ Engage/Hitch | - |
-| 3 | Fendt SCR/S4/Gen6 | ❌ Not Implemented | ✅ Steering | ✅ Buttons | - |
+| 2 | Case IH/New Holland | ✅ Implemented | ✅ Steering | ✅ Engage/Hitch | - |
+| 3 | Fendt SCR/S4/Gen6 | ✅ Implemented | ✅ Steering | ✅ Buttons | - |
 | 4 | JCB | ❌ Not Implemented | ✅ Steering | ✅ Engage | - |
 | 5 | Fendt One | ❌ Not Implemented | ✅ Steering | ✅ Engage (500k) | ✅ Implement |
 | 6 | Lindner | ❌ Not Implemented | ✅ Steering | ✅ Engage | - |
 | 7 | AgOpenGPS | ❌ Not Implemented | ✅ Steering | - | - |
 | 8 | CAT MT Series | ✅ Implemented | ✅ Steering | ✅ Engage | - |
 | 9 | Generic (Keya) | ✅ Implemented | - | - | - |
+
+---
+
+## Future Enhancements
+
+### J1939 GPS Data Broadcasting
+- **PGN 65267**: Broadcast pivot position (lat/lon) for smart implements
+- **PGN 129029**: Broadcast comprehensive GPS data (position, altitude, fix, satellites, HDOP/PDOP)
+- Use case: Implements with their own controllers that need position data
+
+### Hitch/Implement Status
+- **ISO PGN 65093**: Standard ISO 11783 rear hitch data
+- **Hitch Pressure Work State**: Use pressure readings to detect implement up/down
+  - Case IH: Message 0x18FE4523 (currently only logged)
+  - Could provide automatic work state detection
+
+### Additional Button Functionality
+- **Fendt**: Add "Go" and "End" button support (currently only armrest button)
+- **Claas**: Add CSM1/CSM2 button support
+- **All Brands**: Expand headland management capabilities
+
+### Implementation Priority
+1. Complete all remaining tractor brands first
+2. Add hitch status/work state detection
+3. Implement J1939 GPS broadcasting (if needed for smart implements)
+4. Expand button functionality for existing brands
 
 ---
 
