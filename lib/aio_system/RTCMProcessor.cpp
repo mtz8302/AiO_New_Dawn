@@ -79,30 +79,21 @@ void RTCMProcessor::processRadioRTCM()
     static uint32_t lastDataTime = 0;
     static bool radioDataActive = false;
 
-    // Process RTCM data from radio serial port
-    while (SerialRadio.available())
+    // Simple direct forwarding - exactly like the working test code
+    if (SerialRadio.available())
     {
-        uint8_t rtcmByte = SerialRadio.read();
-        radioByteCount++;
-        lastDataTime = millis();
-
-        // Mark data stream as active
+        // Track activity
         if (!radioDataActive) {
             radioDataActive = true;
             LOG_INFO(EventSource::NETWORK, "Radio RTCM data stream started");
         }
 
-        // Forward RTCM to GPS1 (unless bridged)
-        if (!SerialManager::getInstance()->isGPS1Bridged())
-        {
-            // Check if write was successful
-            size_t written = SerialGPS1.write(rtcmByte);
-            if (written > 0) {
-                forwardedByteCount++;
-            } else {
-                LOG_WARNING(EventSource::NETWORK, "Failed to write byte to GPS1 - buffer may be full");
-            }
-        }
+        lastDataTime = millis();
+
+        // Forward one byte per call - exactly like tester's working code
+        SerialGPS1.write(SerialRadio.read());
+        radioByteCount++;
+        forwardedByteCount++;
 
         // Pulse LED periodically to show radio RTCM activity
         static uint32_t lastPulse = 0;
