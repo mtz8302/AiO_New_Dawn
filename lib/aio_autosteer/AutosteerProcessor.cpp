@@ -751,6 +751,9 @@ void AutosteerProcessor::handleSteerSettings(uint8_t pgn, const uint8_t* data, s
     configManager.setAckermanFix(ackermanFix);
     configManager.saveSteerSettings();
     LOG_INFO(EventSource::AUTOSTEER, "Steer settings saved to EEPROM");
+
+    // Log confirmation that settings are now active
+    LOG_INFO(EventSource::AUTOSTEER, "Settings now active - no reboot required. Motor will use new PWM values immediately.");
 }
 
 void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_t len) {
@@ -1024,6 +1027,17 @@ void AutosteerProcessor::updateMotorControl() {
     uint8_t kp = configManager.getKp();
     uint8_t highPWM = configManager.getHighPWM();
     uint8_t minPWM = configManager.getMinPWM();
+
+    // Debug log to verify settings are being read
+    static uint32_t lastSettingsVerifyLog = 0;
+    static uint8_t lastKp = 0;
+    static uint8_t lastHighPWM = 0;
+    if (millis() - lastSettingsVerifyLog > 5000 || kp != lastKp || highPWM != lastHighPWM) {
+        lastSettingsVerifyLog = millis();
+        lastKp = kp;
+        lastHighPWM = highPWM;
+        LOG_INFO(EventSource::AUTOSTEER, "Active PWM settings: Kp=%d, highPWM=%d, minPWM=%d", kp, highPWM, minPWM);
+    }
     
     // Calculate base PWM output (error * Kp)
     int16_t pValue = kp * angleError;
