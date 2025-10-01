@@ -356,13 +356,14 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
     </script>
 </head>
 <body>
-    <div class="header">
-        <h1>📋 Log Viewer</h1>
-    </div>
-
     <div class="container">
-        <div class="nav-button">
-            <button class="big-button" onclick="location.href='/'">← Home</button>
+        <h1>Live Log Viewer</h1>
+
+        <div class="nav-buttons">
+            <button type="button" class="touch-button" style="background: #7f8c8d;"
+                    onclick="window.location.href='/'">
+                Back to Home
+            </button>
         </div>
 
         <div class="stats" id="stats">Loading...</div>
