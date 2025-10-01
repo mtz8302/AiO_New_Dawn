@@ -429,57 +429,62 @@ void SimpleWebManager::handleLogViewerData(EthernetClient& client) {
     size_t head = logger->getLogBufferHead();
     const LogEntry* buffer = logger->getLogBuffer();
 
-    // Build JSON response manually to avoid size issues
-    String json = "{\"logs\":[";
+    // Send response headers manually for chunked streaming
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: application/json");
+    client.println("Connection: close");
+    client.println();
+
+    // Stream JSON directly to client
+    client.print("{\"logs\":[");
 
     // Read from oldest to newest (circular buffer)
     size_t bufferSize = logger->getLogBufferSize();
     size_t start = (count < bufferSize) ? 0 : head;
+
     for (size_t i = 0; i < count; i++) {
         size_t index = (start + i) % bufferSize;
         const LogEntry& entry = buffer[index];
 
-        if (i > 0) json += ",";
+        if (i > 0) client.print(",");
 
-        json += "{\"timestamp\":";
-        json += entry.timestamp;
-        json += ",\"severity\":";
-        json += static_cast<uint8_t>(entry.severity);
-        json += ",\"source\":";
-        json += static_cast<uint8_t>(entry.source);
-        json += ",\"message\":\"";
+        client.print("{\"timestamp\":");
+        client.print(entry.timestamp);
+        client.print(",\"severity\":");
+        client.print(static_cast<uint8_t>(entry.severity));
+        client.print(",\"source\":");
+        client.print(static_cast<uint8_t>(entry.source));
+        client.print(",\"message\":\"");
 
         // Properly escape JSON special characters
         const char* msg = entry.message;
         for (size_t j = 0; msg[j] != '\0'; j++) {
             char c = msg[j];
             switch (c) {
-                case '"':  json += "\\\""; break;
-                case '\\': json += "\\\\"; break;
-                case '\n': json += "\\n"; break;
-                case '\r': json += "\\r"; break;
-                case '\t': json += "\\t"; break;
-                case '\b': json += "\\b"; break;
-                case '\f': json += "\\f"; break;
+                case '"':  client.print("\\\""); break;
+                case '\\': client.print("\\\\"); break;
+                case '\n': client.print("\\n"); break;
+                case '\r': client.print("\\r"); break;
+                case '\t': client.print("\\t"); break;
+                case '\b': client.print("\\b"); break;
+                case '\f': client.print("\\f"); break;
                 default:
-                    if (c < 32) {
-                        // Control characters - skip them
-                    } else {
-                        json += c;
+                    if (c >= 32 && c < 127) {
+                        client.print(c);
                     }
+                    // Skip control chars and non-ASCII
                     break;
             }
         }
 
-        json += "\",\"severityName\":\"";
-        json += logger->severityToString(entry.severity);
-        json += "\",\"sourceName\":\"";
-        json += logger->sourceToString(entry.source);
-        json += "\"}";
+        client.print("\",\"severityName\":\"");
+        client.print(logger->severityToString(entry.severity));
+        client.print("\",\"sourceName\":\"");
+        client.print(logger->sourceToString(entry.source));
+        client.print("\"}");
     }
 
-    json += "]}";
-    SimpleHTTPServer::sendJSON(client, json);
+    client.print("]}");
 }
 
 void SimpleWebManager::handleNetworkConfig(EthernetClient& client, const String& method) {
