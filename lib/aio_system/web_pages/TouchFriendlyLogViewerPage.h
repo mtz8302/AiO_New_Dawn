@@ -363,8 +363,6 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
 </head>
 <body>
     <div class="container">
-        <h1>Live Log Viewer</h1>
-
         <div class="stats" id="stats">Loading...</div>
 
         <div class="controls">
@@ -375,15 +373,13 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
         </div>
 
         <div class="filter-bar">
-            <h3 style="margin-top: 0;">Filter by Severity</h3>
+            <h3 style="margin-top: 0;">Filter By</h3>
             <div class="filter-row">
                 <button class="filter-btn severity-filter-btn" data-severity="3" onclick="setSeverityFilter(3)">ERROR</button>
                 <button class="filter-btn severity-filter-btn" data-severity="4" onclick="setSeverityFilter(4)">WARN</button>
                 <button class="filter-btn severity-filter-btn" data-severity="6" onclick="setSeverityFilter(6)">INFO</button>
                 <button class="filter-btn severity-filter-btn" data-severity="7" onclick="setSeverityFilter(7)">DEBUG</button>
             </div>
-
-            <h3>Filter by Source</h3>
             <div class="filter-row">
                 <button class="filter-btn small source-filter-btn" data-source="0" onclick="setSourceFilter(0)">SYS</button>
                 <button class="filter-btn small source-filter-btn" data-source="1" onclick="setSourceFilter(1)">NET</button>
