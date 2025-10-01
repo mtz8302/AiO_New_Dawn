@@ -424,10 +424,17 @@ void SimpleWebManager::handleEventLoggerConfig(EthernetClient& client, const Str
 void SimpleWebManager::handleLogViewerData(EthernetClient& client) {
     EventLogger* logger = EventLogger::getInstance();
 
-    // Get log buffer info
+    // Get log buffer info - capture snapshot to avoid race conditions
+    __disable_irq();  // Disable interrupts briefly
     size_t count = logger->getLogBufferCount();
     size_t head = logger->getLogBufferHead();
+    size_t bufferSize = logger->getLogBufferSize();
+
+    // Copy buffer entries to avoid corruption during output
+    LogEntry snapshot[100];
     const LogEntry* buffer = logger->getLogBuffer();
+    memcpy(snapshot, buffer, sizeof(snapshot));
+    __enable_irq();  // Re-enable interrupts
 
     // Send response headers manually for chunked streaming
     client.println("HTTP/1.1 200 OK");
@@ -439,12 +446,11 @@ void SimpleWebManager::handleLogViewerData(EthernetClient& client) {
     client.print("{\"logs\":[");
 
     // Read from oldest to newest (circular buffer)
-    size_t bufferSize = logger->getLogBufferSize();
     size_t start = (count < bufferSize) ? 0 : head;
 
     for (size_t i = 0; i < count; i++) {
         size_t index = (start + i) % bufferSize;
-        const LogEntry& entry = buffer[index];
+        const LogEntry& entry = snapshot[index];
 
         if (i > 0) client.print(",");
 
