@@ -2,7 +2,7 @@
 #define VERSION_H
 
 // AiO New Dawn firmware version
-#define FIRMWARE_VERSION "1.0.68-beta" // Added CLAAS CAN support with steering and engage detection
+#define FIRMWARE_VERSION "1.0.69-beta" // Add Keya option to CAN config web UI dropdowns
 
 // Teensy board type for OTA identification
 #define TEENSY_BOARD_TYPE "Teensy41"

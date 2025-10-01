@@ -179,9 +179,10 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                     </select>
                     <select id="can1Name" class="bus-name-select">
                         <option value="0">None</option>
-                        <option value="1">V_Bus</option>
-                        <option value="2">K_Bus</option>
-                        <option value="3">ISO_Bus</option>
+                        <option value="1">Keya</option>
+                        <option value="2">V_Bus</option>
+                        <option value="3">K_Bus</option>
+                        <option value="4">ISO_Bus</option>
                     </select>
                     <div class="function-checkboxes" id="can1Functions">
                         <!-- Dynamically populated based on brand and bus name -->
@@ -203,9 +204,10 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                     </select>
                     <select id="can2Name" class="bus-name-select">
                         <option value="0">None</option>
-                        <option value="1">V_Bus</option>
-                        <option value="2">K_Bus</option>
-                        <option value="3">ISO_Bus</option>
+                        <option value="1">Keya</option>
+                        <option value="2">V_Bus</option>
+                        <option value="3">K_Bus</option>
+                        <option value="4">ISO_Bus</option>
                     </select>
                     <div class="function-checkboxes" id="can2Functions">
                         <!-- Dynamically populated based on brand and bus name -->
@@ -227,9 +229,10 @@ const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[] PROGMEM = R"rawliteral(
                     </select>
                     <select id="can3Name" class="bus-name-select">
                         <option value="0">None</option>
-                        <option value="1">V_Bus</option>
-                        <option value="2">K_Bus</option>
-                        <option value="3">ISO_Bus</option>
+                        <option value="1">Keya</option>
+                        <option value="2">V_Bus</option>
+                        <option value="3">K_Bus</option>
+                        <option value="4">ISO_Bus</option>
                     </select>
                     <div class="function-checkboxes" id="can3Functions">
                         <!-- Dynamically populated based on brand and bus name -->
