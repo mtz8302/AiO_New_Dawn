@@ -44,6 +44,12 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
             transition: all 0.3s;
         }
 
+        .filter-btn.small {
+            min-width: 70px;
+            padding: 10px 8px;
+            font-size: 14px;
+        }
+
         .filter-btn.active {
             background: #3498db;
             color: white;
@@ -359,19 +365,13 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
     <div class="container">
         <h1>Live Log Viewer</h1>
 
-        <div class="nav-buttons">
-            <button type="button" class="touch-button" style="background: #7f8c8d;"
-                    onclick="window.location.href='/'">
-                Back to Home
-            </button>
-        </div>
-
         <div class="stats" id="stats">Loading...</div>
 
         <div class="controls">
+            <button class="control-btn" style="background: #7f8c8d;" onclick="window.location.href='/'">🏠 Home</button>
             <button class="control-btn refresh-btn" id="pauseBtn" onclick="togglePause()">⏸️ Pause</button>
-            <button class="control-btn auto-refresh-btn" id="autoRefreshBtn">🔴 Disconnected</button>
-            <button class="control-btn clear-btn" onclick="clearFilters()">✖ Clear Filters</button>
+            <button class="control-btn auto-refresh-btn" id="autoRefreshBtn">🔴 Live</button>
+            <button class="control-btn clear-btn" onclick="clearFilters()">✖ Clear</button>
         </div>
 
         <div class="filter-bar">
@@ -385,16 +385,14 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
 
             <h3>Filter by Source</h3>
             <div class="filter-row">
-                <button class="filter-btn source-filter-btn" data-source="0" onclick="setSourceFilter(0)">SYS</button>
-                <button class="filter-btn source-filter-btn" data-source="1" onclick="setSourceFilter(1)">NET</button>
-                <button class="filter-btn source-filter-btn" data-source="2" onclick="setSourceFilter(2)">GNSS</button>
-                <button class="filter-btn source-filter-btn" data-source="3" onclick="setSourceFilter(3)">IMU</button>
-            </div>
-            <div class="filter-row">
-                <button class="filter-btn source-filter-btn" data-source="4" onclick="setSourceFilter(4)">STEER</button>
-                <button class="filter-btn source-filter-btn" data-source="5" onclick="setSourceFilter(5)">MACH</button>
-                <button class="filter-btn source-filter-btn" data-source="6" onclick="setSourceFilter(6)">CAN</button>
-                <button class="filter-btn source-filter-btn" data-source="8" onclick="setSourceFilter(8)">USER</button>
+                <button class="filter-btn small source-filter-btn" data-source="0" onclick="setSourceFilter(0)">SYS</button>
+                <button class="filter-btn small source-filter-btn" data-source="1" onclick="setSourceFilter(1)">NET</button>
+                <button class="filter-btn small source-filter-btn" data-source="2" onclick="setSourceFilter(2)">GNSS</button>
+                <button class="filter-btn small source-filter-btn" data-source="3" onclick="setSourceFilter(3)">IMU</button>
+                <button class="filter-btn small source-filter-btn" data-source="4" onclick="setSourceFilter(4)">STEER</button>
+                <button class="filter-btn small source-filter-btn" data-source="5" onclick="setSourceFilter(5)">MACH</button>
+                <button class="filter-btn small source-filter-btn" data-source="6" onclick="setSourceFilter(6)">CAN</button>
+                <button class="filter-btn small source-filter-btn" data-source="8" onclick="setSourceFilter(8)">USER</button>
             </div>
         </div>
 
