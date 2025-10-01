@@ -232,10 +232,23 @@ void IMUProcessor::processBNO085Data()
     // Update current data if valid
     if (bnoParser->isDataValid())
     {
+        extern ConfigManager configManager;
+
         // Update current data
         currentData.heading = bnoParser->getYaw();
-        currentData.pitch = bnoParser->getPitch();
-        currentData.roll = bnoParser->getRoll();
+
+        // Apply scaling (x10) and Y-axis swap if configured
+        // Y-axis swap is needed for some mounting orientations
+        if (configManager.getIsUseYAxis()) {
+            // Swap pitch and roll axes
+            currentData.pitch = 10.0f * bnoParser->getRoll();
+            currentData.roll = 10.0f * bnoParser->getPitch();
+        } else {
+            // Normal orientation
+            currentData.pitch = 10.0f * bnoParser->getPitch();
+            currentData.roll = 10.0f * bnoParser->getRoll();
+        }
+
         currentData.yawRate = bnoParser->getYawRate();
         currentData.quality = bnoParser->isActive() ? 10 : 0;
         currentData.timestamp = millis();

@@ -644,6 +644,7 @@ void AutosteerProcessor::handleSteerConfig(uint8_t pgn, const uint8_t* data, siz
     configManager.setPulseCountMax(pulseCountMax);
     configManager.setMinSpeed(minSpeed);
     configManager.setMotorDriverConfig(motorDriverConfig);
+    configManager.setIsUseYAxis(isUseYAxis);  // Save Y-axis swap setting for IMU
     
     // Note: Sensor configuration updates would go here if we want dynamic changes
     // For now, sensor changes require reboot to ensure clean state

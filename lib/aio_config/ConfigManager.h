@@ -63,6 +63,7 @@ private:
     uint8_t raiseTime;
     uint8_t lowerTime;
     bool isPinActiveHigh;
+    bool sectionControlSleepMode;  // If true, onboard SC goes silent when external SC detected
     uint8_t user1;
     uint8_t user2;
     uint8_t user3;
@@ -218,6 +219,8 @@ public:
     void setLowerTime(uint8_t value) { lowerTime = value; }
     bool getIsPinActiveHigh() const { return isPinActiveHigh; }
     void setIsPinActiveHigh(bool value) { isPinActiveHigh = value; }
+    bool getSectionControlSleepMode() const { return sectionControlSleepMode; }
+    void setSectionControlSleepMode(bool value) { sectionControlSleepMode = value; }
     uint8_t getUser1() const { return user1; }
     void setUser1(uint8_t value) { user1 = value; }
     uint8_t getUser2() const { return user2; }

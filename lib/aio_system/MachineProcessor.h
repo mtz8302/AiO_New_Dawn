@@ -89,6 +89,9 @@ public:
     void setPinLow(uint8_t pin);
     void setPinPWM(uint8_t pin, uint16_t pwmValue);  // For Danfoss valve control
     bool checkPCA9685();
+
+    // Section control sleep mode detection
+    bool isOnboardSectionControlActive() const;  // Returns true if onboard SC should respond
 };
 
 extern MachineProcessor machineProcessor;

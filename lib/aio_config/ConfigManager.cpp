@@ -235,6 +235,8 @@ void ConfigManager::saveMachineConfig()
         machineConfigByte |= 0x02;
     if (isPinActiveHigh)
         machineConfigByte |= 0x04;
+    if (sectionControlSleepMode)
+        machineConfigByte |= 0x08;
 
     EEPROM.put(addr, machineConfigByte);
     addr += sizeof(machineConfigByte);
@@ -280,6 +282,7 @@ void ConfigManager::loadMachineConfig()
     hydraulicLift = (machineConfigByte & 0x01) != 0;
     tramlineControl = (machineConfigByte & 0x02) != 0;
     isPinActiveHigh = (machineConfigByte & 0x04) != 0;
+    sectionControlSleepMode = (machineConfigByte & 0x08) != 0;
 }
 
 void ConfigManager::saveKWASConfig()
@@ -446,6 +449,7 @@ void ConfigManager::resetToDefaults()
     raiseTime = 2;
     lowerTime = 4;
     isPinActiveHigh = false;
+    sectionControlSleepMode = false;  // Default: onboard SC always active
     user1 = 0;
     user2 = 0;
     user3 = 0;

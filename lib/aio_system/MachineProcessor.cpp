@@ -329,7 +329,13 @@ void MachineProcessor::handleBroadcastPGN(uint8_t pgn, const uint8_t* data, size
         LOG_ERROR(EventSource::MACHINE, "No instance for broadcast PGN!");
         return;
     }
-    
+
+    // Check if onboard section control should respond
+    if (!instance->isOnboardSectionControlActive()) {
+        // Sleep mode active - don't respond to hello or scan requests
+        return;
+    }
+
     if (pgn == 200) {
         
         uint8_t helloReply[] = {
@@ -442,8 +448,14 @@ void MachineProcessor::handlePGN239(uint8_t pgn, const uint8_t* data, size_t len
     
     if (len >= 8) {
         // Extract section states from bytes 11 & 12 (array indices 6 & 7)
-        uint16_t sectionStates = data[6] | (data[7] << 8);
-        
+        // If in sleep mode, ignore external section control commands
+        uint16_t sectionStates;
+        if (instance->isOnboardSectionControlActive()) {
+            sectionStates = data[6] | (data[7] << 8);
+        } else {
+            sectionStates = 0;  // Sleep mode - turn off all sections
+        }
+
         // Track if any states changed
         bool statesChanged = false;
         
@@ -832,5 +844,22 @@ void MachineProcessor::loadMachineConfig() {
     // This method is no longer needed - all machine config is now loaded
     // through ConfigManager::loadMachineConfig()
     LOG_DEBUG(EventSource::MACHINE, "loadMachineConfig() deprecated - use ConfigManager");
+}
+
+bool MachineProcessor::isOnboardSectionControlActive() const {
+    // Check if section control sleep mode is enabled
+    if (!configManager.getSectionControlSleepMode()) {
+        return true;  // Sleep mode disabled - always active
+    }
+
+    // Sleep mode enabled - check for external section control activity
+    // External SC is detected if we've recently received PGN 239 from a non-zero source
+    // This is a simple heuristic: if PGN 239 comes from external source, we sleep
+    // Note: This could be enhanced to track source IPs or have explicit wake/sleep commands
+
+    // For now, sleep mode with this simple check:
+    // If sleep mode is enabled, we assume external SC may be active
+    // In practice, users would enable this setting when they have external SC
+    return false;  // Sleep when enabled (external SC assumed active)
 }
 
