@@ -5,6 +5,9 @@
 #include <vector>
 #include <cstdarg>
 
+// Forward declaration to avoid circular dependency
+class LogWebSocket;
+
 // Event severity levels (following syslog standards)
 enum class EventSeverity : uint8_t {
     EMERGENCY = 0,  // System is unusable
@@ -123,6 +126,9 @@ private:
     // Add entry to circular buffer
     void addToBuffer(EventSeverity severity, EventSource source, const char* message);
 
+    // WebSocket for real-time log streaming
+    LogWebSocket* logWebSocket;
+
 public:
     ~EventLogger();
     
@@ -192,6 +198,10 @@ public:
     const LogEntry* getLogBuffer() const { return logBuffer; }
     size_t getLogBufferHead() const { return logBufferHead; }
     size_t getLogBufferSize() const { return LOG_BUFFER_SIZE; }
+
+    // WebSocket management
+    void setLogWebSocket(LogWebSocket* ws) { logWebSocket = ws; }
+    LogWebSocket* getLogWebSocket() const { return logWebSocket; }
 };
 
 // Convenience macros for common logging patterns

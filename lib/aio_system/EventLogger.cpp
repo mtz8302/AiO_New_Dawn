@@ -1,4 +1,5 @@
 #include "EventLogger.h"
+#include "LogWebSocket.h"
 #include "EEPROMLayout.h"
 #include "EEPROM.h"
 #include "QNetworkBase.h"
@@ -23,14 +24,17 @@ EventLogger* EventLogger::instance = nullptr;
 
 EventLogger::EventLogger() {
     loadConfig();
-    
+
+    // Initialize WebSocket pointer
+    logWebSocket = nullptr;
+
     // Initialize token buckets
     uint32_t now = millis();
     for (int i = 0; i < 8; i++) {
         buckets[i].tokens = maxMessagesPerSecond[i];
         buckets[i].lastRefillTime = now;
     }
-    
+
     // Initialize UDP socket for syslog
     // QNEthernet UDP sockets don't need explicit begin() call
     // They are initialized on first use
@@ -345,6 +349,11 @@ void EventLogger::addToBuffer(EventSeverity severity, EventSource source, const 
     // Truncate message to fit buffer
     strncpy(entry.message, message, sizeof(entry.message) - 1);
     entry.message[sizeof(entry.message) - 1] = '\0';
+
+    // Broadcast to WebSocket clients if available
+    if (logWebSocket) {
+        logWebSocket->broadcastLog(entry.timestamp, severity, source, entry.message);
+    }
 
     // Advance head pointer
     logBufferHead = (logBufferHead + 1) % LOG_BUFFER_SIZE;

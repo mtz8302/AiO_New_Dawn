@@ -168,8 +168,8 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
     </style>
     <script>
         let logs = [];
-        let autoRefresh = false;
-        let refreshInterval = null;
+        let ws = null;
+        let reconnectTimer = null;
 
         // Filters
         let severityFilter = -1;  // -1 = all
@@ -187,16 +187,63 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
             return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`;
         }
 
-        function loadLogs() {
-            fetch('/api/logs/data')
-            .then(response => response.json())
-            .then(data => {
-                logs = data.logs;
-                renderLogs();
-            })
-            .catch(error => {
-                console.error('Error loading logs:', error);
-            });
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) return;
+
+            const wsUrl = 'ws://' + window.location.hostname + ':8083';
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                document.getElementById('autoRefreshBtn').textContent = '🟢 Live';
+                document.getElementById('autoRefreshBtn').classList.add('active');
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                document.getElementById('autoRefreshBtn').textContent = '🔴 Disconnected';
+                document.getElementById('autoRefreshBtn').classList.remove('active');
+                ws = null;
+                // Auto-reconnect after 3 seconds
+                reconnectTimer = setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    if (data.type === 'history') {
+                        // Initial history load
+                        logs = data.logs;
+                    } else {
+                        // Single log entry
+                        logs.push(data);
+                        // Keep only last 100 logs
+                        if (logs.length > 100) {
+                            logs.shift();
+                        }
+                    }
+
+                    renderLogs();
+                } catch (error) {
+                    console.error('Error parsing log message:', error);
+                }
+            };
+        }
+
+        function disconnectWebSocket() {
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
         }
 
         function renderLogs() {
@@ -264,21 +311,11 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
             renderLogs();
         }
 
-        function toggleAutoRefresh() {
-            autoRefresh = !autoRefresh;
-            const btn = document.getElementById('autoRefreshBtn');
-
-            if (autoRefresh) {
-                btn.classList.add('active');
-                btn.textContent = 'Auto: ON';
-                refreshInterval = setInterval(loadLogs, 2000);  // Refresh every 2 seconds
+        function toggleConnection() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                disconnectWebSocket();
             } else {
-                btn.classList.remove('active');
-                btn.textContent = 'Auto: OFF';
-                if (refreshInterval) {
-                    clearInterval(refreshInterval);
-                    refreshInterval = null;
-                }
+                connectWebSocket();
             }
         }
 
@@ -293,9 +330,14 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
             renderLogs();
         }
 
-        // Load logs on page load
+        // Connect WebSocket on page load
         window.addEventListener('DOMContentLoaded', function() {
-            loadLogs();
+            connectWebSocket();
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            disconnectWebSocket();
         });
     </script>
 </head>
@@ -312,8 +354,7 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
         <div class="stats" id="stats">Loading...</div>
 
         <div class="controls">
-            <button class="control-btn refresh-btn" onclick="loadLogs()">🔄 Refresh</button>
-            <button class="control-btn auto-refresh-btn" id="autoRefreshBtn" onclick="toggleAutoRefresh()">Auto: OFF</button>
+            <button class="control-btn auto-refresh-btn" id="autoRefreshBtn" onclick="toggleConnection()">🔴 Disconnected</button>
             <button class="control-btn clear-btn" onclick="clearFilters()">✖ Clear Filters</button>
         </div>
 

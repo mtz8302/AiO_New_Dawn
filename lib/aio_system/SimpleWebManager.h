@@ -9,6 +9,7 @@
 #include <QNEthernet.h>
 #include "SimpleHTTPServer.h"
 #include "SimpleWebSocket.h"
+#include "LogWebSocket.h"
 #include "Version.h"
 #include "EEPROMLayout.h"
 
@@ -41,6 +42,7 @@ public:
 private:
     SimpleHTTPServer httpServer;
     SimpleWebSocketServer telemetryWS;
+    LogWebSocket logWS;
     bool isRunning;
     WebLanguage currentLanguage;
     bool systemReady;

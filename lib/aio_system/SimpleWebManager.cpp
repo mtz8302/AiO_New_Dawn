@@ -70,7 +70,15 @@ bool SimpleWebManager::begin(uint16_t port) {
     if (!telemetryWS.begin(8082)) {
         LOG_WARNING(EventSource::NETWORK, "Failed to start WebSocket telemetry server");
     }
-    
+
+    // Start Log WebSocket server on port 8083
+    if (!logWS.begin(8083)) {
+        LOG_WARNING(EventSource::NETWORK, "Failed to start Log WebSocket server");
+    } else {
+        // Connect LogWebSocket to EventLogger
+        EventLogger::getInstance()->setLogWebSocket(&logWS);
+    }
+
     isRunning = true;
     
     IPAddress ip = Ethernet.localIP();
@@ -82,6 +90,10 @@ bool SimpleWebManager::begin(uint16_t port) {
 
 void SimpleWebManager::stop() {
     if (isRunning) {
+        // Disconnect LogWebSocket from EventLogger
+        EventLogger::getInstance()->setLogWebSocket(nullptr);
+
+        logWS.stop();
         telemetryWS.stop();
         httpServer.stop();
         isRunning = false;
@@ -93,6 +105,7 @@ void SimpleWebManager::handleClient() {
     // Now called by SimpleScheduler at 100Hz
     httpServer.handleClient();
     telemetryWS.handleClients();
+    logWS.handleClient();
 }
 
 void SimpleWebManager::setupRoutes() {
