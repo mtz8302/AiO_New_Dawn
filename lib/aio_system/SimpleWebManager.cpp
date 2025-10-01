@@ -449,10 +449,27 @@ void SimpleWebManager::handleLogViewerData(EthernetClient& client) {
         json += static_cast<uint8_t>(entry.source);
         json += ",\"message\":\"";
 
-        // Escape quotes in message
-        String msg = entry.message;
-        msg.replace("\"", "\\\"");
-        json += msg;
+        // Properly escape JSON special characters
+        const char* msg = entry.message;
+        for (size_t j = 0; msg[j] != '\0'; j++) {
+            char c = msg[j];
+            switch (c) {
+                case '"':  json += "\\\""; break;
+                case '\\': json += "\\\\"; break;
+                case '\n': json += "\\n"; break;
+                case '\r': json += "\\r"; break;
+                case '\t': json += "\\t"; break;
+                case '\b': json += "\\b"; break;
+                case '\f': json += "\\f"; break;
+                default:
+                    if (c < 32) {
+                        // Control characters - skip them
+                    } else {
+                        json += c;
+                    }
+                    break;
+            }
+        }
 
         json += "\",\"severityName\":\"";
         json += logger->severityToString(entry.severity);
