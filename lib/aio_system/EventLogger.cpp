@@ -56,20 +56,23 @@ void EventLogger::log(EventSeverity severity, EventSource source, const char* fo
     if (!config.disableRateLimit && !checkRateLimit(severity)) {
         return;
     }
-    
+
     // Format the message
     va_list args;
     va_start(args, format);
     vsnprintf(messageBuffer, sizeof(messageBuffer), format, args);
     va_end(args);
-    
+
     eventCounter++;
-    
+
+    // Add to circular buffer for web viewer
+    addToBuffer(severity, source, messageBuffer);
+
     // Output to enabled channels
     if (config.enableSerial && shouldLog(severity, false)) {
         outputSerial(severity, source, messageBuffer);
     }
-    
+
     if (config.enableUDP && shouldLog(severity, true)) {
         outputUDP(severity, source, messageBuffer);
     }
@@ -324,10 +327,30 @@ void EventLogger::setStartupMode(bool startup) {
 void EventLogger::setRateLimitEnabled(bool enabled) {
     config.disableRateLimit = !enabled;
     saveConfig();
-    
+
     if (enabled) {
         LOG_INFO(EventSource::SYSTEM, "Rate limiting ENABLED");
     } else {
         LOG_WARNING(EventSource::SYSTEM, "Rate limiting DISABLED - all messages will be logged!");
+    }
+}
+
+void EventLogger::addToBuffer(EventSeverity severity, EventSource source, const char* message) {
+    // Add entry to circular buffer
+    LogEntry& entry = logBuffer[logBufferHead];
+    entry.timestamp = millis();
+    entry.severity = severity;
+    entry.source = source;
+
+    // Truncate message to fit buffer
+    strncpy(entry.message, message, sizeof(entry.message) - 1);
+    entry.message[sizeof(entry.message) - 1] = '\0';
+
+    // Advance head pointer
+    logBufferHead = (logBufferHead + 1) % LOG_BUFFER_SIZE;
+
+    // Track count (up to max)
+    if (logBufferCount < LOG_BUFFER_SIZE) {
+        logBufferCount++;
     }
 }

@@ -17,6 +17,7 @@
 #include "web_pages/CommonStyles.h"  // Common CSS
 #include "web_pages/SimpleDeviceSettingsNoReplace.h"  // Device settings without replacements
 #include "web_pages/TouchFriendlyEventLoggerPage.h"  // Touch-friendly event logger page
+#include "web_pages/TouchFriendlyLogViewerPage.h"  // Touch-friendly log viewer page
 #include "web_pages/TouchFriendlyAnalogWorkSwitchPage.h"  // Touch-friendly analog work switch page
 #include "web_pages/TouchFriendlyOTAPage.h"  // Touch-friendly OTA update page
 #include "web_pages/TouchFriendlyGPSConfigPage.h"  // Touch-friendly GPS configuration page
@@ -115,7 +116,12 @@ void SimpleWebManager::setupRoutes() {
     httpServer.on("/eventlogger", [this](EthernetClient& client, const String& method, const String& query) {
         sendEventLoggerPage(client);
     });
-    
+
+    // Log viewer page (tablet-friendly)
+    httpServer.on("/logs", [this](EthernetClient& client, const String& method, const String& query) {
+        sendLogViewerPage(client);
+    });
+
     // Network settings page
     httpServer.on("/network", [this](EthernetClient& client, const String& method, const String& query) {
         sendNetworkPage(client);
@@ -166,7 +172,12 @@ void SimpleWebManager::setupRoutes() {
     httpServer.on("/api/eventlogger/config", [this](EthernetClient& client, const String& method, const String& query) {
         handleEventLoggerConfig(client, method);
     });
-    
+
+    // Log viewer API
+    httpServer.on("/api/logs/data", [this](EthernetClient& client, const String& method, const String& query) {
+        handleLogViewerData(client);
+    });
+
     // Network API
     httpServer.on("/api/network/config", [this](EthernetClient& client, const String& method, const String& query) {
         handleNetworkConfig(client, method);
@@ -261,6 +272,11 @@ void SimpleWebManager::sendTouchHomePage(EthernetClient& client) {
 void SimpleWebManager::sendEventLoggerPage(EthernetClient& client) {
     extern const char TOUCH_FRIENDLY_EVENT_LOGGER_PAGE[];
     SimpleHTTPServer::sendP(client, 200, "text/html", TOUCH_FRIENDLY_EVENT_LOGGER_PAGE);
+}
+
+void SimpleWebManager::sendLogViewerPage(EthernetClient& client) {
+    extern const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[];
+    SimpleHTTPServer::sendP(client, 200, "text/html", TOUCH_FRIENDLY_LOG_VIEWER_PAGE);
 }
 
 void SimpleWebManager::sendNetworkPage(EthernetClient& client) {
@@ -403,6 +419,50 @@ void SimpleWebManager::handleEventLoggerConfig(EthernetClient& client, const Str
     } else {
         SimpleHTTPServer::send(client, 405, "text/plain", "Method Not Allowed");
     }
+}
+
+void SimpleWebManager::handleLogViewerData(EthernetClient& client) {
+    EventLogger* logger = EventLogger::getInstance();
+
+    // Get log buffer info
+    size_t count = logger->getLogBufferCount();
+    size_t head = logger->getLogBufferHead();
+    const LogEntry* buffer = logger->getLogBuffer();
+
+    // Build JSON response manually to avoid size issues
+    String json = "{\"logs\":[";
+
+    // Read from oldest to newest (circular buffer)
+    size_t bufferSize = logger->getLogBufferSize();
+    size_t start = (count < bufferSize) ? 0 : head;
+    for (size_t i = 0; i < count; i++) {
+        size_t index = (start + i) % bufferSize;
+        const LogEntry& entry = buffer[index];
+
+        if (i > 0) json += ",";
+
+        json += "{\"timestamp\":";
+        json += entry.timestamp;
+        json += ",\"severity\":";
+        json += static_cast<uint8_t>(entry.severity);
+        json += ",\"source\":";
+        json += static_cast<uint8_t>(entry.source);
+        json += ",\"message\":\"";
+
+        // Escape quotes in message
+        String msg = entry.message;
+        msg.replace("\"", "\\\"");
+        json += msg;
+
+        json += "\",\"severityName\":\"";
+        json += logger->severityToString(entry.severity);
+        json += "\",\"sourceName\":\"";
+        json += logger->sourceToString(entry.source);
+        json += "\"}";
+    }
+
+    json += "]}";
+    SimpleHTTPServer::sendJSON(client, json);
 }
 
 void SimpleWebManager::handleNetworkConfig(EthernetClient& client, const String& method) {
