@@ -170,6 +170,7 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
         let logs = [];
         let ws = null;
         let reconnectTimer = null;
+        let paused = false;
 
         // Filters
         let severityFilter = -1;  // -1 = all
@@ -228,7 +229,10 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
                         }
                     }
 
-                    renderLogs();
+                    // Only render if not paused
+                    if (!paused) {
+                        renderLogs();
+                    }
                 } catch (error) {
                     console.error('Error parsing log message:', error);
                 }
@@ -257,8 +261,9 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
             });
 
             // Update stats
+            const pausedText = paused ? ' [PAUSED]' : '';
             document.getElementById('stats').innerHTML =
-                `Showing ${filtered.length} of ${logs.length} logs`;
+                `Showing ${filtered.length} of ${logs.length} logs${pausedText}`;
 
             // Render filtered logs
             if (filtered.length === 0) {
@@ -275,8 +280,10 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
                 </div>`;
             }).join('');
 
-            // Auto-scroll to bottom
-            container.scrollTop = container.scrollHeight;
+            // Auto-scroll to bottom only if not paused
+            if (!paused) {
+                container.scrollTop = container.scrollHeight;
+            }
         }
 
         function setSeverityFilter(level) {
@@ -311,11 +318,18 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
             renderLogs();
         }
 
-        function toggleConnection() {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                disconnectWebSocket();
+        function togglePause() {
+            paused = !paused;
+            const btn = document.getElementById('pauseBtn');
+
+            if (paused) {
+                btn.classList.add('active');
+                btn.textContent = '▶️ Resume';
             } else {
-                connectWebSocket();
+                btn.classList.remove('active');
+                btn.textContent = '⏸️ Pause';
+                // Re-render to catch up with buffered logs
+                renderLogs();
             }
         }
 
@@ -354,7 +368,8 @@ const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[] PROGMEM = R"rawliteral(
         <div class="stats" id="stats">Loading...</div>
 
         <div class="controls">
-            <button class="control-btn auto-refresh-btn" id="autoRefreshBtn" onclick="toggleConnection()">🔴 Disconnected</button>
+            <button class="control-btn refresh-btn" id="pauseBtn" onclick="togglePause()">⏸️ Pause</button>
+            <button class="control-btn auto-refresh-btn" id="autoRefreshBtn">🔴 Disconnected</button>
             <button class="control-btn clear-btn" onclick="clearFilters()">✖ Clear Filters</button>
         </div>
 
