@@ -44,7 +44,13 @@ const char TOUCH_FRIENDLY_HOME_PAGE[] PROGMEM = R"rawliteral(
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-right: 10px;">
                     <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2m-5 14H7v-2h7v2m3-4H7v-2h10v2m0-4H7V7h10v2Z"/>
                 </svg>
-                Event Logger
+                Event Logger Config
+            </a></li>
+            <li><a href="/logs">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-right: 10px;">
+                    <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5Z"/>
+                </svg>
+                Live Log Viewer
             </a></li>
             <li><a href="/um98x-config">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="white" style="margin-right: 10px;">
