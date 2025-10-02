@@ -25,6 +25,7 @@
 #include "web_pages/TouchFriendlyDeviceSettingsPage.h"  // Touch-friendly device settings
 #include "web_pages/TouchFriendlyNetworkPage.h"  // Touch-friendly network settings
 #include "web_pages/TouchFriendlyAnalogWorkSwitchPage.h"  // Touch-friendly analog work switch
+#include "web_pages/TouchFriendlyCANConfigPage.h"  // Touch-friendly CAN configuration
 #include <ArduinoJson.h>
 #include <QNEthernet.h>
 #include "ESP32Interface.h"
@@ -135,7 +136,12 @@ void SimpleWebManager::setupRoutes() {
     httpServer.on("/analogworkswitch", [this](EthernetClient& client, const String& method, const String& query) {
         sendAnalogWorkSwitchPage(client);
     });
-    
+
+    // CAN Configuration page
+    httpServer.on("/can", [this](EthernetClient& client, const String& method, const String& query) {
+        sendCANConfigPage(client);
+    });
+
     // WAS Demo page removed - using WebSocket telemetry instead
     
     // Language selection
@@ -197,7 +203,12 @@ void SimpleWebManager::setupRoutes() {
             SimpleHTTPServer::send(client, 405, "text/plain", "Method Not Allowed");
         }
     });
-    
+
+    // CAN configuration API
+    httpServer.on("/api/can/config", [this](EthernetClient& client, const String& method, const String& query) {
+        handleCANConfig(client, method);
+    });
+
     // OTA upload endpoint
     httpServer.on("/api/ota/upload", [this](EthernetClient& client, const String& method, const String& query) {
         if (method == "POST") {
@@ -285,6 +296,11 @@ void SimpleWebManager::sendDeviceSettingsPage(EthernetClient& client) {
 void SimpleWebManager::sendAnalogWorkSwitchPage(EthernetClient& client) {
     extern const char TOUCH_FRIENDLY_ANALOG_WORK_SWITCH_PAGE[];
     SimpleHTTPServer::sendP(client, 200, "text/html", TOUCH_FRIENDLY_ANALOG_WORK_SWITCH_PAGE);
+}
+
+void SimpleWebManager::sendCANConfigPage(EthernetClient& client) {
+    extern const char TOUCH_FRIENDLY_CAN_CONFIG_PAGE[];
+    SimpleHTTPServer::sendP(client, 200, "text/html", TOUCH_FRIENDLY_CAN_CONFIG_PAGE);
 }
 
 // WAS Demo page removed - using WebSocket telemetry instead
@@ -1016,4 +1032,97 @@ void SimpleWebManager::handleUM98xWrite(EthernetClient& client) {
     String response;
     serializeJson(responseDoc, response);
     SimpleHTTPServer::send(client, success ? 200 : 500, "application/json", response);
+}
+
+void SimpleWebManager::handleCANConfig(EthernetClient& client, const String& method) {
+    extern ConfigManager configManager;
+
+    if (method == "GET") {
+        // Return current CAN configuration
+        CANSteerConfig config = configManager.getCANSteerConfig();
+
+        StaticJsonDocument<512> doc;
+        doc["brand"] = config.brand;
+        doc["can1Speed"] = config.can1Speed;
+        doc["can1Function"] = config.can1Function;
+        doc["can1Name"] = config.can1Name;
+        doc["can2Speed"] = config.can2Speed;
+        doc["can2Function"] = config.can2Function;
+        doc["can2Name"] = config.can2Name;
+        doc["can3Speed"] = config.can3Speed;
+        doc["can3Function"] = config.can3Function;
+        doc["can3Name"] = config.can3Name;
+        doc["moduleID"] = config.moduleID;
+
+        String json;
+        serializeJson(doc, json);
+        SimpleHTTPServer::sendJSON(client, json);
+
+    } else if (method == "POST") {
+        // Read POST body
+        String body = readPostBody(client);
+
+        LOG_INFO(EventSource::NETWORK, "CAN config POST body: %s", body.c_str());
+
+        // Parse JSON
+        StaticJsonDocument<512> doc;
+        DeserializationError error = deserializeJson(doc, body);
+
+        if (error) {
+            LOG_ERROR(EventSource::NETWORK, "CAN config JSON parse error: %s", error.c_str());
+            SimpleHTTPServer::sendJSON(client, "{\"status\":\"error\",\"message\":\"Invalid JSON\"}");
+            return;
+        }
+
+        // Get current config
+        CANSteerConfig config = configManager.getCANSteerConfig();
+
+        // Update config from JSON
+        if (doc.containsKey("brand")) {
+            config.brand = doc["brand"];
+        }
+        if (doc.containsKey("can1Speed")) {
+            config.can1Speed = doc["can1Speed"];
+        }
+        if (doc.containsKey("can1Function")) {
+            config.can1Function = doc["can1Function"];
+        }
+        if (doc.containsKey("can1Name")) {
+            config.can1Name = doc["can1Name"];
+        }
+        if (doc.containsKey("can2Speed")) {
+            config.can2Speed = doc["can2Speed"];
+        }
+        if (doc.containsKey("can2Function")) {
+            config.can2Function = doc["can2Function"];
+        }
+        if (doc.containsKey("can2Name")) {
+            config.can2Name = doc["can2Name"];
+        }
+        if (doc.containsKey("can3Speed")) {
+            config.can3Speed = doc["can3Speed"];
+        }
+        if (doc.containsKey("can3Function")) {
+            config.can3Function = doc["can3Function"];
+        }
+        if (doc.containsKey("can3Name")) {
+            config.can3Name = doc["can3Name"];
+        }
+        if (doc.containsKey("moduleID")) {
+            config.moduleID = doc["moduleID"];
+        }
+
+        // Save to EEPROM
+        configManager.setCANSteerConfig(config);
+        configManager.saveCANSteerConfig();
+
+        LOG_INFO(EventSource::NETWORK, "CAN config saved - Brand: %d, CAN1: %d/%d, CAN2: %d/%d, CAN3: %d/%d",
+                 config.brand, config.can1Speed, config.can1Function,
+                 config.can2Speed, config.can2Function,
+                 config.can3Speed, config.can3Function);
+
+        SimpleHTTPServer::sendJSON(client, "{\"status\":\"ok\",\"message\":\"Configuration saved. Restart required.\"}");
+    } else {
+        SimpleHTTPServer::send(client, 405, "text/plain", "Method Not Allowed");
+    }
 }

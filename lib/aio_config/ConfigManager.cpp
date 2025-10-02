@@ -390,6 +390,7 @@ void ConfigManager::loadAllConfigs()
     loadTurnSensorConfig();
     loadAnalogWorkSwitchConfig();
     loadMiscConfig();
+    loadCANSteerConfig();  // Load CAN configuration
 }
 
 void ConfigManager::saveAllConfigs()
@@ -404,6 +405,7 @@ void ConfigManager::saveAllConfigs()
     saveTurnSensorConfig();
     saveAnalogWorkSwitchConfig();
     saveMiscConfig();
+    saveCANSteerConfig();  // Save CAN configuration
 }
 
 void ConfigManager::resetToDefaults()
@@ -508,6 +510,17 @@ void ConfigManager::resetToDefaults()
     dns[0] = 8; dns[1] = 8; dns[2] = 8; dns[3] = 8;
     destIP[0] = 192; destIP[1] = 168; destIP[2] = 5; destIP[3] = 255;  // Broadcast
     destPort = 9999;
+
+    // CAN steering defaults
+    canSteerConfig.brand = 0;       // Disabled
+    canSteerConfig.can1Speed = 0;   // 250k
+    canSteerConfig.can1Function = 0; // None
+    canSteerConfig.can2Speed = 0;   // 250k
+    canSteerConfig.can2Function = 0; // None
+    canSteerConfig.can3Speed = 0;   // 250k
+    canSteerConfig.can3Function = 0; // None
+    canSteerConfig.moduleID = 0x1C; // Default Keya module ID
+    canSteerConfig.reserved[0] = 0;
 
     eeVersion = CURRENT_EE_VERSION;
 }
@@ -748,4 +761,51 @@ void ConfigManager::loadNetworkConfig()
     
     LOG_INFO(EventSource::CONFIG, "Loaded network config - IP: %d.%d.%d.%d",
              ipAddress[0], ipAddress[1], ipAddress[2], ipAddress[3]);
+}
+
+// CAN Steer configuration methods
+CANSteerConfig ConfigManager::getCANSteerConfig() const {
+    return canSteerConfig;
+}
+
+void ConfigManager::setCANSteerConfig(const CANSteerConfig& config) {
+    canSteerConfig = config;
+}
+
+void ConfigManager::saveCANSteerConfig() {
+    // We'll store this at the end of the EEPROM space
+    // Using address 900 (plenty of room after other configs)
+    int addr = 900;
+
+    // Write a marker byte to indicate valid config
+    uint8_t marker = 0xCA;  // 'CA' for CAN
+    EEPROM.put(addr, marker);
+    addr += sizeof(marker);
+
+    // Save the entire struct
+    EEPROM.put(addr, canSteerConfig);
+
+    LOG_INFO(EventSource::CONFIG, "Saved CAN Steer config - Brand: %d",
+             canSteerConfig.brand);
+}
+
+void ConfigManager::loadCANSteerConfig() {
+    int addr = 900;
+
+    // Check for valid config marker
+    uint8_t marker;
+    EEPROM.get(addr, marker);
+    addr += sizeof(marker);
+
+    if (marker != 0xCA) {
+        LOG_INFO(EventSource::CONFIG, "No valid CAN Steer config found, using defaults");
+        canSteerConfig = CANSteerConfig();  // Use default values
+        return;
+    }
+
+    // Load the entire struct
+    EEPROM.get(addr, canSteerConfig);
+
+    LOG_INFO(EventSource::CONFIG, "Loaded CAN Steer config - Brand: %d",
+             canSteerConfig.brand);
 }

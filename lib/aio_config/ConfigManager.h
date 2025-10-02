@@ -5,6 +5,46 @@
 #include <EEPROM.h>
 #include "EEPROMLayout.h"
 
+// CAN bus functions
+enum class CANFunction : uint8_t {
+    NONE = 0,
+    KEYA = 1,
+    V_BUS = 2,
+    ISO_BUS = 3,
+    K_BUS = 4
+};
+
+enum class CANBusName : uint8_t {
+    NONE = 0,
+    V_BUS = 1,
+    K_BUS = 2,
+    ISO_BUS = 3
+};
+
+// CAN Steer configuration structure
+struct CANSteerConfig {
+    // Brand selection
+    uint8_t brand = 9;          // 0=Disabled, 1=Fendt, 2=Valtra, etc, 9=Generic (default)
+
+    // CAN1 configuration
+    uint8_t can1Speed = 0;      // 0=250k, 1=500k
+    uint8_t can1Function = 0;   // CANFunction enum
+    uint8_t can1Name = 0;       // 0=None, 1=V_Bus, 2=K_Bus, 3=ISO_Bus
+
+    // CAN2 configuration
+    uint8_t can2Speed = 0;      // 0=250k, 1=500k
+    uint8_t can2Function = 0;   // CANFunction enum
+    uint8_t can2Name = 0;       // 0=None, 1=V_Bus, 2=K_Bus, 3=ISO_Bus
+
+    // CAN3 configuration
+    uint8_t can3Speed = 0;      // 0=250k, 1=500k
+    uint8_t can3Function = 0;   // CANFunction enum
+    uint8_t can3Name = 0;       // 0=None, 1=V_Bus, 2=K_Bus, 3=ISO_Bus
+
+    uint8_t moduleID = 0x1C;    // Module ID for protocols that need it
+    uint8_t reserved[1];        // Future expansion
+};
+
 // ConfigManager Pattern for PGN Settings Access
 // ============================================
 // All runtime access to PGN settings should go through ConfigManager methods.
@@ -122,7 +162,10 @@ private:
     
     // Version control
     uint16_t eeVersion;
-    
+
+    // CAN Steer configuration
+    CANSteerConfig canSteerConfig;
+
     // Initialization tracking
     bool initialized;
 
@@ -334,6 +377,12 @@ public:
     void resetToDefaults();
     bool checkVersion();
     void updateVersion();
+
+    // CAN Steer configuration methods
+    CANSteerConfig getCANSteerConfig() const;
+    void setCANSteerConfig(const CANSteerConfig& config);
+    void saveCANSteerConfig();
+    void loadCANSteerConfig();
 };
 
 #endif // CONFIGMANAGER_H_

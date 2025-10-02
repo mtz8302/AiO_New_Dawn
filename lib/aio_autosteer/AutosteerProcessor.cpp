@@ -4,6 +4,7 @@
 #include "EncoderProcessor.h"
 #include "MotorDriverInterface.h"
 #include "KeyaCANDriver.h"
+#include "TractorCANDriver.h"
 #include "ConfigManager.h"
 #include "LEDManagerFSM.h"
 #include "EventLogger.h"
@@ -186,24 +187,120 @@ void AutosteerProcessor::process() {
     }
     
     // === BUTTON/SWITCH LOGIC ===
+    // Static variable for Massey/Fendt/CaseIH button state tracking (needs to persist across cycles)
+    static bool lastMasseyEngageState = false;
+    static bool lastFendtButtonState = false;
+    static bool lastCaseIHEngageState = false;
+    static bool lastCATMTEngageState = false;
+    static bool lastClaasEngageState = false;
+    static bool lastJcbEngageState = false;
+    static bool lastLindnerEngageState = false;
+
+    // Debug: log button/switch config periodically
+    static uint32_t lastConfigLog = 0;
+    if (millis() - lastConfigLog > 5000) {
+        lastConfigLog = millis();
+        LOG_DEBUG(EventSource::AUTOSTEER, "Button config: button=%d, switch=%d",
+                  configManager.getSteerButton(), configManager.getSteerSwitch());
+    }
+
     if (configManager.getSteerButton() || configManager.getSteerSwitch()) {
         if (configManager.getSteerButton()) {
             // BUTTON MODE - Toggle on press
             static bool lastButtonReading = HIGH;
             bool buttonReading = adProcessor.isSteerSwitchOn() ? LOW : HIGH;  // Convert to active low
-            
-            if (buttonReading == LOW && lastButtonReading == HIGH) {
+
+            // Also check tractor-specific buttons if using TractorCANDriver
+            bool masseyEngagePressed = false;
+            bool fendtButtonPressed = false;
+            bool caseIHEngagePressed = false;
+            bool catMTEngagePressed = false;
+            bool claasEngagePressed = false;
+            bool jcbEngagePressed = false;
+            bool lindnerEngagePressed = false;
+
+            if (motorPTR && motorPTR->getType() == MotorDriverType::TRACTOR_CAN) {
+                TractorCANDriver* tractorCAN = static_cast<TractorCANDriver*>(motorPTR);
+
+                // Check Massey button
+                bool currentMasseyEngage = tractorCAN->isEngageButtonPressed();
+                // Detect falling edge of Massey engage button (release)
+                if (!currentMasseyEngage && lastMasseyEngageState) {
+                    masseyEngagePressed = true;
+                }
+                lastMasseyEngageState = currentMasseyEngage;
+
+                // Check Fendt button
+                bool currentFendtButton = tractorCAN->isFendtButtonPressed();
+                // Detect falling edge of Fendt button (release)
+                if (!currentFendtButton && lastFendtButtonState) {
+                    fendtButtonPressed = true;
+                }
+                lastFendtButtonState = currentFendtButton;
+
+                // Check Case IH engage state
+                bool currentCaseIHEngage = tractorCAN->isCaseIHEngaged();
+                // Detect rising edge of Case IH engage (OFF to ON transition)
+                if (currentCaseIHEngage && !lastCaseIHEngageState) {
+                    caseIHEngagePressed = true;
+                }
+                lastCaseIHEngageState = currentCaseIHEngage;
+
+                // Check CAT MT engage state
+                bool currentCATMTEngage = tractorCAN->isCATMTEngaged();
+                // Detect rising edge of CAT MT engage (OFF to ON transition)
+                if (currentCATMTEngage && !lastCATMTEngageState) {
+                    catMTEngagePressed = true;
+                }
+                lastCATMTEngageState = currentCATMTEngage;
+
+                // Check CLAAS engage state
+                bool currentClaasEngage = tractorCAN->isClaasEngaged();
+                // Detect rising edge of CLAAS engage (OFF to ON transition)
+                if (currentClaasEngage && !lastClaasEngageState) {
+                    claasEngagePressed = true;
+                }
+                lastClaasEngageState = currentClaasEngage;
+
+                // Check JCB engage state
+                bool currentJcbEngage = tractorCAN->isJcbEngaged();
+                // Detect rising edge of JCB engage (OFF to ON transition)
+                if (currentJcbEngage && !lastJcbEngageState) {
+                    jcbEngagePressed = true;
+                }
+                lastJcbEngageState = currentJcbEngage;
+
+                // Check Lindner engage state
+                bool currentLindnerEngage = tractorCAN->isLindnerEngaged();
+                // Detect rising edge of Lindner engage (OFF to ON transition)
+                if (currentLindnerEngage && !lastLindnerEngageState) {
+                    lindnerEngagePressed = true;
+                }
+                lastLindnerEngageState = currentLindnerEngage;
+            }
+
+            // Check if any button was pressed
+            if ((buttonReading == LOW && lastButtonReading == HIGH) || masseyEngagePressed ||
+                fendtButtonPressed || caseIHEngagePressed || catMTEngagePressed || claasEngagePressed || jcbEngagePressed || lindnerEngagePressed) {
                 // Button was just pressed - toggle state
                 steerState = !steerState;
-                LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via button press", 
-                         steerState == 0 ? "ARMED" : "DISARMED");
-                
+                const char* buttonType = masseyEngagePressed ? "Massey K_Bus button" :
+                                        fendtButtonPressed ? "Fendt armrest button" :
+                                        caseIHEngagePressed ? "Case IH engage" :
+                                        catMTEngagePressed ? "CAT MT engage" :
+                                        claasEngagePressed ? "CLAAS engage" :
+                                        jcbEngagePressed ? "JCB engage" :
+                                        lindnerEngagePressed ? "Lindner engage" : "button";
+                LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via %s press",
+                         steerState == 0 ? "ARMED" : "DISARMED",
+                         buttonType);
+
                 // Reset encoder count when autosteer is armed
                 if (steerState == 0 && EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
                     EncoderProcessor::getInstance()->resetPulseCount();
                     LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
                 }
-                
+
                 // Pulse blue LED for button press
                 ledManagerFSM.pulseButton();
             }
@@ -232,15 +329,15 @@ void AutosteerProcessor::process() {
     
     // Check if guidance status changed from AgOpenGPS
     if (guidanceStatusChanged) {
-        LOG_DEBUG(EventSource::AUTOSTEER, "Guidance status changed: %s (steerState=%d, hasKickout=%d)",
+        LOG_INFO(EventSource::AUTOSTEER, "Guidance status changed: %s (steerState=%d, hasKickout=%d)",
                  guidanceActive ? "ACTIVE" : "INACTIVE", steerState,
                  kickoutMonitor ? kickoutMonitor->hasKickout() : 0);
-        
+
         if (guidanceActive) {
             // Guidance turned ON in AgOpenGPS
             steerState = 0;  // Activate steering
             LOG_INFO(EventSource::AUTOSTEER, "Autosteer ARMED via AgOpenGPS (OSB)");
-            
+
             // If there's a kickout active, clear it
             if (kickoutMonitor && kickoutMonitor->hasKickout()) {
                 kickoutMonitor->clearKickout();
@@ -257,11 +354,12 @@ void AutosteerProcessor::process() {
     }
     
     // If AgOpenGPS has stopped steering, turn off after delay
-    // BUT only if not using a physical switch in switch mode
+    // BUT only if not using a physical switch in switch mode OR button mode
     static int switchCounter = 0;
     bool physicalSwitchActive = configManager.getSteerSwitch() && adProcessor.isSteerSwitchOn();
-    
-    if (steerState == 0 && !guidanceActive && !physicalSwitchActive) {
+    bool buttonModeActive = configManager.getSteerButton();
+
+    if (steerState == 0 && !guidanceActive && !physicalSwitchActive && !buttonModeActive) {
         if (switchCounter++ > 30) {  // 30 * 10ms = 300ms delay
             steerState = 1;
             switchCounter = 0;
@@ -360,13 +458,13 @@ void AutosteerProcessor::process() {
                 lastGuidanceOffTime = millis();
                 waitingForGuidanceOn = true;
             }
-            else if (guidanceActive && !prevGuidanceStatus && waitingForGuidanceOn && 
+            else if (guidanceActive && !prevGuidanceStatus && waitingForGuidanceOn &&
                      (millis() - lastGuidanceOffTime < 1000)) {
                 // Guidance went back ON within 1 second - this is an OSB toggle
                 waitingForGuidanceOn = false;
-                
+
                 LOG_INFO(EventSource::AUTOSTEER, "OSB toggle detected during kickout - clearing kickout");
-                
+
                 // Clear kickout and re-arm
                 kickoutMonitor->clearKickout();
                 steerState = 0;  // Re-arm
@@ -413,19 +511,24 @@ void AutosteerProcessor::process() {
     // Send PGN 253 status to AgOpenGPS
     sendPGN253();
     
-    // Update LED status based on actual system state (no motor speed hysteresis)
-    bool wasReady = true;  // ADProcessor is always available as an object
-    bool armed = (steerState == 0);         // Button/OSB has armed autosteer
-    bool guidance = guidanceActive;         // AgOpenGPS has active guidance line
-    
-    // Map states to LED FSM states - simple and clear
+    // Update LED status - simple motor state tracking
+    bool motorActive = (motorState != MotorState::DISABLED);  // Check actual motor state
+
+    // Map motor state directly to LED state
     LEDManagerFSM::SteerState ledState;
-    if (!wasReady) {
-        ledState = LEDManagerFSM::STEER_MALFUNCTION; // Red - hardware malfunction
-    } else if (!armed) {
-        ledState = LEDManagerFSM::STEER_READY;       // Amber - ready but not armed
+    if (motorActive) {
+        ledState = LEDManagerFSM::STEER_ENGAGED;     // Green - motor running
     } else {
-        ledState = LEDManagerFSM::STEER_ENGAGED;     // Green - engaged
+        ledState = LEDManagerFSM::STEER_READY;       // Amber - motor not running
+    }
+
+    // Debug logging for LED state
+    static LEDManagerFSM::SteerState lastLedState = LEDManagerFSM::STEER_READY;
+    if (ledState != lastLedState) {
+        LOG_INFO(EventSource::AUTOSTEER, "LED state change: motor=%s -> %s",
+                 motorActive ? "ACTIVE" : "DISABLED",
+                 ledState == LEDManagerFSM::STEER_READY ? "AMBER" : "GREEN");
+        lastLedState = ledState;
     }
     ledManagerFSM.transitionSteerState(ledState);
 }
@@ -858,24 +961,30 @@ void AutosteerProcessor::handleSteerData(uint8_t pgn, const uint8_t* data, size_
     // Track autosteer enable bit changes for OSB handling
     static bool prevAutosteerEnabled = false;
     if (newAutosteerState != prevAutosteerEnabled) {
-        LOG_DEBUG(EventSource::AUTOSTEER, "AgOpenGPS autosteer bit changed: %s", 
+        LOG_INFO(EventSource::AUTOSTEER, "AgOpenGPS autosteer bit changed: %s",
                       newAutosteerState ? "ENABLED" : "DISABLED");
-        
-        // If autosteer bit goes high and we're in kickout, this might be OSB press
-        if (newAutosteerState && !prevAutosteerEnabled && steerState == 1) {
-            // Check if we have an active kickout
+
+        // OSB button was pressed - handle it even when button mode is configured
+        if (newAutosteerState && !prevAutosteerEnabled) {
+            // OSB turned ON - arm autosteer
+            steerState = 0;
+            LOG_INFO(EventSource::AUTOSTEER, "Autosteer ARMED via AgOpenGPS (OSB bit 6)");
+
+            // If there's a kickout active, clear it
             if (kickoutMonitor && kickoutMonitor->hasKickout()) {
-                // OSB pressed during kickout - clear it and re-arm
                 kickoutMonitor->clearKickout();
-                steerState = 0;  // Re-arm
-                LOG_INFO(EventSource::AUTOSTEER, "KICKOUT: Cleared via OSB - autosteer re-armed");
-                
-                // Reset encoder count
-                if (EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
-                    EncoderProcessor::getInstance()->resetPulseCount();
-                    LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
-                }
+                LOG_INFO(EventSource::AUTOSTEER, "KICKOUT: Cleared via OSB");
             }
+
+            // Reset encoder count
+            if (EncoderProcessor::getInstance() && EncoderProcessor::getInstance()->isEnabled()) {
+                EncoderProcessor::getInstance()->resetPulseCount();
+                LOG_INFO(EventSource::AUTOSTEER, "Encoder count reset for new engagement");
+            }
+        } else if (!newAutosteerState && prevAutosteerEnabled) {
+            // OSB turned OFF - disarm autosteer
+            steerState = 1;
+            LOG_INFO(EventSource::AUTOSTEER, "Autosteer DISARMED via AgOpenGPS (OSB bit 6)");
         }
         prevAutosteerEnabled = newAutosteerState;
     }
@@ -976,8 +1085,11 @@ void AutosteerProcessor::updateMotorControl() {
         motorState = MotorState::SOFT_START;
         softStartBeginTime = millis();
         softStartRampValue = 0.0f;
-        LOG_INFO(EventSource::AUTOSTEER, "Motor STARTING - soft-start sequence (%dms)", 
+        LOG_INFO(EventSource::AUTOSTEER, "Motor STARTING - soft-start sequence (%dms)",
                  softStartDurationMs);
+        // Update LED immediately
+        ledManagerFSM.transitionSteerState(LEDManagerFSM::STEER_ENGAGED);
+        LOG_INFO(EventSource::AUTOSTEER, "LED -> GREEN (motor starting)");
     } 
     else if (!shouldBeActive && motorState != MotorState::DISABLED) {
         // Transition: Disable motor
@@ -986,7 +1098,7 @@ void AutosteerProcessor::updateMotorControl() {
         if (motorPTR) {
             motorPTR->enable(false);
             motorPTR->setPWM(0);
-            
+
             // LOCK output control
             if (motorPTR->getType() == MotorDriverType::KEYA_CAN) {
                 // Directly control LOCK output for Keya motor
@@ -997,6 +1109,10 @@ void AutosteerProcessor::updateMotorControl() {
                 LOG_INFO(EventSource::AUTOSTEER, "LOCK output: INACTIVE (motor disabled)");
             }
         }
+        // Update LED immediately when motor disabled
+        ledManagerFSM.transitionSteerState(LEDManagerFSM::STEER_READY);
+        LOG_INFO(EventSource::AUTOSTEER, "LED -> AMBER (motor disabled)");
+
         // Give more specific disable reason
         if (!QNetworkBase::isConnected()) {
             // Already logged in link state change detection above

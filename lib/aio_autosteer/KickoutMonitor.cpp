@@ -86,7 +86,10 @@ void KickoutMonitor::process() {
     }
     
     // Determine motor type for sensor relevance
-    bool isKeyaMotor = (motorDriver && motorDriver->getType() == MotorDriverType::KEYA_CAN);
+    MotorDriverType motorType = motorDriver ? motorDriver->getType() : MotorDriverType::NONE;
+    bool isKeyaMotor = (motorType == MotorDriverType::KEYA_CAN ||
+                       motorType == MotorDriverType::KEYA_SERIAL ||
+                       motorType == MotorDriverType::TRACTOR_CAN);  // TRACTOR_CAN handles its own kickout
     
     // Debug motor type and sensor configuration
     static uint32_t lastDebugTime = 0;
@@ -96,10 +99,13 @@ void KickoutMonitor::process() {
             const char* motorTypeName = "Unknown";
             switch (motorDriver->getType()) {
                 case MotorDriverType::KEYA_CAN: motorTypeName = "KEYA_CAN"; break;
+                case MotorDriverType::KEYA_SERIAL: motorTypeName = "KEYA_SERIAL"; break;
+                case MotorDriverType::TRACTOR_CAN: motorTypeName = "TRACTOR_CAN"; break;
                 case MotorDriverType::DANFOSS: motorTypeName = "DANFOSS"; break;
                 case MotorDriverType::DRV8701: motorTypeName = "DRV8701"; break;
                 case MotorDriverType::CYTRON_MD30C: motorTypeName = "CYTRON_MD30C"; break;
                 case MotorDriverType::IBT2: motorTypeName = "IBT2"; break;
+                case MotorDriverType::GENERIC_PWM: motorTypeName = "GENERIC_PWM"; break;
                 default: break;
             }
             LOG_DEBUG(EventSource::AUTOSTEER, "KickoutMonitor: Motor=%s, isKeya=%d, Encoder=%d, Pressure=%d, Current=%d",
@@ -375,9 +381,11 @@ bool KickoutMonitor::checkMotorSlipKickout() {
     if (!motorDriver) {
         return false;
     }
-    
+
     // Check motor type
-    if (motorDriver->getType() == MotorDriverType::KEYA_CAN) {
+    MotorDriverType motorType = motorDriver->getType();
+
+    if (motorType == MotorDriverType::KEYA_CAN) {
         // Cast to KeyaCANDriver to access slip detection
         KeyaCANDriver* keyaDriver = static_cast<KeyaCANDriver*>(motorDriver);
         if (keyaDriver->checkMotorSlip()) {
@@ -385,10 +393,15 @@ bool KickoutMonitor::checkMotorSlipKickout() {
             return true;
         }
     }
-    
+    else if (motorType == MotorDriverType::TRACTOR_CAN) {
+        // TRACTOR_CAN handles its own internal kickout
+        // No slip detection needed here
+        return false;
+    }
+
     // For other motor types, could check position feedback vs commanded
     // This would require additional implementation
-    
+
     return false;
 }
 

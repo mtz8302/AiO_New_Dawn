@@ -57,6 +57,7 @@ private:
     void sendOTAPage(EthernetClient& client);
     void sendDeviceSettingsPage(EthernetClient& client);
     void sendAnalogWorkSwitchPage(EthernetClient& client);
+    void sendCANConfigPage(EthernetClient& client);
     
     // API handlers
     void handleApiStatus(EthernetClient& client);
@@ -68,6 +69,7 @@ private:
     void handleAnalogWorkSwitchConfig(EthernetClient& client);
     void handleAnalogWorkSwitchSetpoint(EthernetClient& client);
     void handleOTAUpload(EthernetClient& client);
+    void handleCANConfig(EthernetClient& client, const String& method);
     
     // UM98x GPS configuration handlers
     void sendUM98xConfigPage(EthernetClient& client);

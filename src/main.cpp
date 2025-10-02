@@ -287,6 +287,12 @@ void setup()
   // Network stack is ready but don't initialize AsyncUDP yet
   LOG_INFO(EventSource::NETWORK, "Network stack initialized");
   
+  // Set CAN bus speeds based on configuration
+  CANSteerConfig canConfig = configManager.getCANSteerConfig();
+  setCAN1Speed(canConfig.can1Speed == 1 ? 500000 : 250000);
+  setCAN2Speed(canConfig.can2Speed == 1 ? 500000 : 250000);
+  setCAN3Speed(canConfig.can3Speed == 1 ? 500000 : 250000);
+
   // Initialize global CAN buses
   initializeGlobalCANBuses();
   
