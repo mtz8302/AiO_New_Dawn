@@ -174,6 +174,9 @@ void TractorCANDriver::processIncomingMessages() {
                     case TractorBrand::CLAAS:
                         processClaasMessage(msg);
                         break;
+                    case TractorBrand::JCB:
+                        processJcbMessage(msg);
+                        break;
                     // Add other brands as needed
                 }
             }
@@ -199,6 +202,9 @@ void TractorCANDriver::processIncomingMessages() {
                     break;
                 case TractorBrand::CLAAS:
                     processClaasKBusMessage(msg);
+                    break;
+                case TractorBrand::JCB:
+                    processJcbKBusMessage(msg);
                     break;
                 // TODO: Process work switch messages for other brands
             }
@@ -235,6 +241,9 @@ void TractorCANDriver::sendSteerCommands() {
                 break;
             case TractorBrand::CLAAS:
                 sendClaasCommands();
+                break;
+            case TractorBrand::JCB:
+                sendJcbCommands();
                 break;
             // Add other brands as needed
         }
@@ -652,6 +661,74 @@ void TractorCANDriver::processClaasKBusMessage(const CAN_message_t& msg) {
             claasEngaged = newEngageState;
             LOG_INFO(EventSource::AUTOSTEER, "Claas engage %s",
                      claasEngaged ? "ON" : "OFF");
+        }
+    }
+}
+
+// ===== JCB Implementation =====
+void TractorCANDriver::processJcbMessage(const CAN_message_t& msg) {
+    // Check for valve status message (0x0CACAB13)
+    // Module ID: 0xAB
+    if (msg.id == 0x0CACAB13 && msg.flags.extended) {
+        // Extract steering curve (little-endian)
+        int16_t estCurve = msg.buf[0] | (msg.buf[1] << 8);
+        actualRPM = (float)estCurve / 100.0f;  // Store as scaled value
+
+        // Check valve ready (byte 2)
+        if (msg.buf[2] != 0) {
+            if (!steerReady) {
+                LOG_INFO(EventSource::AUTOSTEER, "JCB steering valve ready");
+            }
+            steerReady = true;
+            lastSteerReadyTime = millis();
+        } else {
+            if (steerReady) {
+                LOG_WARNING(EventSource::AUTOSTEER, "JCB steering valve not ready");
+            }
+            steerReady = false;
+        }
+    }
+}
+
+void TractorCANDriver::sendJcbCommands() {
+    // Only send if we have a valid steering bus
+    if (!steerCAN || steerBusNum == 0) return;
+
+    CAN_message_t msg;
+    msg.id = 0x0CAD13AB;  // JCB steering command ID (module 0xAB)
+    msg.flags.extended = 1;  // Extended ID (29-bit)
+    msg.len = 8;
+
+    // Convert PWM to JCB curve value (similar to Case IH/CLAAS)
+    int16_t setCurve = 0;
+    if (enabled && steerReady) {
+        // Scale PWM to curve value
+        setCurve = (int16_t)(targetPWM * 128);  // Scale factor TBD
+    }
+
+    // Build message (little-endian, same as Case IH/CLAAS)
+    msg.buf[0] = setCurve & 0xFF;        // Curve low byte
+    msg.buf[1] = (setCurve >> 8) & 0xFF; // Curve high byte
+    msg.buf[2] = enabled ? 253 : 252;    // 253 = steer intent, 252 = no intent
+    msg.buf[3] = 0xFF;  // JCB uses 0xFF for bytes 3-7
+    msg.buf[4] = 0xFF;
+    msg.buf[5] = 0xFF;
+    msg.buf[6] = 0xFF;
+    msg.buf[7] = 0xFF;
+
+    writeCANMessage(steerBusNum, msg);
+}
+
+void TractorCANDriver::processJcbKBusMessage(const CAN_message_t& msg) {
+    // Check for engage message (0x18EFAB27 or 0x0CEFAB27)
+    if ((msg.id == 0x18EFAB27 || msg.id == 0x0CEFAB27) && msg.flags.extended) {
+        // Message received = engaged
+        bool newEngageState = true;
+
+        if (newEngageState != jcbEngaged) {
+            jcbEngaged = newEngageState;
+            LOG_INFO(EventSource::AUTOSTEER, "JCB engage %s",
+                     jcbEngaged ? "ON" : "OFF");
         }
     }
 }

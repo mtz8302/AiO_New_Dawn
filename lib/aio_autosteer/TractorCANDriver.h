@@ -77,6 +77,9 @@ private:
     // CLAAS tracking
     bool claasEngaged = false;          // Track CLAAS engage state
 
+    // JCB tracking
+    bool jcbEngaged = false;            // Track JCB engage state
+
     // Helper methods
     void assignCANBuses();
     void* getBusPointer(uint8_t busNum);
@@ -98,6 +101,8 @@ private:
     void processCATKBusMessage(const CAN_message_t& msg);
     void processClaasMessage(const CAN_message_t& msg);
     void processClaasKBusMessage(const CAN_message_t& msg);
+    void processJcbMessage(const CAN_message_t& msg);
+    void processJcbKBusMessage(const CAN_message_t& msg);
 
     // Brand-specific command senders
     void sendKeyaCommands();
@@ -106,6 +111,7 @@ private:
     void sendValtraCommands();
     void sendCATCommands();
     void sendClaasCommands();
+    void sendJcbCommands();
     void sendMasseyF1();
     void sendMasseyF2();
 
@@ -160,6 +166,9 @@ public:
 
     // CLAAS-specific methods
     bool isClaasEngaged() const { return claasEngaged; }
+
+    // JCB-specific methods
+    bool isJcbEngaged() const { return jcbEngaged; }
 };
 
 #endif // TRACTOR_CAN_DRIVER_H

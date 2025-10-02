@@ -193,6 +193,7 @@ void AutosteerProcessor::process() {
     static bool lastCaseIHEngageState = false;
     static bool lastCATMTEngageState = false;
     static bool lastClaasEngageState = false;
+    static bool lastJcbEngageState = false;
 
     // Debug: log button/switch config periodically
     static uint32_t lastConfigLog = 0;
@@ -214,6 +215,7 @@ void AutosteerProcessor::process() {
             bool caseIHEngagePressed = false;
             bool catMTEngagePressed = false;
             bool claasEngagePressed = false;
+            bool jcbEngagePressed = false;
 
             if (motorPTR && motorPTR->getType() == MotorDriverType::TRACTOR_CAN) {
                 TractorCANDriver* tractorCAN = static_cast<TractorCANDriver*>(motorPTR);
@@ -257,18 +259,27 @@ void AutosteerProcessor::process() {
                     claasEngagePressed = true;
                 }
                 lastClaasEngageState = currentClaasEngage;
+
+                // Check JCB engage state
+                bool currentJcbEngage = tractorCAN->isJcbEngaged();
+                // Detect rising edge of JCB engage (OFF to ON transition)
+                if (currentJcbEngage && !lastJcbEngageState) {
+                    jcbEngagePressed = true;
+                }
+                lastJcbEngageState = currentJcbEngage;
             }
 
             // Check if any button was pressed
             if ((buttonReading == LOW && lastButtonReading == HIGH) || masseyEngagePressed ||
-                fendtButtonPressed || caseIHEngagePressed || catMTEngagePressed || claasEngagePressed) {
+                fendtButtonPressed || caseIHEngagePressed || catMTEngagePressed || claasEngagePressed || jcbEngagePressed) {
                 // Button was just pressed - toggle state
                 steerState = !steerState;
                 const char* buttonType = masseyEngagePressed ? "Massey K_Bus button" :
                                         fendtButtonPressed ? "Fendt armrest button" :
                                         caseIHEngagePressed ? "Case IH engage" :
                                         catMTEngagePressed ? "CAT MT engage" :
-                                        claasEngagePressed ? "CLAAS engage" : "button";
+                                        claasEngagePressed ? "CLAAS engage" :
+                                        jcbEngagePressed ? "JCB engage" : "button";
                 LOG_INFO(EventSource::AUTOSTEER, "Autosteer %s via %s press",
                          steerState == 0 ? "ARMED" : "DISARMED",
                          buttonType);
