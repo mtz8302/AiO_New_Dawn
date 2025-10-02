@@ -17,6 +17,7 @@
 #include "web_pages/CommonStyles.h"  // Common CSS
 #include "web_pages/SimpleDeviceSettingsNoReplace.h"  // Device settings without replacements
 #include "web_pages/TouchFriendlyEventLoggerPage.h"  // Touch-friendly event logger page
+#include "web_pages/TouchFriendlyLogViewerPage.h"  // Touch-friendly log viewer page
 #include "web_pages/TouchFriendlyAnalogWorkSwitchPage.h"  // Touch-friendly analog work switch page
 #include "web_pages/TouchFriendlyOTAPage.h"  // Touch-friendly OTA update page
 #include "web_pages/TouchFriendlyGPSConfigPage.h"  // Touch-friendly GPS configuration page
@@ -70,7 +71,15 @@ bool SimpleWebManager::begin(uint16_t port) {
     if (!telemetryWS.begin(8082)) {
         LOG_WARNING(EventSource::NETWORK, "Failed to start WebSocket telemetry server");
     }
-    
+
+    // Start Log WebSocket server on port 8083
+    if (!logWS.begin(8083)) {
+        LOG_WARNING(EventSource::NETWORK, "Failed to start Log WebSocket server");
+    } else {
+        // Connect LogWebSocket to EventLogger
+        EventLogger::getInstance()->setLogWebSocket(&logWS);
+    }
+
     isRunning = true;
     
     IPAddress ip = Ethernet.localIP();
@@ -82,6 +91,10 @@ bool SimpleWebManager::begin(uint16_t port) {
 
 void SimpleWebManager::stop() {
     if (isRunning) {
+        // Disconnect LogWebSocket from EventLogger
+        EventLogger::getInstance()->setLogWebSocket(nullptr);
+
+        logWS.stop();
         telemetryWS.stop();
         httpServer.stop();
         isRunning = false;
@@ -93,6 +106,7 @@ void SimpleWebManager::handleClient() {
     // Now called by SimpleScheduler at 100Hz
     httpServer.handleClient();
     telemetryWS.handleClients();
+    logWS.handleClient();
 }
 
 void SimpleWebManager::setupRoutes() {
@@ -116,7 +130,12 @@ void SimpleWebManager::setupRoutes() {
     httpServer.on("/eventlogger", [this](EthernetClient& client, const String& method, const String& query) {
         sendEventLoggerPage(client);
     });
-    
+
+    // Log viewer page (tablet-friendly)
+    httpServer.on("/logs", [this](EthernetClient& client, const String& method, const String& query) {
+        sendLogViewerPage(client);
+    });
+
     // Network settings page
     httpServer.on("/network", [this](EthernetClient& client, const String& method, const String& query) {
         sendNetworkPage(client);
@@ -172,7 +191,12 @@ void SimpleWebManager::setupRoutes() {
     httpServer.on("/api/eventlogger/config", [this](EthernetClient& client, const String& method, const String& query) {
         handleEventLoggerConfig(client, method);
     });
-    
+
+    // Log viewer API
+    httpServer.on("/api/logs/data", [this](EthernetClient& client, const String& method, const String& query) {
+        handleLogViewerData(client);
+    });
+
     // Network API
     httpServer.on("/api/network/config", [this](EthernetClient& client, const String& method, const String& query) {
         handleNetworkConfig(client, method);
@@ -272,6 +296,11 @@ void SimpleWebManager::sendTouchHomePage(EthernetClient& client) {
 void SimpleWebManager::sendEventLoggerPage(EthernetClient& client) {
     extern const char TOUCH_FRIENDLY_EVENT_LOGGER_PAGE[];
     SimpleHTTPServer::sendP(client, 200, "text/html", TOUCH_FRIENDLY_EVENT_LOGGER_PAGE);
+}
+
+void SimpleWebManager::sendLogViewerPage(EthernetClient& client) {
+    extern const char TOUCH_FRIENDLY_LOG_VIEWER_PAGE[];
+    SimpleHTTPServer::sendP(client, 200, "text/html", TOUCH_FRIENDLY_LOG_VIEWER_PAGE);
 }
 
 void SimpleWebManager::sendNetworkPage(EthernetClient& client) {
@@ -419,6 +448,78 @@ void SimpleWebManager::handleEventLoggerConfig(EthernetClient& client, const Str
     } else {
         SimpleHTTPServer::send(client, 405, "text/plain", "Method Not Allowed");
     }
+}
+
+void SimpleWebManager::handleLogViewerData(EthernetClient& client) {
+    EventLogger* logger = EventLogger::getInstance();
+
+    // Get log buffer info - capture snapshot to avoid race conditions
+    __disable_irq();  // Disable interrupts briefly
+    size_t count = logger->getLogBufferCount();
+    size_t head = logger->getLogBufferHead();
+    size_t bufferSize = logger->getLogBufferSize();
+
+    // Copy buffer entries to avoid corruption during output
+    LogEntry snapshot[100];
+    const LogEntry* buffer = logger->getLogBuffer();
+    memcpy(snapshot, buffer, sizeof(snapshot));
+    __enable_irq();  // Re-enable interrupts
+
+    // Send response headers manually for chunked streaming
+    client.println("HTTP/1.1 200 OK");
+    client.println("Content-Type: application/json");
+    client.println("Connection: close");
+    client.println();
+
+    // Stream JSON directly to client
+    client.print("{\"logs\":[");
+
+    // Read from oldest to newest (circular buffer)
+    size_t start = (count < bufferSize) ? 0 : head;
+
+    for (size_t i = 0; i < count; i++) {
+        size_t index = (start + i) % bufferSize;
+        const LogEntry& entry = snapshot[index];
+
+        if (i > 0) client.print(",");
+
+        client.print("{\"timestamp\":");
+        client.print(entry.timestamp);
+        client.print(",\"severity\":");
+        client.print(static_cast<uint8_t>(entry.severity));
+        client.print(",\"source\":");
+        client.print(static_cast<uint8_t>(entry.source));
+        client.print(",\"message\":\"");
+
+        // Properly escape JSON special characters
+        const char* msg = entry.message;
+        for (size_t j = 0; msg[j] != '\0'; j++) {
+            char c = msg[j];
+            switch (c) {
+                case '"':  client.print("\\\""); break;
+                case '\\': client.print("\\\\"); break;
+                case '\n': client.print("\\n"); break;
+                case '\r': client.print("\\r"); break;
+                case '\t': client.print("\\t"); break;
+                case '\b': client.print("\\b"); break;
+                case '\f': client.print("\\f"); break;
+                default:
+                    if (c >= 32 && c < 127) {
+                        client.print(c);
+                    }
+                    // Skip control chars and non-ASCII
+                    break;
+            }
+        }
+
+        client.print("\",\"severityName\":\"");
+        client.print(logger->severityToString(entry.severity));
+        client.print("\",\"sourceName\":\"");
+        client.print(logger->sourceToString(entry.source));
+        client.print("\"}");
+    }
+
+    client.print("]}");
 }
 
 void SimpleWebManager::handleNetworkConfig(EthernetClient& client, const String& method) {
