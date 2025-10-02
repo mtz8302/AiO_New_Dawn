@@ -2,7 +2,7 @@
 #define VERSION_H
 
 // AiO New Dawn firmware version
-#define FIRMWARE_VERSION "1.0.70-beta" // Add JCB tractor CAN support with steering and engage detection
+#define FIRMWARE_VERSION "1.0.71-beta" // Add Lindner tractor CAN support - unified CAN complete (9/9 brands)
 
 // Teensy board type for OTA identification
 #define TEENSY_BOARD_TYPE "Teensy41"

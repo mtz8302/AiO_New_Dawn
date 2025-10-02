@@ -80,6 +80,9 @@ private:
     // JCB tracking
     bool jcbEngaged = false;            // Track JCB engage state
 
+    // Lindner tracking
+    bool lindnerEngaged = false;        // Track Lindner engage state
+
     // Helper methods
     void assignCANBuses();
     void* getBusPointer(uint8_t busNum);
@@ -103,6 +106,8 @@ private:
     void processClaasKBusMessage(const CAN_message_t& msg);
     void processJcbMessage(const CAN_message_t& msg);
     void processJcbKBusMessage(const CAN_message_t& msg);
+    void processLindnerMessage(const CAN_message_t& msg);
+    void processLindnerKBusMessage(const CAN_message_t& msg);
 
     // Brand-specific command senders
     void sendKeyaCommands();
@@ -112,6 +117,7 @@ private:
     void sendCATCommands();
     void sendClaasCommands();
     void sendJcbCommands();
+    void sendLindnerCommands();
     void sendMasseyF1();
     void sendMasseyF2();
 
@@ -169,6 +175,9 @@ public:
 
     // JCB-specific methods
     bool isJcbEngaged() const { return jcbEngaged; }
+
+    // Lindner-specific methods
+    bool isLindnerEngaged() const { return lindnerEngaged; }
 };
 
 #endif // TRACTOR_CAN_DRIVER_H

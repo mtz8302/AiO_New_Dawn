@@ -177,6 +177,9 @@ void TractorCANDriver::processIncomingMessages() {
                     case TractorBrand::JCB:
                         processJcbMessage(msg);
                         break;
+                    case TractorBrand::LINDNER:
+                        processLindnerMessage(msg);
+                        break;
                     // Add other brands as needed
                 }
             }
@@ -205,6 +208,9 @@ void TractorCANDriver::processIncomingMessages() {
                     break;
                 case TractorBrand::JCB:
                     processJcbKBusMessage(msg);
+                    break;
+                case TractorBrand::LINDNER:
+                    processLindnerKBusMessage(msg);
                     break;
                 // TODO: Process work switch messages for other brands
             }
@@ -244,6 +250,9 @@ void TractorCANDriver::sendSteerCommands() {
                 break;
             case TractorBrand::JCB:
                 sendJcbCommands();
+                break;
+            case TractorBrand::LINDNER:
+                sendLindnerCommands();
                 break;
             // Add other brands as needed
         }
@@ -729,6 +738,74 @@ void TractorCANDriver::processJcbKBusMessage(const CAN_message_t& msg) {
             jcbEngaged = newEngageState;
             LOG_INFO(EventSource::AUTOSTEER, "JCB engage %s",
                      jcbEngaged ? "ON" : "OFF");
+        }
+    }
+}
+
+// ===== Lindner Implementation =====
+void TractorCANDriver::processLindnerMessage(const CAN_message_t& msg) {
+    // Check for valve status message (0x0CACF013)
+    // Module ID: 0xF0
+    if (msg.id == 0x0CACF013 && msg.flags.extended) {
+        // Extract steering curve (little-endian)
+        int16_t estCurve = msg.buf[0] | (msg.buf[1] << 8);
+        actualRPM = (float)estCurve / 100.0f;  // Store as scaled value
+
+        // Check valve ready (byte 2)
+        if (msg.buf[2] != 0) {
+            if (!steerReady) {
+                LOG_INFO(EventSource::AUTOSTEER, "Lindner steering valve ready");
+            }
+            steerReady = true;
+            lastSteerReadyTime = millis();
+        } else {
+            if (steerReady) {
+                LOG_WARNING(EventSource::AUTOSTEER, "Lindner steering valve not ready");
+            }
+            steerReady = false;
+        }
+    }
+}
+
+void TractorCANDriver::sendLindnerCommands() {
+    // Only send if we have a valid steering bus
+    if (!steerCAN || steerBusNum == 0) return;
+
+    CAN_message_t msg;
+    msg.id = 0x0CADF013;  // Lindner steering command ID (module 0xF0)
+    msg.flags.extended = 1;  // Extended ID (29-bit)
+    msg.len = 8;
+
+    // Convert PWM to Lindner curve value (similar to Case IH/CLAAS/JCB)
+    int16_t setCurve = 0;
+    if (enabled && steerReady) {
+        // Scale PWM to curve value
+        setCurve = (int16_t)(targetPWM * 128);  // Scale factor TBD
+    }
+
+    // Build message (little-endian, same as Case IH/CLAAS/JCB)
+    msg.buf[0] = setCurve & 0xFF;        // Curve low byte
+    msg.buf[1] = (setCurve >> 8) & 0xFF; // Curve high byte
+    msg.buf[2] = enabled ? 253 : 252;    // 253 = steer intent, 252 = no intent
+    msg.buf[3] = 0xFF;  // Lindner uses 0xFF for bytes 3-7
+    msg.buf[4] = 0xFF;
+    msg.buf[5] = 0xFF;
+    msg.buf[6] = 0xFF;
+    msg.buf[7] = 0xFF;
+
+    writeCANMessage(steerBusNum, msg);
+}
+
+void TractorCANDriver::processLindnerKBusMessage(const CAN_message_t& msg) {
+    // Check for engage message (0x0CEFF021)
+    if (msg.id == 0x0CEFF021 && msg.flags.extended) {
+        // Message received = engaged
+        bool newEngageState = true;
+
+        if (newEngageState != lindnerEngaged) {
+            lindnerEngaged = newEngageState;
+            LOG_INFO(EventSource::AUTOSTEER, "Lindner engage %s",
+                     lindnerEngaged ? "ON" : "OFF");
         }
     }
 }
